@@ -625,6 +625,8 @@ def _apply_swaps_view(out: dict, res, swaps, ref, palette=None):
     except SwapError as e:
         out["swaps_error"] = {"code": e.code, "message": str(e)}
         return res
+    if rep is None:   # まばたきが無い（口パクだけ）: ふつうのシートは今までと同じ
+        return res
     out["swaps"] = rep.info()
     out["swaps_warnings"] = list(rep.warnings)
     out["sheet_durations"] = [int(d) for d in got.durations]
@@ -632,15 +634,51 @@ def _apply_swaps_view(out: dict, res, swaps, ref, palette=None):
     return got
 
 
+def _talk_view(out: dict, anim, swaps, ref, palette=None, mirror_anim=None):
+    """しゃべりのシート（口パク）の結果を作り、画面に出す記録を `out` に足す（"talk_swaps"・"talk_warnings"・"talk_error"）。
+    口パクが無ければ何も足さずに [] を返す。作れれば [しゃべりの結果]（`mirror_anim` があれば反転も）。"""
+    from .swap import SwapError, apply_talk, mirror_swapped
+    if swaps is None or swaps.find("talk") is None:
+        return []
+    out["talk_swaps"] = None
+    out["talk_error"] = None
+    out["talk_warnings"] = []
+    try:
+        got, rep = apply_talk(anim, ref, swaps, palette)
+    except SwapError as e:
+        out["talk_error"] = {"code": e.code, "message": str(e)}
+        return []
+    out["talk_swaps"] = rep.info()
+    out["talk_warnings"] = list(rep.warnings)
+    if got is None:
+        return []
+    import dataclasses
+    talks = [got]
+    if mirror_anim is not None:
+        talks.append(mirror_swapped(got, dataclasses.replace(mirror_anim, name=got.name + "_mirror")))
+    return talks
+
+
 def _add_sheet(out: dict, res, image_name: str, conv: list, swaps=None, ref=None) -> None:
     """作れたらシートの PNG と JSON、作れなかったら作らなかった理由の JSON（CLI の `_skipped.json` と同じ）を足す。
-    `swaps` があれば、シートに差し替え（まばたきなど）を入れる（`ref` は差し替えを描いた絵。変換したスプライト）。"""
+    `swaps` があれば、シートに差し替え（まばたきなど）を入れる（`ref` は差し替えを描いた絵。変換したスプライト）。
+    口パクがあれば、しゃべりのシートも "talk"（{"name", "sheet_png", "sheet_json", ...}）に足す（CLI の
+    `<出力名>_<動き>_talk_sheet.png` と同じ中身）。"""
     from .motion import make_sheet, sheet_json
     from .motion.report import skipped_json
     out["skipped_records"] = list(conv) + list(res.skips)
     if swaps is not None and not res.skipped:
-        from .swap import swaps_json
+        from .swap import swaps_json, talk_image_name
         from .touchup import palette_of
+        talks = _talk_view(out, res, swaps, ref)
+        if "talk_swaps" in out:
+            out["talk"] = None
+        for t in talks:
+            w, h = t.size
+            name = talk_image_name(image_name)
+            out["talk"] = {"name": name, "sheet_png": encode_png(make_sheet(t.frames)),
+                           "sheet_json": sheet_json(t, name, conv), "frame_width": int(w), "frame_height": int(h),
+                           "frame_count": len(t.frames), "durations": [int(d) for d in t.durations]}
         res = _apply_swaps_view(out, res, swaps, ref)
         out["swaps_json"] = swaps_json(swaps, palette_of([ref]))   # 保存する <出力名>_<動き>_swaps.json の中身
     if not res.skipped:
@@ -662,6 +700,8 @@ def motion_for_web(sprite_png: bytes, options_json: str = "{}") -> str:
     res = motion_image_bytes(sprite_png, values)
     if "sheet_png" in res:
         res["sheet_png_base64"] = base64.b64encode(res.pop("sheet_png")).decode("ascii")
+    if res.get("talk"):
+        res["talk"]["sheet_png_base64"] = base64.b64encode(res["talk"].pop("sheet_png")).decode("ascii")
     return json.dumps(res, ensure_ascii=False)
 
 
@@ -1147,28 +1187,32 @@ def frames_sheets(request: dict, result=None) -> dict:
         return {"ok": False, "error": friendly_error(e), "detail": error_detail(e)}
     from .piskel import fps_for_durations, piskel_text
     out: dict = {"ok": True}
+    talks = []
     if swaps is not None:
         from .swap import mirror_swapped, swaps_json
         from .touchup import palette_of
         pal = palette_of(result.frames)
+        talks = _talk_view(out, anims[0], swaps, result.frames[0], pal, anims[1] if len(anims) > 1 else None)
         got = _apply_swaps_view(out, anims[0], swaps, result.frames[0], pal)
         if got is not anims[0]:
             anims = [got] + [mirror_swapped(got, a) for a in anims[1:]]
         out["swaps_json"] = swaps_json(swaps, pal)   # 保存する <出力名>_<名前>_swaps.json の中身
-    sheets = []
-    for anim in anims:
+
+    def sheet_entry(anim):
         png_name = F.sheet_file_name(base, anim)
         w, h = anim.size
         fps, fps_notes = fps_for_durations(anim.durations)
-        sheets.append({"name": png_name, "png": encode_png(make_sheet(anim.frames)),
+        return {"name": png_name, "png": encode_png(make_sheet(anim.frames)),
                        "piskel_name": png_name[:-4] + ".piskel", "piskel": piskel_text(anim.frames, png_name[:-4], fps),
                        "piskel_fps": fps, "piskel_notes": fps_notes,
                        "json": F.frames_sheet_json(anim, png_name, result.skipped, result.dot_size),
                        "frame_width": int(w), "frame_height": int(h), "frame_count": len(anim.frames),
                        "durations": [int(d) for d in anim.durations], "mirror": anim.name.endswith("_mirror"),
                        "offset_y": [int(v) for v in anim.info.get("offset_y", [])],
-                       "padding_y": [int(v) for v in anim.info.get("padding_y", (0, 0))]})
-    out["sheets"] = sheets
+                "padding_y": [int(v) for v in anim.info.get("padding_y", (0, 0))]}
+    out["sheets"] = [sheet_entry(a) for a in anims]
+    if "talk_swaps" in out:   # 口パクがあるときだけ: しゃべりのシート（CLI と同じ名前・中身。反転は 2 つ目）
+        out["talk_sheets"] = [sheet_entry(a) for a in talks]
     return out
 
 
@@ -1182,7 +1226,7 @@ def frames_sheets_for_web(request_json: str = "{}") -> str:
         return json.dumps({"ok": False, "error": f"シートの設定を読めません: {e}", "detail": error_detail(e)},
                           ensure_ascii=False)
     res = frames_sheets(values)
-    for s in res.get("sheets", []):
+    for s in res.get("sheets", []) + res.get("talk_sheets", []):
         s["png_base64"] = base64.b64encode(s.pop("png")).decode("ascii")
     return json.dumps(res, ensure_ascii=False)
 

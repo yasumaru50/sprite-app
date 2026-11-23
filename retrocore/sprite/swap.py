@@ -8,8 +8,11 @@
 
 - `blink`（まばたき）: `closed`（目を閉じた絵。いる）・`half`（半分閉じた絵。なくてもよい）。
   あれば 開く → 半分 → 閉じる → 半分 → 開く、無ければ 開く → 閉じる → 開く
+- `talk`（口パク）: `open`（開いた口。いる）・`half`（半分開いた口。なくてもよい）。閉じた口は 1 コマ目のまま。
+  あれば 閉じる → 半分 → 開く → 半分 のくり返し（既定 各 100 ミリ秒）、無ければ 閉じる → 開く のくり返し（既定 各 150 ミリ秒）。
+  口パクは、ふつうのシートとは別の「しゃべりのシート」（`apply_talk()`）にだけ入る。ふつうのシートは今までと同じ（まばたきだけ）
 
-口パクなど別の種類は、`TYPES` に形の名前と並べ方を足せば同じ仕組みで使える（今は blink だけ）。
+別の種類は、`TYPES` に形の名前と並べ方を足せば同じ仕組みで使える。
 
 当て方（`apply_swaps()`。どれも迷ったら当てない）:
 
@@ -37,7 +40,21 @@
 
 `rects` は書き出すときだけ付ける（読むときは無視して、ドットから決め直す）。シートの JSON には、差し替えたときだけ
 `swaps`（間隔・1 周の時間・周の数・入れた時刻とフレーム・コマごとの位置と合い方）と、差し替えたフレームの `frames[].swap` を足す。
-差し替えが無いときの出力は、今までとバイト単位で同じ。
+差し替えが無いときの出力は、今までとバイト単位で同じ。`talk_ms`（口の切り替えの時間。null は自動）は口パクがあるときだけ書く。
+
+しゃべりのシート（`apply_talk()`。どれも迷ったら入れない）:
+
+1. **何周にするか**: 口の 1 回り（閉じる → 開く、か 閉じる → 半分 → 開く → 半分）の時間で、シート全体の時間がちょうど割り切れるように
+   動きを何周か繰り返す（まばたきもあれば、まばたきの間隔に近い周の数から探す）。`TALK_MAX_MS` までで割り切れなければ、
+   口の切り替えの時間を `TALK_STRETCH`（2%）まで伸び縮みさせてつなぐ（どちらでも、シートの終わりと始まりで口がつながる）
+2. **位置を探す・確かめる**: まばたきと同じ（`_place()`）。口を入れられないフレームは閉じた口のまま（警告）。
+   入れられないフレームが半分以上なら、しゃべりのシートは作らない（理由と次に試せることを警告にする）
+3. **まばたき**: ふつうのシートと同じ決め方で 1 回入れる。目と口の四角が重なるフレームには、口を優先してまばたきを入れない（`overlap`）
+4. **時間を分ける**: 口の切り替え・まばたき・元のフレームの境目で時間を分ける（全体の時間は変えない）。`MIN_PIECE` ミリ秒より
+   短い切れ端は隣に足す（差し替えの形が消えないように、形のある方を残す）
+
+しゃべりのシートの名前は `<動き>_talk`（動きが無いときは `talk`）。JSON の `swaps` に口パク（`type: "talk"`）とまばたきの記録、
+`frames[].swap` に `{"talk": "open", "blink": "closed"}` のような、そのフレームに入れた形を書く。
 """
 
 from __future__ import annotations
@@ -52,9 +69,10 @@ from .touchup import TRANSPARENT, Dot
 
 VERSION = 1
 KIND = "sprite_swaps"
-TYPES = {"blink": ("closed", "half")}          # 種類 → 形の名前（最初の形はいる）
-TYPE_TEXT = {"blink": "まばたき"}
-SHAPE_TEXT = {"closed": "閉じた目", "half": "半分閉じた目"}
+TYPES = {"blink": ("closed", "half"), "talk": ("open", "half")}   # 種類 → 形の名前（最初の形はいる）
+TYPE_TEXT = {"blink": "まばたき", "talk": "口パク"}
+SHAPE_TEXT = {"closed": "閉じた目", "half": "半分閉じた目", "open": "開いた口"}
+TALK_SHAPE_TEXT = {"closed": "閉じた口", "half": "半分開いた口", "open": "開いた口"}
 DEFAULT_INTERVAL = 3000
 DEFAULT_CLOSE = 120
 DEFAULT_HALF = 60
@@ -62,6 +80,12 @@ DEFAULT_SEARCH = 3
 MIN_INTERVAL, MAX_INTERVAL = 500, 20000
 MIN_CLOSE, MAX_CLOSE = 20, 1000
 MIN_SEARCH, MAX_SEARCH = 0, 8
+TALK_STEP = 150          # 口の切り替えの時間の既定（半分の口が無いとき）
+TALK_STEP_HALF = 100     # 同じ（半分の口があるとき）
+MIN_TALK, MAX_TALK = 40, 1000
+TALK_MAX_MS = 20000      # 口の 1 回りで割り切れる周の数を探す、シートの長さの上限
+TALK_STRETCH = 0.02      # 割り切れないとき、口の切り替えの時間をこの割合まで伸び縮みさせてよい
+TALK_MAX_SKIP = 0.5      # 口を入れられないフレームがこの割合以上なら、しゃべりのシートは作らない
 MIN_MATCH = 0.7          # これ未満の合い方のフレームには当てない
 MARGIN = 2               # 位置を探すとき・違う部品を確かめるときに、四角のまわりを何ドット広げて見るか
 CLUSTER_GAP = 2          # 違うドットどうしがこのドット数以内なら、同じ固まり（同じ四角）にする
@@ -86,7 +110,9 @@ SKIP_FOOT = "foot"
 SKIP_CROSS = "crossing"
 SKIP_INTRUSION = "intrusion"
 SKIP_SEAM = "seam"
-SKIP_TEXT = {SKIP_LOW: "1 コマ目と合う位置が見つからない", SKIP_EDGE: "キャンバスの外に出る", SKIP_FOOT: "足元が変わる",
+SKIP_OVERLAP = "overlap"
+SKIP_TEXT = {SKIP_OVERLAP: "目と口の四角が重なる（口を優先して、まばたきは入れない）",
+             SKIP_LOW: "1 コマ目と合う位置が見つからない", SKIP_EDGE: "キャンバスの外に出る", SKIP_FOOT: "足元が変わる",
              SKIP_CROSS: "四角の境目をまたいで 1 コマ目と違う部品（前髪・手など）がある",
              SKIP_INTRUSION: "外から入ってきた部品（腕・髪など）がある",
              SKIP_SEAM: "置き換えると四角の境目で段差・輪郭の途切れができる"}
@@ -158,6 +184,10 @@ class Swap:
                     break
         return [(b[0], b[1], b[2] - b[0], b[3] - b[1]) for b in sorted(boxes, key=lambda b: (b[1], b[0]))]
 
+    def talk_pattern(self) -> list[str]:
+        """口パクの 1 回りの形の並び（"closed" は 1 コマ目のまま）。"""
+        return ["closed", "half", "open", "half"] if self.shapes.get("half") else ["closed", "open"]
+
     def sequence(self, close_ms: int, half_ms: int) -> list[tuple[str, int]]:
         """入れる形と時間の並び（まばたき: 半分 → 閉じる → 半分。半分が無ければ閉じるだけ）。"""
         if self.shapes.get("half"):
@@ -177,9 +207,24 @@ class SwapSet:
     close_ms: int = DEFAULT_CLOSE
     half_ms: int = DEFAULT_HALF
     search: int = DEFAULT_SEARCH
+    talk_ms: int | None = None     # 口の切り替えの時間（None は自動。半分の口があれば 100、無ければ 150）
 
     def empty(self) -> bool:
         return not any(d for s in self.swaps for d in s.shapes.values())
+
+    def find(self, kind: str) -> Swap | None:
+        """その種類の差し替え（形が 1 つもなければ None）。"""
+        for sw in self.swaps:
+            if sw.type == kind and any(sw.shapes.values()):
+                return sw
+        return None
+
+    def talk_step(self) -> int:
+        """口の切り替えの時間（ミリ秒）。"""
+        if self.talk_ms is not None:
+            return int(self.talk_ms)
+        sw = self.find("talk")
+        return TALK_STEP_HALF if sw is not None and sw.shapes.get("half") else TALK_STEP
 
     def validate(self) -> None:
         for k, v, lo, hi in (("interval_ms", self.interval_ms, MIN_INTERVAL, MAX_INTERVAL),
@@ -188,6 +233,9 @@ class SwapSet:
                              ("search", self.search, MIN_SEARCH, MAX_SEARCH)):
             if isinstance(v, bool) or not isinstance(v, (int, np.integer)) or not lo <= int(v) <= hi:
                 raise ValueError(f"{k} は {lo}〜{hi} の整数で書いてください: {v!r}")
+        v = self.talk_ms
+        if v is not None and (isinstance(v, bool) or not isinstance(v, (int, np.integer)) or not MIN_TALK <= int(v) <= MAX_TALK):
+            raise ValueError(f"talk_ms は {MIN_TALK}〜{MAX_TALK} の整数か null（自動）で書いてください: {v!r}")
 
 
 # ---------------------------------------------------------------- 読み書き
@@ -213,7 +261,7 @@ def swaps_from_dict(d) -> SwapSet:
     if _int(d.get("version", VERSION), "version") > VERSION:
         raise ValueError(f"新しい版（{d.get('version')}）の差し替えの一覧です。Sprite App を新しくしてください")
     unknown = sorted(set(d) - {"version", "kind", "name", "frame_width", "frame_height", "palette", "interval_ms",
-                               "close_ms", "half_ms", "search", "swaps"})
+                               "close_ms", "half_ms", "search", "talk_ms", "swaps"})
     if unknown:
         raise ValueError(f"差し替えの一覧に知らない項目があります: {', '.join(unknown)}")
     pal_raw = d.get("palette", [])
@@ -284,10 +332,13 @@ def swaps_from_dict(d) -> SwapSet:
             swaps.append(Swap(kind, shapes))
     out = SwapSet(swaps=swaps, frame_width=size.get("frame_width"), frame_height=size.get("frame_height"), name=name,
                   interval_ms=d.get("interval_ms", DEFAULT_INTERVAL), close_ms=d.get("close_ms", DEFAULT_CLOSE),
-                  half_ms=d.get("half_ms", DEFAULT_HALF), search=d.get("search", DEFAULT_SEARCH))
+                  half_ms=d.get("half_ms", DEFAULT_HALF), search=d.get("search", DEFAULT_SEARCH),
+                  talk_ms=d.get("talk_ms"))
     out.validate()
     out.interval_ms, out.close_ms, out.half_ms, out.search = (int(out.interval_ms), int(out.close_ms),
                                                               int(out.half_ms), int(out.search))
+    if out.talk_ms is not None:
+        out.talk_ms = int(out.talk_ms)
     return out
 
 
@@ -326,9 +377,13 @@ def swaps_dict(s: SwapSet, palette: list[str]) -> dict:
             if sw.shapes.get(sn):
                 e[sn] = [dot(d) for d in sw.shapes[sn]]
         items.append(e)
-    return {"version": VERSION, "kind": KIND, "name": s.name, "frame_width": s.frame_width,
-            "frame_height": s.frame_height, "palette": pal, "interval_ms": int(s.interval_ms),
-            "close_ms": int(s.close_ms), "half_ms": int(s.half_ms), "search": int(s.search), "swaps": items}
+    out = {"version": VERSION, "kind": KIND, "name": s.name, "frame_width": s.frame_width,
+           "frame_height": s.frame_height, "palette": pal, "interval_ms": int(s.interval_ms),
+           "close_ms": int(s.close_ms), "half_ms": int(s.half_ms), "search": int(s.search)}
+    if any(sw.type == "talk" for sw in s.swaps):   # 口パクがあるときだけ（まばたきだけの一覧は前と同じ）
+        out["talk_ms"] = None if s.talk_ms is None else int(s.talk_ms)
+    out["swaps"] = items
+    return out
 
 
 def swaps_json(s: SwapSet, palette: list[str]) -> str:
@@ -459,6 +514,8 @@ class Placement:
     ok: bool
     code: str | None = None
     images: dict = field(default_factory=dict)   # 形の名前 → 当てたフレームの絵
+    patches: dict = field(default_factory=dict)  # 形の名前 → [(左, 上, 置いた絵), ...]（目と口を重ねるときに使う）
+    rects: list = field(default_factory=list)    # 置いた四角 (左, 上, 幅, 高さ)（フレームの座標）
 
     def info(self) -> dict:
         out = {"frame": int(self.frame), "shift": {"x": int(self.shift[0]), "y": int(self.shift[1])},
@@ -540,19 +597,22 @@ def _place(frame: np.ndarray, index: int, ref: np.ndarray, sw: Swap, origin: tup
             return Placement(index, (dx, dy), m, False, SKIP_CROSS)
         if _intrusion(ref, frame, rect, at):
             return Placement(index, (dx, dy), m, False, SKIP_INTRUSION)
-    p = Placement(index, (dx, dy), m, True)
+    p = Placement(index, (dx, dy), m, True, rects=[(tx, ty, r[2], r[3]) for r, (tx, ty) in zip(rects, ats)])
     foot = _bottom(frame)
     co = _classes(frame, line_colors)
     for sn, dots in sw.shapes.items():
         img = frame.copy()
         pasted = np.zeros((FH, FW), bool)
+        patches = []
         for rect, (tx, ty) in zip(rects, ats):
             rx, ry, rw, rh = rect
             mine = [d for d in dots if rx <= d.x < rx + rw and ry <= d.y < ry + rh]
             if not mine:
                 continue   # この形はこの四角を変えない（もう片方の目だけ閉じる絵など）
-            img[ty:ty + rh, tx:tx + rw] = _shape_patch(ref, mine, rect)
+            patch = _shape_patch(ref, mine, rect)
+            img[ty:ty + rh, tx:tx + rw] = patch
             pasted[ty:ty + rh, tx:tx + rw] = True
+            patches.append((tx, ty, patch))
         if _bottom(img) != foot:
             return Placement(index, (dx, dy), m, False, SKIP_FOOT)
         # 境目の確かめ（same.py と同じ）: 1 コマ目に形を重ねた絵を、見つけた位置に置いたもの（写した側の元）と比べる
@@ -570,6 +630,7 @@ def _place(frame: np.ndarray, index: int, ref: np.ndarray, sw: Swap, origin: tup
         if bad.any():
             return Placement(index, (dx, dy), m, False, SKIP_SEAM)
         p.images[sn] = img
+        p.patches[sn] = patches
     return p
 
 
@@ -659,11 +720,15 @@ def apply_swaps(anim, ref: np.ndarray, s: SwapSet, palette: list[str] | None = N
 
     `ref` は差し替えを描いた 1 コマ目（コマが並んだ絵は元の 1 コマ目、1 枚の絵は変換したスプライト）。
     当てられない（大きさ・パレットが違う）ときは SwapError。どのフレームにも当てられないときは、元の結果のまま（周も増やさない）で
-    記録に理由を書く。
+    記録に理由を書く。ふつうのシートに入れるのはまばたきだけ（口パクは `apply_talk()` のしゃべりのシート）。まばたきが無ければ
+    (元の結果, None) を返す（今までと同じ出力）。
     """
     import dataclasses
 
     from .edit import palette_hex
+    sw = s.find("blink")
+    if sw is None:
+        return anim, None
     pal = palette if palette is not None else palette_hex(list(anim.frames))
     warnings = check_swaps(ref, pal, s)
     frames, durations = list(anim.frames), [int(d) for d in anim.durations]
@@ -671,7 +736,6 @@ def apply_swaps(anim, ref: np.ndarray, s: SwapSet, palette: list[str] | None = N
     cycle = int(sum(durations))
     origins = _origins(anim.info, n)
     rep = SwapReport(int(s.interval_ms), cycle, 1, warnings=list(warnings))
-    sw = s.swaps[0]   # 今は blink だけ（1 つ）
     seq = sw.sequence(s.close_ms, s.half_ms)
     length = sum(ms for _, ms in seq)
     from .steady import outline_keys
@@ -741,6 +805,262 @@ def apply_swaps(anim, ref: np.ndarray, s: SwapSet, palette: list[str] | None = N
     info["swaps"] = rep.info()
     out = dataclasses.replace(anim, frames=new_frames, durations=new_dur, info=info)
     return out, rep
+
+
+# ---------------------------------------------------------------- しゃべりのシート（口パク）
+
+def _talk_repeats(cycle: int, n: int, period: int, target: int) -> int:
+    """しゃべりのシートの周の数。口の 1 回り（`period` ミリ秒）でシート全体がちょうど割り切れる、`target` 以上でいちばん小さい数。
+    `TALK_MAX_MS`・`MAX_FRAMES` までで見つからなければ、口の切り替えの時間のずれが `TALK_STRETCH` 以下になるいちばん小さい数
+    （それも無ければ、ずれがいちばん小さい数）。割り切れないときは、口の切り替えの時間を少し伸び縮みさせる。"""
+    cap = max(1, MAX_FRAMES // max(n, 1))
+    target = max(1, min(target, cap))
+    if cycle <= 0:
+        return target
+    limit = max(TALK_MAX_MS, cycle * target)
+    rs = [r for r in range(target, cap + 1) if cycle * r <= limit] or [target]
+    for r in rs:
+        if (cycle * r) % period == 0:
+            return r
+
+    def err(r):
+        total = cycle * r
+        k = max(1, (total + period // 2) // period) * period
+        return abs(total - k) / k
+    for r in rs:
+        if err(r) <= TALK_STRETCH:
+            return r
+    return min(rs, key=lambda r: (err(r), r))
+
+
+def _overlaps(a: list, b: list) -> bool:
+    """四角の並びどうしが重なるか（接するだけは重ならない）。"""
+    return any(ax < bx + bw and bx < ax + aw and ay < by + bh and by < ay + ah
+               for ax, ay, aw, ah in a for bx, by, bw, bh in b)
+
+
+def _pieces(st: int, en: int, tracks: list[list[tuple[int, int, str | None]]]) -> list[list]:
+    """1 フレーム（`st`〜`en` ミリ秒）を、トラックごとの形の切れ目で分けた [(トラックごとの形), 時間] の並び。
+    `MIN_PIECE` ミリ秒より短い切れ端は前（無ければ後ろ）に足す（形のある方を残す）。同じ形が続いたらまとめる。"""
+    cuts = {st, en}
+    for marks in tracks:
+        for a, b, _ in marks:
+            if st < a < en:
+                cuts.add(a)
+            if st < b < en:
+                cuts.add(b)
+    cuts = sorted(cuts)
+
+    def shape_at(marks, t):
+        for a, b, sn in marks:
+            if a <= t < b:
+                return sn
+        return None
+    pieces = [[tuple(shape_at(m, a) for m in tracks), b - a] for a, b in zip(cuts, cuts[1:])]
+    i = 0
+    while len(pieces) > 1 and i < len(pieces):
+        if pieces[i][1] < MIN_PIECE:
+            j = i - 1 if i > 0 else i + 1
+            key = tuple(pj if pj is not None else pi for pi, pj in zip(pieces[i][0], pieces[j][0]))
+            pieces[j] = [key, pieces[j][1] + pieces[i][1]]
+            del pieces[i]
+            i = 0
+            continue
+        i += 1
+    merged: list[list] = []
+    for p in pieces:
+        if merged and merged[-1][0] == p[0]:
+            merged[-1][1] += p[1]
+        else:
+            merged.append(list(p))
+    return merged
+
+
+def talk_name(name: str) -> str:
+    """しゃべりのシートの名前（`<動き>_talk`。動きが無いときは `talk`）。"""
+    return f"{name}_talk" if name else "talk"
+
+
+def talk_image_name(image_name: str) -> str:
+    """ふつうのシートの PNG の名前（`<出力名>_<動き>_sheet.png`）に対する、しゃべりのシートの名前（`<出力名>_<動き>_talk_sheet.png`）。"""
+    if image_name.endswith("_sheet.png"):
+        return image_name[:-len("_sheet.png")] + "_talk_sheet.png"
+    return (image_name[:-4] if image_name.endswith(".png") else image_name) + "_talk.png"
+
+
+def still_motion(sprite: np.ndarray, s: SwapSet):
+    """動きが「なし」のときの、しゃべりのシートの材料（変換した絵 1 枚。時間は口の 1 回り）。"""
+    from .motion.base import MotionResult
+    sw = s.find("talk")
+    period = s.talk_step() * (len(sw.talk_pattern()) if sw is not None else 2)
+    return MotionResult(name="", frames=[sprite], durations=[period], info={})
+
+
+def apply_talk(anim, ref: np.ndarray, s: SwapSet, palette: list[str] | None = None):
+    """動きの結果（シートの材料。まばたきを入れる前のもの）から、口パク（とまばたき）を入れた「しゃべりのシート」の結果を作る。
+
+    戻り値は (しゃべりの結果 か None, 記録 `SwapReport` か None)。口パクが無ければ (None, None)。口を入れられないフレームが
+    半分以上なら (None, 記録)（理由と次に試せることは記録の警告）。当てられない（大きさ・パレットが違う）ときは SwapError。
+    """
+    import dataclasses
+
+    from .edit import palette_hex
+    talk = s.find("talk")
+    if talk is None:
+        return None, None
+    pal = palette if palette is not None else palette_hex(list(anim.frames))
+    warnings = check_swaps(ref, pal, s)
+    frames, durations = list(anim.frames), [int(d) for d in anim.durations]
+    n = len(frames)
+    cycle = int(sum(durations))
+    origins = _origins(anim.info, n)
+    from .steady import outline_keys
+    line_colors = outline_keys(ref)
+    rep = SwapReport(int(s.interval_ms), cycle, 1, warnings=list(warnings))
+    src = anim.info.get("source_frames")
+    src = src if isinstance(src, (list, tuple)) and len(src) == n else None
+
+    def where(p):
+        return f"{p.frame + 1} 枚目" + (f"（元の {src[p.frame]} コマ目）" if src else "") + f": {SKIP_TEXT[p.code]}"
+
+    step = s.talk_step()
+    pattern = talk.talk_pattern()
+    mouth = [_place(frames[i], i, ref, talk, origins[i], s.search, line_colors) for i in range(n)]
+    item: dict = {"type": talk.type, "rects": [{"x": r[0], "y": r[1], "w": r[2], "h": r[3]} for r in talk.rects()],
+                  "shapes": [sn for sn in TYPES[talk.type] if talk.shapes.get(sn)], "step_ms": int(step),
+                  "pattern": list(pattern)}
+    bad = [p for p in mouth if not p.ok]
+    if bad:
+        item["frames_not_used"] = [{"frame": int(p.frame), "code": p.code, "match": round(float(p.match), 3)} for p in bad]
+    if n == 0 or len(bad) >= n * TALK_MAX_SKIP:
+        item["applied"] = False
+        item["message"] = (f"口を入れられないフレームが多いので（{n} 枚のうち {len(bad)} 枚）、しゃべりのシートは作りませんでした")
+        rep.items.append(item)
+        rep.warnings.append(item["message"] + "。" + "／".join(where(p) for p in bad) + "。次に試せること: "
+                            "口のまわりの肌まで少し広く描く（四角が大きくなり、合う位置を見つけやすくなります）／"
+                            "動きを小さくする（深さ・揺れ幅を 1 にする）／動きを「なし」にして口だけ動かす")
+        return None, rep
+    if bad:
+        rep.warnings.append("口を入れなかったフレームがあります（そのフレームは閉じた口のままです。迷ったら入れません）。"
+                            + "／".join(where(p) for p in bad))
+    blink = s.find("blink")
+    eyes = [_place(frames[i], i, ref, blink, origins[i], s.search, line_colors) for i in range(n)] if blink else None
+    plen = len(pattern)
+    period = step * plen
+    target = _repeats(cycle, n, s.interval_ms) if blink else 1
+    repeats = _talk_repeats(cycle, n, period, target)
+    total = cycle * repeats
+    k = plen * max(1, (total + period // 2) // period)
+    bounds = [(i * total + k // 2) // k for i in range(k + 1)]
+    talk_marks = [(bounds[i], bounds[i + 1], None if pattern[i % plen] == "closed" else pattern[i % plen])
+                  for i in range(k) if bounds[i] < bounds[i + 1]]
+    rep.repeats = repeats
+    seq_frames = list(range(n)) * repeats
+    seq_dur = durations * repeats
+    starts = list(np.cumsum([0] + seq_dur[:-1]).astype(int).tolist())
+    tracks = [talk_marks]
+    blink_item = None
+    if blink is not None:
+        seq = blink.sequence(s.close_ms, s.half_ms)
+        length = sum(ms for _, ms in seq)
+        overlap = [bool(eyes[i].ok and mouth[i].ok and _overlaps(eyes[i].rects, mouth[i].rects)) for i in range(n)]
+        for i in range(n):
+            if overlap[i]:
+                eyes[i] = Placement(i, eyes[i].shift, eyes[i].match, False, SKIP_OVERLAP)
+        blink_item = {"type": blink.type, "rects": [{"x": r[0], "y": r[1], "w": r[2], "h": r[3]} for r in blink.rects()],
+                      "shapes": [sn for sn in TYPES[blink.type] if blink.shapes.get(sn)]}
+        not_used = [p for p in eyes if not p.ok]
+        if not_used:
+            blink_item["frames_not_used"] = [{"frame": int(p.frame), "code": p.code, "match": round(float(p.match), 3)}
+                                             for p in not_used]
+        order = list(range(len(seq_frames) // 2, len(seq_frames))) + list(range(0, len(seq_frames) // 2))
+        chosen = None
+        for j in order:
+            t0 = starts[j]
+            if t0 + length > total:
+                continue
+            cover = [q for q in range(len(seq_frames)) if starts[q] < t0 + length and starts[q] + seq_dur[q] > t0]
+            if all(eyes[seq_frames[q]].ok for q in cover):
+                chosen = j
+                break
+        if chosen is None:
+            blink_item["applied"] = False
+            blink_item["message"] = "まばたきを入れられるフレームがありません（どのフレームも 1 コマ目と合う位置が見つからないか、目と口の四角が重なる）"
+            rep.warnings.append(blink_item["message"])
+        else:
+            t0 = starts[chosen]
+            marks, t = [], t0
+            for sn, ms in seq:
+                marks.append((t, t + ms, sn))
+                t += ms
+            tracks.append(marks)
+            blink_item.update({"applied": True, "start_ms": int(t0), "duration_ms": int(length)})
+            if not_used:
+                rep.warnings.append("しゃべりのシートで、まばたきを入れなかったフレームがあります（迷ったら入れません）。"
+                                    + "／".join(where(p) for p in not_used))
+    new_frames, new_dur, new_src, marks_out = [], [], [], []
+    mouth_frames, eye_frames = [], []
+    cache: dict = {}
+    for q, (st, d) in enumerate(zip(starts, seq_dur)):
+        i = seq_frames[q]
+        for key, ms in _pieces(st, st + d, tracks):
+            m = key[0] if mouth[i].ok else None
+            e = key[1] if len(key) > 1 and eyes[i].ok else None
+            if (i, m, e) not in cache:
+                img = frames[i] if m is None else mouth[i].images[m]
+                if e is not None:
+                    img = img.copy()
+                    for tx, ty, patch in eyes[i].patches[e]:
+                        img[ty:ty + patch.shape[0], tx:tx + patch.shape[1]] = patch
+                cache[(i, m, e)] = img
+            new_frames.append(cache[(i, m, e)])
+            new_dur.append(int(ms))
+            new_src.append(i)
+            mark = {}
+            if m is not None:
+                mark["talk"] = m
+                mouth_frames.append(len(new_frames) - 1)
+            if e is not None:
+                mark["blink"] = e
+                eye_frames.append(len(new_frames) - 1)
+            marks_out.append(mark or None)
+    steps = [b - a for a, b, _ in talk_marks]
+    item.update({"applied": True, "steps": len(talk_marks), "step_ms_used": sorted(set(steps)),
+                 "frames": mouth_frames, "placements": [p.info() for p in mouth]})
+    rep.items.append(item)
+    if blink_item is not None:
+        if blink_item.get("applied"):
+            blink_item.update({"frames": eye_frames, "placements": [p.info() for p in eyes]})
+        rep.items.append(blink_item)
+    if len(set(steps)) > 1:
+        rep.warnings.append(f"動きの 1 周（{cycle} ミリ秒）が口の 1 回り（{period} ミリ秒）で割り切れないので、"
+                            f"口の切り替えを {min(steps)}〜{max(steps)} ミリ秒にしました（シートの終わりと始まりで口がつながるように）")
+    info = dict(anim.info)
+    for key in ("source_frames", "offset_y", "offsets"):
+        v = info.get(key)
+        if isinstance(v, (list, tuple)) and len(v) == n:
+            info[key] = [v[i] for i in new_src]
+    info["swap_frames"] = marks_out
+    info["swaps"] = dict(rep.info(), talk_ms=int(step))
+    out = dataclasses.replace(anim, name=talk_name(anim.name), frames=new_frames, durations=new_dur, info=info)
+    return out, rep
+
+
+def talk_summary(rep: SwapReport) -> str:
+    """しゃべりのシートの 1 行の説明。"""
+    parts = []
+    for it in rep.items:
+        if it["type"] == "talk":
+            if not it.get("applied"):
+                return "しゃべりのシートは作りませんでした"
+            ms = it["step_ms_used"]
+            shapes = " → ".join(TALK_SHAPE_TEXT[k] for k in it["pattern"])
+            parts.append(f"口パク {shapes} を {ms[0] if len(ms) == 1 else f'{ms[0]}〜{ms[-1]}'} ミリ秒ごと（{it['steps']} 回）")
+        elif it.get("applied"):
+            parts.append(f"まばたきを {it['start_ms']} ミリ秒から {it['duration_ms']} ミリ秒")
+        else:
+            parts.append("まばたきは入れませんでした")
+    return f"動き {rep.repeats} 周（{rep.cycle_ms * rep.repeats} ミリ秒）に、" + "・".join(parts)
 
 
 def mirror_swapped(swapped, mirror_anim):
