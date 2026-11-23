@@ -333,3 +333,19 @@ def test_swaps_run_with_int32_numpy(strip, plain):
     with emulate_int32():
         got, _ = S.apply_swaps(anim, plain.frames[0], S.swaps_from_dict(d), palette_of(plain.frames))
     assert all(np.array_equal(a, b) for a, b in zip(want.frames, got.frames)) and want.durations == got.durations
+
+
+def test_web_page_has_swap_editor():
+    import sys
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    sys.path.insert(0, str(root / "tools"))
+    import build_sprite_web
+    html = build_sprite_web.build()
+    for key in ('id="swap-mode"', 'id="swap-box"', 'id="swap-shape"', 'id="swap-interval"', 'id="swap-close"',
+                'id="swap-half"', 'id="swap-save"', 'id="swap-load"', 'id="swap-status"', "差し替えを描く",
+                "function swapDict", "function touchSingleSync", "--swaps", "sprite_swaps"):
+        assert key in html, key
+    # 説明の文は「？」の中（class="help"）に入れる
+    assert 'class="note help" data-help-at="touch-title">「差し替えを描く」' in html
+    assert 'class="note help" data-help-at="swap-io">' in html
