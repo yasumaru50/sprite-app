@@ -626,7 +626,7 @@ def build_parser() -> argparse.ArgumentParser:
                     help="--write-motion-spec で書く分ける高さ（at）の書き方。number（既定）は下から何ドット目の数（このキャラ用）、"
                          "percent はキャラの高さに対する割合（\"35.0%%\"。別のキャラにも使う）。auto はそのまま")
     fx = p.add_argument_group(
-        "重ね（--fx。！・汗・ハート・Zzz・？・怒りマーク・涙・キラキラなど 16 種の漫画的エフェクトを、キャラのシートとは別の小さなシートにして重ねる。"
+        "重ね（--fx。！・汗・ハート・Zzz・？・怒りマーク・キラキラなど 14 種の漫画的エフェクトを、キャラのシートとは別の小さなシートにして重ねる。"
         "--motion・--motion-spec・--frames と一緒に使う）")
     fx.add_argument("--fx", choices=fx_mod.effect_names(), default=None,
                     help="重ねるエフェクト（1 つ）。" + "、".join(f"{e['name']} = {e['label']}（{e['anchor_label']}・"

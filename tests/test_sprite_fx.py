@@ -42,7 +42,7 @@ def test_all_effects_load_and_use_only_known_colors():
     for n in X.effect_names():
         e = X.load_effect(n)
         if e.anchor != "around":   # 体のまわりは、キャラの大きさで部品の間が変わる
-            assert 2 <= e.width <= 20 and 2 <= e.height <= 20
+            assert 2 <= e.width <= 32 and 2 <= e.height <= 20   # ぐるぐるの輪は頭の幅くらい
         assert all(len(rows[0]) <= 20 and len(rows) <= 20 for rows in e.parts.values())
         assert all(d % 50 == 0 for d in e.durations)   # .piskel にそろえやすい
         frames = X.render(e, (1, 2, 3))
@@ -54,8 +54,9 @@ def test_all_effects_load_and_use_only_known_colors():
             assert set(np.unique(f[..., 3]).tolist()) <= {0, 255}   # 半透明なし
     spec = X.fx_spec()
     assert [e["loop"] for e in spec["effects"]][:4] == [False, False, True, True]
-    assert len(spec["effects"]) == 16
-    assert {e["anchor"] for e in spec["effects"]} == set(X.ANCHORS)
+    assert len(spec["effects"]) == 14
+    assert "tears" not in X.effect_names() and "gloom" not in X.effect_names()   # 2 回目で外した
+    assert {e["anchor"] for e in spec["effects"]} == set(X.ANCHORS) - {"face"}   # 「顔」は今は使うエフェクトが無い
     assert all(e["anchor_label"] for e in spec["effects"])
 
 
@@ -68,10 +69,10 @@ FIRST4 = {
 }
 
 
-def _first4_digest(name, mirror):
+def _digest(name, mirror):
     res = make_motion(make_pixel_sprite(), "breathe")
     fr = [f[:, ::-1].copy() for f in res.frames] if mirror else res.frames
-    once = name in ("surprise", "sweat")
+    once = not X.load_effect(name).loop
     fx = X.make_fx(name, fr, mirror, (1, -2), ("hide" if mirror else None) if once else None)
     h = hashlib.sha256()
     h.update(X.fx_sheet(fx).tobytes())
@@ -85,7 +86,43 @@ def _first4_digest(name, mirror):
 
 @pytest.mark.parametrize("name", list(FIRST4))
 def test_first_four_effects_are_unchanged(name):
-    assert (_first4_digest(name, False), _first4_digest(name, True)) == FIRST4[name]
+    assert (_digest(name, False), _digest(name, True)) == FIRST4[name]
+
+
+# 2 回目の 12 種のうち、手直ししなかった 9 種の出力（涙・もやもやを外し、ぐるぐるを描き直す前のハッシュ）
+SECOND9 = {
+    "question": ("235a352a6a352595", "4137881aea1302d8"),
+    "anger": ("33534d520106ddce", "2150b7fa270ac0bd"),
+    "music": ("32f45c0acd1ad9b0", "bf32f75e21b484a8"),
+    "sparkle": ("6106aee3feb0d646", "259ecb14526bc12c"),
+    "pale": ("48345dcdbfe02388", "f02acb8f83737591"),
+    "idea": ("3b89f947117a6019", "10d21a75ab3db309"),
+    "steam": ("c38901181f544a4e", "90d35d66e527d55e"),
+    "silence": ("e9d9e64bc7582bf3", "8d865d7781b03130"),
+    "panic": ("baebd89870a0d790", "6aeca020d64a2311"),
+}
+
+
+@pytest.mark.parametrize("name", list(SECOND9))
+def test_second_round_effects_are_unchanged(name):
+    assert (_digest(name, False), _digest(name, True)) == SECOND9[name]
+
+
+def test_dizzy_stars_orbit():
+    e = X.load_effect("dizzy")
+    assert e.loop and len(e.durations) >= 3 and all(d % 50 == 0 for d in e.durations)
+    for placed in e.placements:
+        assert len(placed) == 3                                       # 星はいつも 3 つ
+        fronts = [(x, y) for p, x, y in placed if p == "front"]
+        backs = [(x, y) for p, x, y in placed if p == "back"]
+        assert fronts and len(fronts) + len(backs) == 3
+        assert [p for p, _, _ in placed][-len(fronts):] == ["front"] * len(fronts)   # 手前の星を後に描く（上になる）
+        assert min(y for _, y in fronts) >= min(y for _, y in backs) if backs else True
+    # 星が動く（全部のコマが違う）。キラキラの星とは違う絵
+    frames = X.render(e)
+    assert len({f.tobytes() for f in frames}) == len(frames)
+    sp = X.load_effect("sparkle")
+    assert all(e.parts[p] not in sp.parts.values() for p in e.parts)
 
 
 def test_bad_tables_are_rejected():
@@ -131,13 +168,15 @@ def test_face_and_upper_face_positions():
     c = _char()                      # 頭: 上端 2・6 行・x 6〜13
     fx_, fy = X.face_point(X.head_box(c))
     assert (fx_, fy) == ((6 + 13 + 1) // 2 + 8 // 4, 2 + X.FACE_ROWS * 6)
-    t = X.make_fx("tears", [c])
+    # 「顔」を使うエフェクトは今は無いので、表をその場で作って確かめる（仕組みは残している）
+    face = {"drop": {"anchor": "face", "loop": True, "parts": {"a": ".o.\noBo\n.o."}, "frames": [([("a", 0, 0)], 100)]}}
+    t = X.make_fx("drop", [c], effects=face)
     w, h = t.size
     assert t.position == (fx_ - w // 2, fy)        # 上端の真ん中を目の下の目安に
     p = X.make_fx("pale", [c])
     w, h = p.size
     assert p.position == ((6 + 13 + 1 - w) // 2, fy - h)   # 下端を目安の行にそろえて、頭の真ん中
-    o = X.make_fx("tears", [c], offset=(-1, 2))
+    o = X.make_fx("drop", [c], offset=(-1, 2), effects=face)
     assert o.position == (t.position[0] - 1, t.position[1] + 2)
 
 
@@ -262,7 +301,7 @@ def test_cli_matches_web_bytes(tmp_path, pixel_png):
     assert not bad["ok"]
 
 
-@pytest.mark.parametrize("name", ["tears", "pale", "sparkle", "idea", "silence"])
+@pytest.mark.parametrize("name", ["dizzy", "pale", "sparkle", "idea", "silence"])
 def test_cli_matches_web_bytes_new_effects(tmp_path, pixel_png, name):
     from apps.sprite import cli
     import base64

@@ -9,7 +9,7 @@
 - エフェクトの 1 コマの大きさは、全部のコマの部品が入るいちばん小さな四角（自動で決まる）。動きは、その四角の中で部品を
   ずらす・切り替える・消すだけで作る（拡大・縮小はしない。ドットがにじむため）
 - `anchor` は置く場所: `"top"` = 頭の上（真ん中）、`"side"` = 頭の横（右。キャラを左右反転したら左）、
-  `"face"` = 顔（右の目の下のあたり）、`"upper_face"` = 顔の上半分（真ん中）、`"around"` = 体のまわり
+  `"face"` = 顔（右の目の下のあたり。今は使うエフェクトが無い）、`"upper_face"` = 顔の上半分（真ん中）、`"around"` = 体のまわり
 - `"around"` のコマでは、置く部品を `(部品の名前, 基準, x, y)` とも書ける。基準は絵全体の範囲（1 コマ目の不透明な所を囲む四角）の
   角・辺の真ん中（`nw` `n` `ne` `w` `e` `sw` `s` `se`）で、x・y はそこから部品の左上までのずれ（キャラの大きさで間が変わる）
 - `loop` が False のものは 1 回で終わる（最後のコマで止めて残すか、消すかを選べる）
@@ -35,8 +35,7 @@ COLORS = {
     "G": (160, 160, 176),   # 灰（電球の口金）
     "L": (200, 208, 224),   # 薄い灰（湯気の影）
     "N": (80, 96, 216),     # 青紫（青ざめの縦線。輪郭なし）
-    "U": (128, 120, 160),   # くすんだ紫（もやもや）
-    "K": (88, 80, 120),     # 暗い紫（もやもやの渦）
+    "O": (232, 152, 40),    # 濃い黄（ぐるぐるの奥を通る星）
 }
 
 EFFECTS = {
@@ -296,34 +295,6 @@ EFFECTS = {
             ([("big", "sw", -6, -11), ("small", "e", 2, 4)], 200),
         ],
     },
-    # 涙: 顔（右の目の下のあたり）。目のふちにたまった涙から、しずくが下へ落ちる。くり返し
-    "tears": {
-        "label": "涙",
-        "anchor": "face",
-        "loop": True,
-        "parts": {
-            "pool": """
-                .ooo.
-                oBBBo
-                .ooo.
-            """,
-            "drop": """
-                ..o..
-                .oBo.
-                oBWBo
-                oBBBo
-                .oBo.
-                ..o..
-            """,
-        },
-        "frames": [
-            ([("pool", 0, 0), ("drop", 0, 1)], 150),
-            ([("pool", 0, 0), ("drop", 0, 3)], 150),
-            ([("pool", 0, 0), ("drop", 0, 5)], 150),
-            ([("pool", 0, 0), ("drop", 0, 7)], 150),
-            ([("pool", 0, 0)], 200),
-        ],
-    },
     # 青ざめの縦線: 顔の上半分（目の上）。顔に重なる縦線（細い線なので輪郭なし）。下の 2 行がゆっくり消えて戻る。くり返し
     "pale": {
         "label": "青ざめ（縦線）",
@@ -411,70 +382,38 @@ EFFECTS = {
               ("ray_side", 15, 8)], 600),
         ],
     },
-    # ぐるぐる（混乱）: 頭の上。うずまきを 90 度ずつ回す（4 枚を順に）。くり返し
+    # ぐるぐる（混乱）: 頭の上。星 3 つが横長の楕円に回る。手前は大きい黄色の星、奥は小さい濃い黄の星にして、少し上を通る。
+    # 120 度回ると同じ形になるので、20 度ずつ 6 コマでくり返す（星 1 つが 1 周するのは 1800 ミリ秒）。キラキラの星（細い十字・白い芯）と
+    # 見分けがつくように、5 つの角のある太い星にする
     "dizzy": {
         "label": "ぐるぐる（混乱）",
         "anchor": "top",
         "loop": True,
         "parts": {
-            "a": """
-                ...ooooo...
-                ..oWWWWWo..
-                .oWoooooWo.
-                oWooWWWooWo
-                oWoWoooWoWo
-                oWoWoWWWoWo
-                oWoWoooooWo
-                oWooWWWWWo.
-                .oWoooooo..
-                ..oWWWWo...
-                ...oooo....
+            "front": """
+                ...o...
+                ..oYo..
+                .oYYYo.
+                oYYYYYo
+                .oYYYo.
+                .oYoYo.
+                ..o.o..
             """,
-            "b": """
-                ...ooooo...
-                ..oWWWWWo..
-                .oWoooooWo.
-                oWooWWWooWo
-                oWoWoooWoWo
-                oWoWoWoWoWo
-                oWoWoWoWoWo
-                .ooWoWWooWo
-                ..oWooooWo.
-                ...oWWWWo..
-                ....oooo...
-            """,
-            "c": """
-                ....oooo...
-                ...oWWWWo..
-                ..ooooooWo.
-                .oWWWWWooWo
-                oWoooooWoWo
-                oWoWWWoWoWo
-                oWoWoooWoWo
-                oWooWWWooWo
-                .oWoooooWo.
-                ..oWWWWWo..
-                ...ooooo...
-            """,
-            "d": """
-                ...oooo....
-                ..oWWWWo...
-                .oWooooWo..
-                oWooWWoWoo.
-                oWoWoWoWoWo
-                oWoWoWoWoWo
-                oWoWoooWoWo
-                oWooWWWooWo
-                .oWoooooWo.
-                ..oWWWWWo..
-                ...ooooo...
+            "back": """
+                ..o..
+                .oOo.
+                oOOOo
+                oOoOo
+                .o.o.
             """,
         },
         "frames": [
-            ([("a", 0, 0)], 150),
-            ([("b", 0, 0)], 150),
-            ([("c", 0, 0)], 150),
-            ([("d", 0, 0)], 150),
+            ([("back", 8, -5), ("back", -12, -5), ("front", -3, 0)], 100),
+            ([("back", -9, -5), ("front", 8, -4), ("front", -7, 0)], 100),
+            ([("back", -6, -6), ("front", 8, -2), ("front", -10, -1)], 100),
+            ([("back", -2, -6), ("front", -13, -2), ("front", 7, -1)], 100),
+            ([("back", 2, -6), ("front", -14, -2), ("front", 4, -1)], 100),
+            ([("back", 5, -5), ("front", -14, -4), ("front", 1, 0)], 100),
         ],
     },
     # 湯気（怒り・暑さ）: 頭の上。左右 2 本の湯気が、小さい→中→大きいと上がって消える（左右で順番をずらす）。くり返し
@@ -530,31 +469,6 @@ EFFECTS = {
             ([("dot", 0, 0)], 350),
             ([("dot", 0, 0), ("dot", 4, 0)], 350),
             ([("dot", 0, 0), ("dot", 4, 0), ("dot", 8, 0)], 800),
-        ],
-    },
-    # もやもや（落ち込み）: 頭の上。渦の入った暗い雲が、左右に 1 ドットずつゆっくり揺れる。くり返し
-    "gloom": {
-        "label": "もやもや（落ち込み）",
-        "anchor": "top",
-        "loop": True,
-        "parts": {
-            "cloud": """
-                .....ooo........
-                ...ooUUUooooo...
-                ..oUUUUUUUUUUo..
-                .oUUUKKUUUUUUUo.
-                oUUUKUUKUUKKUUUo
-                oUUUUKKUUKUUKUUo
-                .oUUUUUUUUKKUUo.
-                ..oUUUoUUUUUUo..
-                ...ooo.oooooo...
-            """,
-        },
-        "frames": [
-            ([("cloud", 1, 0)], 400),
-            ([("cloud", 2, 0)], 400),
-            ([("cloud", 1, 0)], 400),
-            ([("cloud", 0, 0)], 400),
         ],
     },
     # 大きな汗（あせあせ）: 頭の横。上の大きい粒と下の小さい粒が、交互に外へ飛ぶ。くり返し
