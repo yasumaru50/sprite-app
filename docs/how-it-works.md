@@ -240,6 +240,17 @@ AI が描いたドット絵風の画像は、ドット 1 個が約 20px で、�
   - 目・口は割らない（継ぎ目が横切るときは部品ごと写す側に入れる）。範囲の外まで写す必要があれば写さない
   - 結果: ai07 `0,0,53,53`・ai08 `0,0,66,56`・ai09 `0,0,62,54` で全部のコマを写せ、上から半分のちらつきは 0
 - **手の直し**（`touchup.py`）: 元のコマごとの「ドットの差し替えの一覧」（x, y, パレットの番号か透明）を最後に当てる。パレットに無い色は作らない
+- **差し替え（まばたき）**（`swap.py`、`--swaps`）: 1 コマ目（1 枚の絵は変換した絵）の上に描いた「閉じた目」「半分閉じた目」と 1 コマ目の違うドットだけを持ち、
+  シートを組み立てた後に、動きの中に 1 回だけ入れる（コマが並んだ絵と 1 枚の絵の動きで同じ関数）
+  - 四角は違うドットの離れた固まりごと（2 ドット以内は同じ固まり）。左右の目を 1 つの四角にすると、目と目の間の前髪・鼻まで 1 コマ目の形に戻るため
+  - 位置は、四角を 2 ドット広げた所の 1 コマ目の絵がいちばん合うずれ（±3 ドット。四角が何個あってもずれは 1 つ。合い方は `same.py` と同じ）。0.7 未満のフレームには入れない。
+    ai08 の 1,2,3,2 は 0.98〜1.0、ai04 の呼吸は 0.96（どちらも合う位置はずれ 0,0。四角を分ける前は 0.93〜0.97）
+  - 四角の中は描いた絵でそのまま置き換える（コマごとに目の形が少し違っても、開いた目が残らない）。その前に確かめ、引っかかったフレームには入れない（迷ったら入れない）:
+    足元が変わる、四角のまわり 2 ドットまでで 1 コマ目と違うドットの固まりが四角の中と外の両方にある（`crossing`。動く前髪・手。置き換えると四角の中だけ戻る）、
+    `same.py` の「入ってきた部品」（`intrusion`）と「境目の段差・輪郭の途切れ」（`seam`。1 コマ目そのものに描いてもできる所は数えない）
+  - `crossing` は `seam` より先に引っかかることが多い（`seam` だけが引っかかるのは、四角の外のすぐ隣だけが 1 コマ目と違うとき）。ai04・ai08 はどのフレームも引っかからなかった
+  - 時間: 閉じる 120 ミリ秒（半分の絵があれば前後に 60 ミリ秒ずつ）を、シートの真ん中のフレームの始まりから入れ、かかるフレームを時間で分ける。
+    20 ミリ秒より短い切れ端は作らない（GIF で 100 ミリ秒になるため）。動き 1 周が間隔（3000 ミリ秒）より短ければ、間隔 ÷ 1 周 を四捨五入した周の数だけ繰り返す
 - **読み戻し**（`edit.py`・`piskel.py`）: 同じコマを 2 回使う順番（1,2,3,2）でも、シートは再生する順に 1 コマずつ並べる（Piskel の再生・エンジンの読み込みがそのまま正しくなるため）。
   同じ元のコマどうしが違えば知らせる。.piskel はそのまま JSON の文字（Piskel のソースの読み込みの部分で確かめた）
 
@@ -261,6 +272,7 @@ AI が描いたドット絵風の画像は、ドット 1 個が約 20px で、�
 | `frames.py` | コマの切り分けとそろえ方 `convert_frames()`・`assemble_frames()`・`flicker_report()` |
 | `steady.py` | ちらつきを減らす `steady_frames()`、違いの図 `steady_image()` |
 | `same.py` | 1 コマ目と同じにする範囲 `same_frames()`（位置を探して写す・境目の確かめ）、範囲の図 `same_image()` |
+| `swap.py` | 差し替え（まばたき）`swaps_from_dict()` / `swaps_json()`（一覧の読み書き）、`swap_from_image()`（描いた絵から違うドット）、`apply_swaps()`（周の数・位置・時間で分けて入れる）、`mirror_swapped()` |
 | `touchup.py` | 手の直し `touchup_from_dict()` / `touchup_json()`（直しの一覧の読み書き）、`apply_touchup()`（当てる・下の色が変わったドットを数える）、`touchup_result()` |
 | `edit.py` / `piskel.py` | 手直しの読み戻し / .piskel の読み書き |
 | `motion/` | 動き。`make_motion()`、`spec.py`（表の形）・`timeline.py`（表からフレーム）・`base.py`（`check_rules()`・`split_limits()`）・`breathe.py`・`sway.py`・`floating.py`・`bouncing.py`・`nod.py`・`stretch.py`・`region.py`・`report.py`（skipped）・`sheet.py`（`save_sheet()`）・`gif.py` |
@@ -269,7 +281,7 @@ retrocore の CG 変換（`retrocore/pipeline.py` など）とは独立してお
 
 テスト画像は `tests/synth_sprite.py` でコード合成する（単色背景・キャラクター風の形・グラデーション。グリッド検出用には、小さなドット絵をマスごとに
 19〜22px のばらつきで拡大し、ぼかし・ノイズ・輪郭の半ドットのずれを加えたもの）。画面と CLI のバイトの一致は `tests/test_sprite_web_motion.py`・
-`test_sprite_frames.py`・`test_sprite_edit.py`・`test_sprite_touchup.py` などが確かめる。
+`test_sprite_frames.py`・`test_sprite_edit.py`・`test_sprite_touchup.py`・`test_sprite_swap.py` などが確かめる。
 
 比較画像の道具（既定の出力先）: `compare_sprite_background.py 入力.png ... --edge-all`（`out/sprite/bg/`）・`compare_sprite_grid.py`（`out/sprite/grid/`）・
 `compare_sprite_simplify.py`（`out/sprite/simplify/`）・`compare_sprite_cleanup.py`（`out/sprite/cleanup/`）・`compare_sprite_outline.py`（`out/sprite/outline/`）・

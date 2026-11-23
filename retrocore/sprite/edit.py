@@ -394,12 +394,15 @@ def check_frames(frames: list[np.ndarray], info: dict, palette: np.ndarray | Non
         sf = info["frames"][i].get("source_frame") if i < len(info["frames"]) else None
         if isinstance(sf, int) and not isinstance(sf, bool):
             entry["source_frame"] = sf
+        sw = info["frames"][i].get("swap") if i < len(info["frames"]) else None
+        if isinstance(sw, dict):   # 差し替え（まばたきなど）を入れたフレームは、同じ元のコマでも違ってよい
+            entry["swap"] = sw
         rec_frames.append(entry)
         marks.append({"new": newm, "semi": semi, "repeat": np.zeros(a.shape, bool)})
     # 同じ元のコマ（source_frame）から作ったコマの違い
     groups: dict[int, list[int]] = {}
     for e in rec_frames:
-        if "source_frame" in e:
+        if "source_frame" in e and "swap" not in e:
             groups.setdefault(e["source_frame"], []).append(e["frame"] - 1)
     repeats = []
     for sf, idx in groups.items():
@@ -588,7 +591,7 @@ def readback(edited: bytes, edited_name: str, info_text, original: bytes | None 
         same = []
         for i, f in enumerate(info["frames"]):
             sf = f.get("source_frame")
-            if not isinstance(sf, int) or isinstance(sf, bool):
+            if not isinstance(sf, int) or isinstance(sf, bool) or isinstance(f.get("swap"), dict):
                 continue
             if sf in seen:
                 j = seen[sf]

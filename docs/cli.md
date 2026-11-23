@@ -4,7 +4,7 @@
 工程の仕組みと値を決めた理由は [how-it-works.md](how-it-works.md)。リポジトリのルートで実行する（依存は `requirements.txt`。NumPy と Pillow だけ）。
 
 目次: [変換](#変換のオプション) / [パレット](#パレット) / [動き](#動き1-枚の絵) / [GIF](#gif-アニメ---gif) / [動きの表](#動きの表---motion-spec----write-motion-spec) /
-[コマが並んだ絵](#コマが並んだ絵---frames) / [読み戻し](#手直ししたシートの読み戻し---readback) / [シートの JSON](#シートの-json)
+[コマが並んだ絵](#コマが並んだ絵---frames) / [差し替え](#差し替えまばたき---swaps) / [読み戻し](#手直ししたシートの読み戻し---readback) / [シートの JSON](#シートの-json)
 
 ## 変換のオプション
 
@@ -119,6 +119,7 @@ python -m apps.sprite chara2.png -o out/sprite/chara2.png --palette out/sprite/g
 | `--stretch-split auto\|N\|P%` | 伸びの分ける高さ（auto は呼吸と同じ探し方） |
 | `--keep-small-parts` | 目・頬など（同じ色の塊で縦 3 ドット以下・面積 24 ドット以下）の長さを変えない（呼吸・うなずく・伸びだけ。既定は切） |
 
+- `--swaps JSON`: ブラウザ版の「差し替えを描く」で保存した `<出力名>_<動き>_swaps.json` で、シートの中にまばたきを入れる（下の「[差し替え](#差し替えまばたき---swaps)」）
 - 動きごとのオプションをほかの動きに付けるとエラー（例 `--breathe-depth は --motion sway では使えません`）
 - 作れないとき（決まりを守れない形）は動きを付けずに警告し、シートは書かない（変換の結果は保存する）。指定した高さの近くで作れないときは
   「近くで分けられる高さ: 13、16」のように試せる数を出す（勝手に別の高さで作らない）。画像の外の高さはエラー（終了コード 1）
@@ -259,16 +260,49 @@ python -m apps.sprite 正面歩き.png --frames --frame-count 3 --frame-order 1,
 | `--same-search N` | 範囲の位置を探す幅（上下左右 N ドット以内。既定 3） |
 | `--same-from K` | 元にするコマ（既定 1） |
 | `--edits JSON` | ブラウザ版の「ドットを直す」で保存した `<出力名>_<名前>_edits.json` を当てる。コマの大きさ・数・パレットが合わなければ作らずに理由を出す。下の色が変わったドットは数を警告する |
+| `--swaps JSON` | ブラウザ版の「差し替えを描く」で保存した `<出力名>_<名前>_swaps.json` で、シートの中にまばたきを入れる（下の「差し替え」） |
 | `--piskel` | シートと同じ名前の `.piskel` も書く（Piskel の Import → Load .piskel file で開ける。速さは 1〜24 FPS の整数 1 つなので、いちばん多い時間から決める） |
 
 - 出力: `<出力名>.png`（そろえたコマを元の順に並べた絵）と `<出力名>_<名前>_<幅>x<高さ>_<N>f.png / .json`（幅・高さは 1 フレーム、N はフレームの数。例 `ai07_walk_53x91_4f.png`）。
   名前で Piskel の「Import as spritesheet」に入れる幅・高さが分かる。1 枚の絵の動きのシートの名前は `<出力名>_<動き>_sheet.png` のまま
-- 順番: 変換 → 1 コマ目と同じにする範囲 → ちらつきを減らす → 手の直し → 体全体の上下・シート
+- 順番: 変換 → 1 コマ目と同じにする範囲 → ちらつきを減らす → 手の直し → 体全体の上下・シート → 差し替え（まばたき）
 - 範囲を写さないとき（警告と次に試せることを出す）の code: `low_match`・`seam`・`hole`・`foot`・`small_part`・`intrusion`・`edge`・`empty`。写さなかった範囲は `skipped`（`stage: same_as_first`）にも入る。
   範囲を使うと図 `<出力名>_<名前>_same.png`（緑の枠 = 写した位置、赤 = 写さなかった、橙 = 境目の問題、青 = 残した部品）も書く
 - `--mirror` の JSON は `pivot.x` も反転し、`source.mirrored` が true。`--gif` は `<出力名>_<名前>_<幅>x<高さ>_<N>f.gif`（幅・高さは 1 倍の大きさ）
 - 使えないもの: `--motion`・`--motion-spec`（体全体の上下は `--frame-root-y`）、`--input-type illust`、`--grid-origin`
 - 比較画像: `tools/compare_sprite_frames.py`・`compare_sprite_steady.py`・`compare_sprite_same.py`（`--frame-count 4` など）
+
+## 差し替え（まばたき。`--swaps`）
+
+目を閉じた顔を 1 回描くだけで、動きの中にまばたきを入れる。`--motion`・`--motion-spec`・`--frames` と一緒に使う。
+
+```bash
+python -m apps.sprite chara.png --motion breathe --gif --swaps chara_sprite_breathe_swaps.json
+python -m apps.sprite 正面歩き.png --frames --frame-count 3 --frame-order 1,2,3,2 --mirror --gif --swaps 正面歩き_sprite_frames_swaps.json
+```
+
+- 一覧のファイルはブラウザ版の「差し替えを描く」で保存する（同じファイルなら画面と CLI の出力はバイト単位で同じ）。1 コマ目（1 枚の絵は変換した絵）と違うドットだけが入る:
+
+```json
+{"version": 1, "kind": "sprite_swaps", "name": "frames", "frame_width": 66, "frame_height": 92,
+ "palette": ["#rrggbb", ...], "interval_ms": 3000, "close_ms": 120, "half_ms": 60, "search": 3,
+ "swaps": [{"type": "blink", "rects": [{"x": 22, "y": 39, "w": 2, "h": 1}, {"x": 40, "y": 39, "w": 2, "h": 1}],
+            "closed": [[22, 39, 13, 0], ...], "half": [[x, y, 色の番号 か null, 1 コマ目の色の番号 か null], ...]}]}
+```
+
+- `closed`（閉じた目）はいる、`half`（半分閉じた目）はなくてもよい。あれば 開く → 半分（`half_ms`）→ 閉じる（`close_ms`）→ 半分 → 開く
+- 動き 1 周が `interval_ms`（500〜20000）より短いときは、動きを何周か繰り返したシートにして 1 回だけ入れる（周の数 = 間隔 ÷ 1 周 を四捨五入）。シートの名前のフレームの数も増える
+- まばたきはシートの真ん中あたりのフレームの始まりから入れ、かかるフレームを時間で分ける（全体の時間は変えない。20 ミリ秒より短い切れ端は作らない）
+- `rects` は違うドットの離れた固まりごとの四角（2 ドット以内のドットは同じ固まり。左右の目は別々）。書き出すときだけ付け、読むときはドットから決め直す
+- 各フレームで頭の位置を上下左右 `search` ドット以内で探す（四角が何個あってもずれは 1 つ）。次のフレームには入れず、どのフレームがなぜ入らなかったかを警告する
+  （入れられるフレームから始める。迷ったら入れない）: 合い方 0.7 未満（`low_match`）・キャンバスの外（`edge`）・足元が変わる（`foot`）・
+  四角の境目をまたいで 1 コマ目と違う部品がある（`crossing`。コマごとに動く前髪・手など）・外から入ってきた太い部品がある（`intrusion`）・
+  置き換えると四角の境目で段差・輪郭の途切れができる（`seam`。`intrusion`・`seam` は `--same-as-first` と同じ確かめ）。
+  どのフレームにも入れられなければ、元のシートのまま警告する
+- 1 コマ目の大きさ・パレットが描いたときと違うと、作らずに理由を出す（終了コード 1）。1 コマ目の色が描いたときと違うドットは数を警告する
+- シートの JSON に `swaps`（`interval_ms`・`cycle_ms`・`repeats`・`items`。`items[]` は `type`・`rects`・`shapes`・`applied`・`start_ms`・`duration_ms`・`frames`（入れたフレームの番号。0 から）・
+  `placements`（元のフレームごとの `shift`・`match`・`used`）・`frames_not_used`（入れなかったフレームと `code`））と、入れたフレームの `frames[].swap`（`{"type": "blink", "shape": "closed"}`）を足す。
+  `.piskel` は速さを 1 つしか持てないので、短いフレームもいちばん多い時間で再生される（本当の時間は JSON）。読み戻しでは、まばたきのフレームを「同じ元のコマが違う」として数えない
 
 ## 手直ししたシートの読み戻し（`--readback`）
 
@@ -317,10 +351,11 @@ python -m apps.sprite 書き出した.png --readback walk_walk_53x91_4f.json --o
 | `same_as_first` | （`--same-as-first` のとき）範囲・コマごとのずれ・合い方・写したか（`copied`・`code`）・`changed_dots`・`kept_dots` など |
 | `steady` | （`--steady on` のとき）`mode`・`size`・`reference_frame`・`rows` と、コマごとの `shift`・`restored_dots`・`kept_dots`・`kept_reasons` |
 | `edits` | （`--edits` のとき）`palette`・`dot_count`・元のコマごとの `dots`（[x, y, 色の番号 か null]） |
+| `swaps` / `frames[].swap` | （`--swaps` のとき）まばたきの記録（上の「差し替え」）。1 枚の絵の動きでは `skipped` の前に入る |
 | `palette` | （`--frames`、PR #40 から）シートで使った色（`"#rrggbb"`、小さい順）。読み戻しで新しい色を見つけるのに使う |
 | `skipped` | 作らなかった理由・警告の記録（いちばん外の最後。何もなければ `[]`） |
 
-並びは `source` → `same_as_first` → `steady` → `edits` → `palette` → `skipped`。直し・範囲・ちらつきを使わないときの JSON は前の版とバイト単位で同じ。
+並びは `source` → `same_as_first` → `steady` → `edits` → `swaps` → `palette` → `skipped`。直し・範囲・ちらつき・差し替えを使わないときの JSON は前の版とバイト単位で同じ。
 Windows の CLI は JSON の改行を CRLF、画面は LF で書く（中身は同じ）。
 
 - **Unity**: Sprite Mode = Multiple、Slice の Grid By Cell Size で `frame_width` × `frame_height`。Pivot は Custom で (pivot.x / frame_width, 1 − pivot.y / frame_height)（下端の中央なら (0.5, 0)）

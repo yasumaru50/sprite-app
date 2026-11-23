@@ -592,7 +592,7 @@
       </div>
       <div id="touch-box" hidden>
         <h3 id="touch-title">ドットを直す</h3>
-        <div class="note help" data-help-at="touch-title">ちらつき・ゴミ・輪郭を数ドット直す所です（大きな描き直しは Piskel で）。
+        <div class="note help edits-only" data-help-at="touch-title">ちらつき・ゴミ・輪郭を数ドット直す所です（大きな描き直しは Piskel で）。
           コマごとにドットを塗る・消すと、そのまま再生と保存（シート・JSON・GIF・左右反転・.piskel）に入ります。
           直しは<b>元のコマ</b>に入るので、順番 1,2,3,2 の 2 番目と 4 番目は 1 回直せば両方変わります。使える色はシートのパレットだけです（新しい色は作れません）。
           上の「1 コマ目と同じにする範囲」や変換の設定を変えても、直しはその上に重ね直します（下の色が変わったドットは数を知らせます）。</div>
@@ -600,23 +600,56 @@
           <button type="button" id="touch-pen" class="secondary on" aria-pressed="true">ペン（B）</button>
           <button type="button" id="touch-eraser" class="secondary" aria-pressed="false">消しゴム（E）</button>
           <button type="button" id="touch-picker" class="secondary" aria-pressed="false">スポイト（I）</button>
-          <button type="button" id="touch-prev" class="secondary">◀ 前のコマ（,）</button>
+          <button type="button" id="touch-prev" class="secondary edits-only">◀ 前のコマ（,）</button>
           <span id="touch-frame-label"></span>
-          <button type="button" id="touch-next" class="secondary">次のコマ（.）▶</button>
+          <button type="button" id="touch-next" class="secondary edits-only">次のコマ（.）▶</button>
         </div>
         <div class="actions">
           <label for="touch-zoom">拡大</label>
           <select id="touch-zoom"><option value="4">4 倍</option><option value="8">8 倍</option><option value="12" selected>12 倍</option><option value="16">16 倍</option></select>
           <label class="check"><input type="checkbox" id="touch-grid" checked> 格子線</label>
-          <label class="check"><input type="checkbox" id="touch-onion"> 前のコマを薄く重ねる（O）</label>
+          <label class="check edits-only"><input type="checkbox" id="touch-onion"> 前のコマを薄く重ねる（O）</label>
           <button type="button" id="touch-undo" class="secondary" disabled>元に戻す（Ctrl＋Z）</button>
           <button type="button" id="touch-redo" class="secondary" disabled>やり直し（Ctrl＋Y）</button>
-          <button type="button" id="touch-clear" class="secondary" disabled>直しを全部消す</button>
+          <button type="button" id="touch-clear" class="secondary edits-only" disabled>直しを全部消す</button>
         </div>
         <div id="touch-palette" role="group" aria-label="パレット（クリックで色を選ぶ）"></div>
         <div class="note help" id="touch-help" data-help-at="touch-title"><b>マウス</b>: 左ドラッグ = 描く（ペン・消しゴム）／右クリック・右ドラッグ = 消しゴム／Alt＋クリック = スポイト（色を拾ってペンに戻る）。
           <b>キー</b>（カーソルが絵の上にあるとき・この欄を選んでいるとき）: B ペン／E 消しゴム／I スポイト／「,」「.」前後のコマ／O 前のコマを薄く重ねる・やめる／
           Ctrl＋Z 元に戻す／Ctrl＋Y か Ctrl＋Shift＋Z やり直し。元に戻すは 1 回のドラッグを 1 つと数えて 50 回まで。前のコマの重ね（再生の順番で 1 つ前。1 コマ目は最後のコマ）は見るためだけで、保存には入りません。</div>
+        <div class="actions edits-only" id="swap-mode-row">
+          <label class="check" id="swap-mode-label"><input type="checkbox" id="swap-mode"> 差し替えを描く（まばたき）</label>
+        </div>
+        <div class="note help" data-help-at="touch-title">「差し替えを描く」: 1 コマ目が出るので、目を閉じた形に描き直してください（使える色はシートのパレットだけ）。
+          1 コマ目と違うドットだけが「差し替え」になり、範囲（違うドットを囲む四角）は自動で決まります。動きの中に 1 回まばたきが入り、
+          2 コマ目以降は頭の位置を上下左右 3 ドット以内で探して当てます（合わないコマには入れずに知らせます）。
+          「半分閉じた目」も描くと、開く → 半分 → 閉じる → 半分 → 開く になります。まばたきがかかるコマは時間で分けます（全体の時間は変わりません）。
+          動き 1 周がまばたきの間隔より短いときは、動きを何周か繰り返したシートにして、その中に 1 回だけ入れます。
+          シート・JSON（swaps）・GIF・左右反転・.piskel に入ります。差し替えを描かなければ、出力は今までと同じです。</div>
+        <div id="swap-box" hidden>
+          <div class="actions">
+            <label for="swap-shape">描く絵</label>
+            <select id="swap-shape"><option value="closed" selected>閉じた目</option><option value="half">半分閉じた目（なくてもよい）</option></select>
+            <button type="button" id="swap-clear" class="secondary" disabled>この絵の差し替えを消す</button>
+          </div>
+          <div class="actions">
+            <label for="swap-interval">まばたきの間隔</label>
+            <input type="number" id="swap-interval" min="500" max="20000" step="100" value="3000" style="width:6em"> ミリ秒
+            <label for="swap-close">閉じる時間</label>
+            <input type="number" id="swap-close" min="20" max="1000" step="10" value="120" style="width:5em"> ミリ秒
+            <label for="swap-half">半分の時間</label>
+            <input type="number" id="swap-half" min="20" max="1000" step="10" value="60" style="width:5em"> ミリ秒
+          </div>
+          <div id="swap-time-error" class="message error" hidden></div>
+          <div id="swap-status" role="status" aria-live="polite"></div>
+          <div id="swap-warn" class="message warn" hidden><div id="swap-warn-text" style="white-space:pre-wrap"></div></div>
+          <div class="actions" id="swap-io" data-help-name="差し替えの一覧">
+            <a id="swap-save" class="button secondary" aria-disabled="true" href="#">差し替えの一覧を保存（JSON）</a>
+            <label for="swap-load">差し替えの一覧を読み込む</label>
+            <input type="file" id="swap-load" accept=".json,application/json">
+          </div>
+          <div class="note help" data-help-at="swap-io">差し替えの一覧（<code>&lt;出力名&gt;_&lt;名前&gt;_swaps.json</code>）は、CLI の <code>--swaps</code> でも同じように当てられます（中身はバイト単位で同じになります）。間隔・時間も一覧に入ります。</div>
+        </div>
         <div class="touch-row">
           <div class="touch-wrap"><canvas id="touch-canvas" tabindex="0" aria-label="直すコマ。左ドラッグで描く、右クリックで消す"></canvas></div>
           <div>
@@ -628,21 +661,21 @@
         <div class="note" id="touch-cursor">&nbsp;</div>
         <div id="touch-status" role="status" aria-live="polite"></div>
         <div id="touch-warn" class="message warn" style="white-space:normal" hidden><div id="touch-warn-text" style="white-space:pre-wrap"></div><div class="actions"><button type="button" id="touch-ack" class="secondary">確かめた（印と警告を消す）</button></div></div>
-        <div class="actions" id="touch-io" data-help-name="直しの一覧">
+        <div class="actions edits-only" id="touch-io" data-help-name="直しの一覧">
           <a id="touch-save" class="button secondary" aria-disabled="true" href="#">直しの一覧を保存（JSON）</a>
           <label for="touch-load">直しの一覧を読み込む</label>
           <input type="file" id="touch-load" accept=".json,application/json">
         </div>
-        <div class="note help" data-help-at="touch-io">直しの一覧（<code>&lt;出力名&gt;_&lt;名前&gt;_edits.json</code>）は、CLI の <code>--edits</code> でも同じように当てられます（中身はバイト単位で同じになります）。</div>
+        <div class="note help edits-only" data-help-at="touch-io">直しの一覧（<code>&lt;出力名&gt;_&lt;名前&gt;_edits.json</code>）は、CLI の <code>--edits</code> でも同じように当てられます（中身はバイト単位で同じになります）。</div>
       </div>
       <dialog id="touch-confirm" aria-labelledby="touch-confirm-title" aria-describedby="touch-confirm-text">
         <h3 id="touch-confirm-title">直しを当てられません</h3>
         <div id="touch-confirm-text"></div>
         <div class="confirm-buttons">
-          <button type="button" id="touch-confirm-save">直しを保存してから捨てる（おすすめ）
+          <button type="button" id="touch-confirm-save"><span id="touch-confirm-save-label">直しを保存してから捨てる（おすすめ）</span>
             <small id="touch-confirm-save-help"></small></button>
           <button type="button" id="touch-confirm-discard" class="secondary">保存せずに捨てる
-            <small>直しを消して、新しい結果を使います（直しは元に戻せません）</small></button>
+            <small id="touch-confirm-discard-help">直しを消して、新しい結果を使います（直しは元に戻せません）</small></button>
           <button type="button" id="touch-confirm-apply" class="secondary" hidden>新しい画像にも当てる
             <small id="touch-confirm-apply-help"></small></button>
           <button type="button" id="touch-confirm-cancel" class="secondary"><span id="touch-confirm-cancel-label">やめる</span>
@@ -1574,10 +1607,14 @@ function requestMotion(delay = 250) {
 async function runMotion() {
   if (!motionOn() || !outPng || !ready) return;
   if (motion.inFlight) { motion.again = true; return; }
+  if (touch.asking) return;   // 差し替えの確認の窓を出している（閉じたら作り直す）
+  if (await touchSingleSync()) return;
   let options;
   try {
     options = motionOptions();
     if (outSkipped.length) options = { ...options, convert_skipped: outSkipped };   // CLI と同じ JSON にする
+    const swaps = touch.single ? swapRequest() : null;
+    if (swaps) options = { ...options, swaps };   // 差し替え（まばたき）。無ければ今までと同じ
   } catch (e) {
     clearMotion("設定を直すと、ここで動きを再生します");
     showMotionError(e.message);
@@ -1644,6 +1681,7 @@ async function showMotion(result, ms) {
   if (result.table) updateRegionHelp();
   motion.badRows = result.table && result.skipped ? badRowsOf(result.problems || []) : null;
   showSkippedCodes(result.skipped_records || []);
+  if (touch.single && result.skipped) swapShow(result);   // 動きを作れなかったときも、差し替えの欄を今の状態にする
   if (result.skipped) {
     // 動きを付けられなかった: 変換結果をそのまま（動かさずに）見せる。シートは保存しない（CLI もシートを書かない）。
     // 作らなかった理由の JSON（CLI の <出力名>_<動き>_skipped.json と同じ中身）だけは ⑤ で保存できる
@@ -1727,6 +1765,12 @@ async function showMotion(result, ms) {
   } else {
     const seams = (result.seam_from_bottom || []).map(span).join("、");
     $("motion-meta").textContent = `${size} ／ 継ぎ目は下から ${seams} ドット目`;
+  }
+  if (result.motion) touch.swapName = result.motion;
+  if (touch.single) {
+    $("motion-meta").textContent += swapShow(result);
+    if (result.swaps) $("cli-equiv").textContent = `${$("cli-equiv").textContent.replace(/ --swaps \S+$/, "")} --swaps ${swapFileName()}`;
+    else $("cli-equiv").textContent = $("cli-equiv").textContent.replace(/ --swaps \S+$/, "");
   }
   setMotionStatus(`動きを作りました（${(ms / 1000).toFixed(1)} 秒）。`, false);
   updatePlayer();
@@ -3193,7 +3237,10 @@ const same = { ranges: [], img: null, scale: 8, drag: null, edit: null, sel: -1,
 // ドットを直す（手の直し）の状態（下の「ドットを直す」）。直しの一覧 edits は変換し直しても残す
 const touch = { edits: new Map(), base: null, W: 0, fw: 0, fh: 0, n: 0, palette: [], frame: 1, tool: "pen", color: null,
                 zoom: 12, grid: true, onion: false, undo: [], redo: [], stroke: null, hover: null, over: false,
-                changed: new Map(), dims: null, inFlight: false, again: false, saveUrl: null, previewTimer: null, previewPos: 0 };
+                changed: new Map(), dims: null, inFlight: false, again: false, saveUrl: null, previewTimer: null, previewPos: 0,
+                // 差し替え（まばたき）: mode が "swap" のときは 1 コマ目の上に描く。swaps: 絵の名前 "closed"・"half" → Map(y*幅+x → {c, was})。
+                // single は「1 枚の絵」の動き（変換したスプライトの上に描く。直しは無い）
+                mode: "edits", swaps: new Map(), single: false, version: -1, swapUrl: null, swapName: null };
 fillSelect($("frame-align"), FSPEC.align, $("frame-align-help"));
 fillSelect($("frame-align-y"), FSPEC.align_y, $("frame-align-y-help"));
 fillSelect($("frame-steady"), FSPEC.steady, $("frame-steady-help"));
@@ -3256,6 +3303,9 @@ async function onKindChange() {
     touchDrop(choice === "save", saveFile);
     dropped = `直したドット ${n} 個を捨てました` + (choice === "save" ? `（${saveFile.name} に保存しました）` : "") + "。";
   }
+  if (swapCount()) dropped += `差し替えのドット ${swapCount()} 個を消しました（絵が変わるため）。`;
+  swapReset();
+  touch.version = -1;
   kindNow = next;
   // 入力の種類を変えたら、変換の結果は消す（同じ絵でも、変換の仕方が違うため）
   srcBoxes = null; srcBoxesBad = false;
@@ -3346,7 +3396,10 @@ function sheetRequest() {
   if (durations.length !== 1 && durations.length !== len) {
     throw new Error(`1 コマの時間の数（${durations.length}）は、1 つか、順番の数（${len}）と同じにしてください。`);
   }
-  return { token: frames.token, base: outBase, name: frameName(), order, durations, root_y: rootY(len), mirror: true };
+  const req = { token: frames.token, base: outBase, name: frameName(), order, durations, root_y: rootY(len), mirror: true };
+  const swaps = swapRequest();
+  if (swaps) req.swaps = swaps;   // 差し替え（まばたき）。無ければ今までと同じ
+  return req;
 }
 // CLI で同じファイルを作る引数（画面の下に出す）
 function framesCli(req) {
@@ -3366,6 +3419,7 @@ function framesCli(req) {
   if (s.outline !== SPEC.outline.default) parts.push(`--outline ${s.outline}`);
   parts.push(...sameCli());
   if (touchCount()) parts.push(`--edits ${touchFileName()}`);
+  if (req.swaps) parts.push(`--swaps ${swapFileName()}`);
   parts.push("--mirror", "--flicker", "--piskel");
   return parts.join(" ");
 }
@@ -3375,8 +3429,8 @@ async function runFramesConvert() {
   showError("");
   let request;
   try { request = frameConvertRequest(); } catch (e) { showError(e.message); return; }
-  // 直しがあるときは、変換する前の結果を控えておく（直しを当てられない確認の「やめる」で戻す）
-  const snap = frames.token && frames.result && touchCount() ? framesSnapshot() : null;
+  // 直し・差し替えがあるときは、変換する前の結果を控えておく（当てられない確認の「やめる」で戻す）
+  const snap = frames.token && frames.result && (touchCount() || swapCount()) ? framesSnapshot() : null;
   const usedInputs = Object.fromEntries(FRAMES_CONVERT_INPUTS.map((id) => [id, $(id).value]));   // この変換に使う値
   busy = true;
   updateButtons();
@@ -3567,7 +3621,7 @@ async function showSheets(result, req) {
   $("motion-meta").textContent = `${main.frame_width}×${main.frame_height} ドット × ${main.frame_count} フレーム`
     + `（コマ ${order}、合計 ${motion.info.total_duration_ms} ミリ秒で 1 回）${offs}`
     + (counts ? ` ／ ちらつき（上から ${frames.result.flicker_rows} 行で 1 コマ目と違うドット）: ${counts}` : "")
-    + steadyText(frames.result) + sameText(frames.result);
+    + steadyText(frames.result) + sameText(frames.result) + swapShow(result);
   $("cli-equiv").textContent = framesCli(req);
   showPiskelHint(main, false);
   updatePlayer();
@@ -4022,6 +4076,10 @@ function sameText(result) {
 // 当て直して、シート・JSON・GIF・反転・.piskel を作り直す。直しの下の絵（touch.base）は「変換 → 範囲 → ちらつきを減らす」の後のコマ。
 const TOUCH_UNDO_MAX = 50;
 function touchColorAt(k, x, y, withEdits) {
+  if (typeof k === "string") {   // 差し替えの絵（直しを当てた 1 コマ目の上に描く）
+    const m = withEdits && touch.swaps.get(k), e = m && m.get(y * touch.fw + x);
+    return e ? e.c : touchColorAt(1, x, y, true);
+  }
   if (withEdits) {
     const m = touch.edits.get(k), e = m && m.get(y * touch.fw + x);
     if (e) return e.c;
@@ -4051,13 +4109,17 @@ function touchPrevFrame(k) {
   return order[(p - 1 + order.length) % order.length];
 }
 function touchFrameImage(k) {
+  if (typeof k === "string") return touchApply(touchFrameImage(1), touch.swaps.get(k));
   const img = new ImageData(touch.fw, touch.fh);
   const d = img.data, b = touch.base, W = touch.W, fw = touch.fw;
   for (let y = 0; y < touch.fh; y++) {
     const s = (y * W + (k - 1) * fw) * 4;
     d.set(b.subarray(s, s + fw * 4), y * fw * 4);
   }
-  const m = touch.edits.get(k);
+  return touchApply(img, touch.edits.get(k));
+}
+function touchApply(img, m) {
+  const d = img.data;
   if (m) for (const [key, e] of m) {
     const i = key * 4;
     if (e.c === null) { d[i] = d[i + 1] = d[i + 2] = d[i + 3] = 0; }
@@ -4084,12 +4146,12 @@ function touchDraw() {
   g.fillStyle = cb; g.fillRect(0, 0, c.width, c.height);
   g.fillStyle = ca;
   for (let y = 0; y < c.height; y += q) for (let x = (y / q) % 2 ? q : 0; x < c.width; x += 2 * q) g.fillRect(x, y, q, q);
-  if (touch.onion && touch.n > 1) {
+  if (touch.onion && touch.n > 1 && touch.mode !== "swap") {
     g.globalAlpha = 0.35;
     g.drawImage(touchFrameCanvas(touchPrevFrame(touch.frame)), 0, 0, fw * z, fh * z);
     g.globalAlpha = 1;
   }
-  g.drawImage(touchFrameCanvas(touch.frame), 0, 0, fw * z, fh * z);
+  g.drawImage(touchFrameCanvas(touchKey()), 0, 0, fw * z, fh * z);
   if (touch.grid && z >= 4) {
     g.strokeStyle = "rgba(0,0,0,0.18)"; g.lineWidth = 1;
     g.beginPath();
@@ -4097,14 +4159,14 @@ function touchDraw() {
     for (let y = 0; y <= fh; y++) { g.moveTo(0, y * z + 0.5); g.lineTo(fw * z, y * z + 0.5); }
     g.stroke();
   }
-  // 直したドット（細い青の点）と、下の色が変わったドット（橙の枠）
-  const m = touch.edits.get(touch.frame);
+  // 直したドット・差し替えのドット（細い青の点）と、下の色が変わったドット（橙の枠）
+  const m = touchStore().get(touchKey());
   if (m) {
     g.fillStyle = "rgba(10,132,255,0.9)";
     const r = Math.max(1, Math.floor(z / 6));
     for (const key of m.keys()) { const x = key % fw, y = Math.floor(key / fw); g.fillRect(x * z + 1, y * z + 1, r, r); }
   }
-  const ch = touch.changed.get(touch.frame);
+  const ch = touch.mode === "swap" ? null : touch.changed.get(touch.frame);
   if (ch) {
     g.strokeStyle = "#ff9f0a"; g.lineWidth = 2;
     for (const [x, y] of ch) g.strokeRect(x * z + 1, y * z + 1, z - 2, z - 2);
@@ -4119,8 +4181,18 @@ function touchLabel() {
   const order = touchOrder();
   const pos = order.map((k, i) => (k === touch.frame ? i + 1 : 0)).filter(Boolean);
   const m = touch.edits.get(touch.frame);
-  $("touch-frame-label").textContent = `${touch.frame} / ${touch.n} コマ目` + (pos.length ? `（再生の ${pos.join("・")} 番目）` : "（再生に使っていない）")
-    + `・直したドット ${m ? m.size : 0}`;
+  if (touch.mode === "swap") {
+    const sm = touch.swaps.get(touchKey());
+    const base = touch.single ? "変換した絵" : "1 コマ目";
+    $("touch-frame-label").textContent = `差し替え「${{ closed: "閉じた目", half: "半分閉じた目" }[touchKey()]}」（${base}の上に描く）`
+      + `・${base}と違うドット ${sm ? sm.size : 0}`;
+  } else {
+    $("touch-frame-label").textContent = `${touch.frame} / ${touch.n} コマ目` + (pos.length ? `（再生の ${pos.join("・")} 番目）` : "（再生に使っていない）")
+      + `・直したドット ${m ? m.size : 0}`;
+  }
+  $("touch-prev").disabled = $("touch-next").disabled = touch.mode === "swap";
+  const sm = touch.swaps.get($("swap-shape").value);
+  $("swap-clear").disabled = !(sm && sm.size);
   $("touch-undo").disabled = !touch.undo.length;
   $("touch-redo").disabled = !touch.redo.length;
   $("touch-clear").disabled = !touchCount();
@@ -4155,6 +4227,7 @@ function touchPreviewTick() {
   const order = touchOrder();
   let durs = [FSPEC.duration];
   try { durs = intList($("frame-duration").value, "時間", false); } catch (e) { /* 既定の時間で回す */ }
+  if (touch.mode === "swap") { swapPreviewTick(); return; }
   const i = touch.previewPos % order.length, k = order[i];
   const s = touch.zoom >= 12 ? 3 : 2;
   c.width = touch.fw * s; c.height = touch.fh * s;
@@ -4177,13 +4250,13 @@ function touchInside([x, y]) { return x >= 0 && y >= 0 && x < touch.fw && y < to
 // 1 ドットを塗る（c は色か null = 透明）。下の色と同じなら直しを消す。変えた分はドラッグの記録に足す
 function touchSet(k, x, y, c) {
   if (!touchInside([x, y])) return;
-  const key = y * touch.fw + x;
-  let m = touch.edits.get(k);
+  const key = y * touch.fw + x, store = touchStore(k);
+  let m = store.get(k);
   const before = m ? m.get(key) : undefined;
   const under = touchColorAt(k, x, y, false);
   const after = c === under ? undefined : { c, was: under };
   if ((before ? before.c : under) === c && !(before && !after)) return;
-  if (!m) { m = new Map(); touch.edits.set(k, m); }
+  if (!m) { m = new Map(); store.set(k, m); }
   if (after) m.set(key, after); else m.delete(key);
   const id = k + ":" + key;
   if (touch.stroke) {
@@ -4196,7 +4269,7 @@ function touchLine(x0, y0, x1, y1, c) {
   const dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0), sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
   let err = dx + dy;
   for (;;) {
-    touchSet(touch.frame, x0, y0, c);
+    touchSet(touchKey(), x0, y0, c);
     if (x0 === x1 && y0 === y1) break;
     const e2 = 2 * err;
     if (e2 >= dy) { err += dy; x0 += sx; }
@@ -4205,17 +4278,17 @@ function touchLine(x0, y0, x1, y1, c) {
 }
 function touchPick(cell) {
   if (!touchInside(cell)) return;
-  const c = touchColorAt(touch.frame, cell[0], cell[1], true);
+  const c = touchColorAt(touchKey(), cell[0], cell[1], true);
   if (c === null) touch.tool = "eraser";
   else { touch.color = c; touch.tool = "pen"; }
   touchLabel();
 }
 function touchCursor(cell) {
   if (!cell || !touchInside(cell)) { $("touch-cursor").innerHTML = "&nbsp;"; return; }
-  const [x, y] = cell, c = touchColorAt(touch.frame, x, y, true);
-  const m = touch.edits.get(touch.frame), e = m && m.get(y * touch.fw + x);
+  const [x, y] = cell, c = touchColorAt(touchKey(), x, y, true);
+  const m = touchStore().get(touchKey()), e = m && m.get(y * touch.fw + x);
   $("touch-cursor").textContent = `x ${x}・y ${y} ／ ` + (c === null ? "透明" : `色 ${touch.palette.indexOf(c)} 番（${c}）`)
-    + (e ? "（直したドット。元は " + (e.was === null ? "透明" : `${touch.palette.indexOf(e.was)} 番`) + "）" : "");
+    + (e ? `（${touch.mode === "swap" ? "差し替えのドット" : "直したドット"}。元は ` + (e.was === null ? "透明" : `${touch.palette.indexOf(e.was)} 番`) + "）" : "");
 }
 function touchPushUndo(changes) {
   touch.undo.push(changes);
@@ -4224,15 +4297,22 @@ function touchPushUndo(changes) {
 }
 function touchReplay(changes, back) {
   for (const ch of changes) {
-    let m = touch.edits.get(ch.k);
-    if (!m) { m = new Map(); touch.edits.set(ch.k, m); }
+    const store = touchStore(ch.k);
+    let m = store.get(ch.k);
+    if (!m) { m = new Map(); store.set(ch.k, m); }
     const v = back ? ch.before : ch.after;
     if (v) m.set(ch.key, v); else m.delete(ch.key);
   }
 }
-function touchUndo() { const u = touch.undo.pop(); if (!u) return; touchReplay([...u].reverse(), true); touch.redo.push(u); touchChanged(); }
-function touchRedo() { const u = touch.redo.pop(); if (!u) return; touchReplay(u, false); touch.undo.push(u); touchChanged(); }
-function touchChanged() { touchRefresh(); touchPreviewRestart(); runTouch(); }
+function touchUndo() { const u = touch.undo.pop(); if (!u) return; touchReplay([...u].reverse(), true); touch.redo.push(u); touchChanged(u); }
+function touchRedo() { const u = touch.redo.pop(); if (!u) return; touchReplay(u, false); touch.undo.push(u); touchChanged(u); }
+// 変えた後に計算し直す（直しは frames_edits_for_web、差し替えはシートを作り直す）。changes が無ければ直しとして扱う
+function touchChanged(changes) {
+  touchRefresh(); touchPreviewRestart();
+  const kinds = new Set((changes || [{ k: 1 }]).map((ch) => typeof ch.k));
+  if (kinds.has("string")) swapChanged();
+  if (kinds.has("number")) runTouch();
+}
 function touchPreviewRestart() { touchPreviewTick(); }
 $("touch-canvas").addEventListener("contextmenu", (ev) => ev.preventDefault());
 $("touch-canvas").addEventListener("mousedown", (ev) => {
@@ -4245,7 +4325,7 @@ $("touch-canvas").addEventListener("mousedown", (ev) => {
   const c = ev.button === 2 || touch.tool === "eraser" ? null : touch.color;
   if (c === undefined) return;
   touch.stroke = { c, last: cell, changes: new Map() };
-  touchSet(touch.frame, cell[0], cell[1], c);
+  touchSet(touchKey(), cell[0], cell[1], c);
   touchDraw();
   touchPreviewRestart();
 });
@@ -4272,7 +4352,7 @@ window.addEventListener("mouseup", () => {
   if (!touch.stroke) return;
   const changes = [...touch.stroke.changes.values()].filter((ch) => (ch.before ? ch.before.c + "|" + ch.before.was : "-") !== (ch.after ? ch.after.c + "|" + ch.after.was : "-"));
   touch.stroke = null;
-  if (changes.length) { touchPushUndo(changes); touchChanged(); } else touchRefresh();
+  if (changes.length) { touchPushUndo(changes); touchChanged(changes); } else touchRefresh();
 });
 function touchActive(ev) {
   if (!touch.base || $("touch-box").hidden) return false;
@@ -4302,7 +4382,7 @@ document.addEventListener("keydown", (ev) => {
   ev.preventDefault();
   touchRefresh();
 });
-function touchGo(d) { touch.frame = ((touch.frame - 1 + d + touch.n) % touch.n) + 1; touchCursor(touch.hover); touchRefresh(); }
+function touchGo(d) { if (touch.mode === "swap") return; touch.frame = ((touch.frame - 1 + d + touch.n) % touch.n) + 1; touchCursor(touch.hover); touchRefresh(); }
 $("touch-pen").addEventListener("click", () => { touch.tool = "pen"; touchLabel(); });
 $("touch-eraser").addEventListener("click", () => { touch.tool = "eraser"; touchLabel(); });
 $("touch-picker").addEventListener("click", () => { touch.tool = "picker"; touchLabel(); });
@@ -4319,7 +4399,7 @@ $("touch-clear").addEventListener("click", () => {
   if (!changes.length) return;
   touchPushUndo(changes);
   touchReplay(changes, false);
-  touchChanged();
+  touchChanged(changes);
 });
 $("touch-ack").addEventListener("click", () => {
   // 下の色が変わったドットの「直したときの下の色」を今の色にする（警告を消す）
@@ -4331,7 +4411,7 @@ $("touch-ack").addEventListener("click", () => {
   if (!changes.length) return;
   touchPushUndo(changes);
   touchReplay(changes, false);
-  touchChanged();
+  touchChanged(changes);
 });
 $("touch-save").addEventListener("click", (ev) => { if ($("touch-save").getAttribute("aria-disabled") === "true") ev.preventDefault(); });
 $("touch-load").addEventListener("change", async (ev) => {
@@ -4386,6 +4466,254 @@ function touchDict() {
   return { version: 1, kind: "sprite_edits", name: frameNameSafe(), frame_width: touch.fw, frame_height: touch.fh,
            frame_count: touch.n, palette: pal, frames: fr };
 }
+// ---- 差し替え（まばたき。CLI の --swaps） ----
+// 「差し替えを描く」では、1 コマ目（直しを当てたもの。1 枚の絵は変換した絵）の上に「閉じた目」「半分閉じた目」を描く。
+// 1 コマ目と違うドットだけを touch.swaps に持ち、シートを作るときに Python（swap.py。CLI と同じ関数）へ渡して、動きの中に 1 回まばたきを入れる。
+function touchKey() { return touch.mode === "swap" ? $("swap-shape").value : touch.frame; }
+function touchStore(k = touchKey()) { return typeof k === "string" ? touch.swaps : touch.edits; }
+function swapCount() { let n = 0; for (const m of touch.swaps.values()) n += m.size; return n; }
+function swapName() { return touch.single ? (touch.swapName || currentMotion()) : frameNameSafe(); }
+function swapFileName() { return `${outBase}_${swapName()}_swaps.json`; }
+function swapTimes() {
+  const v = {};
+  for (const [id, key, lo, hi, label] of [["swap-interval", "interval_ms", 500, 20000, "まばたきの間隔"],
+                                          ["swap-close", "close_ms", 20, 1000, "閉じる時間"], ["swap-half", "half_ms", 20, 1000, "半分の時間"]]) {
+    const n = Number($(id).value);
+    if (!Number.isInteger(n) || n < lo || n > hi) throw new Error(`${label}は ${lo}〜${hi} の整数（ミリ秒）で入れてください（いまは「${$(id).value}」）。`);
+    v[key] = n;
+  }
+  return v;
+}
+// Python に渡す差し替えの一覧（swap.py のファイルと同じ形）。「閉じた目」が無ければ null（まばたきは入れない＝今までと同じ出力）
+function swapDict(times, allowEmpty = false) {
+  const closed = touch.swaps.get("closed");
+  if (!touch.base || ((!closed || !closed.size) && !allowEmpty)) return null;
+  const pal = touch.palette.slice();
+  const idx = (c) => { if (c === null) return null; let i = pal.indexOf(c); if (i < 0) { pal.push(c); i = pal.length - 1; } return i; };
+  const dots = (m) => [...m.keys()].sort((a, b) => a - b).map((key) => { const e = m.get(key); return [key % touch.fw, Math.floor(key / touch.fw), idx(e.c), idx(e.was)]; });
+  const sw = { type: "blink" };
+  if (closed && closed.size) sw.closed = dots(closed);
+  const half = touch.swaps.get("half");
+  if (half && half.size) sw.half = dots(half);
+  return { version: 1, kind: "sprite_swaps", name: swapName(), frame_width: touch.fw, frame_height: touch.fh, palette: pal,
+           ...(times || swapTimes()), search: 3, swaps: [sw] };
+}
+// 捨てる前に保存する差し替えの一覧（今の絵の大きさで作る。大きさが変わる前に作っておく）
+function swapSaveFile() {
+  let times;
+  try { times = swapTimes(); } catch (e) { times = { interval_ms: 3000, close_ms: 120, half_ms: 60 }; }
+  return { text: JSON.stringify(swapDict(times, true), null, 2) + "\n", name: swapFileName() };
+}
+// 当てられなくなった差し替えを脇へ置く（絵から外す。確認の窓で「やめる」なら戻す）
+function swapHold(reason) {
+  touch.swapHeld = { swaps: touch.swaps, file: swapSaveFile(), n: swapCount(), reason,
+                     undo: touch.undo, redo: touch.redo };
+  touch.swaps = new Map();
+  touch.undo = touch.undo.filter((u) => u.every((ch) => typeof ch.k !== "string"));
+  touch.redo = touch.redo.filter((u) => u.every((ch) => typeof ch.k !== "string"));
+}
+function swapRestoreHeld() {
+  const h = touch.swapHeld;
+  if (!h) return;
+  touch.swaps = h.swaps; touch.undo = h.undo; touch.redo = h.redo; touch.swapHeld = null;
+  $("swap-warn").hidden = true;
+  touchRefresh(); touchPreviewRestart();
+}
+function swapDropHeld(keep) {
+  const h = touch.swapHeld;
+  if (!h) return;
+  if (keep) saveText(h.file.text, h.file.name);
+  touch.swapHeld = null;
+  // 捨てた知らせは、次に差し替えを描くまで欄に残す（シートを作り直しても消さない）
+  touch.swapNote = `当てられなかった差し替えのドット ${h.n} 個を捨てました`
+    + (keep ? `（${h.file.name} に保存しました）` : "") + `: ${h.reason}`;
+  $("swap-warn").hidden = false;
+  $("swap-warn-text").textContent = touch.swapNote;
+}
+// 差し替えだけがあって当てられないときの確認（「ドットを直す」と同じ窓。cancel が null なら「やめる」は出さない）
+async function swapCannotApply(cancel, noCancelReason) {
+  const h = touch.swapHeld;
+  if (!h) return null;
+  const choice = await touchAsk(h.n, h.reason, cancel, noCancelReason, {
+    title: "差し替えを当てられません", saveName: h.file.name, saveLabel: "差し替えを保存してから捨てる（おすすめ）",
+    text: `差し替え（まばたき）のドット ${h.n} 個を、新しい結果に当てられません。理由: ${h.reason}`,
+    saveHelp: `差し替えの一覧（${h.file.name}）をダウンロードしてから、差し替えを消して新しい結果を使います。`
+      + "あとで「差し替えの一覧を読み込む」や CLI の --swaps で使えます",
+    discardHelp: "差し替えを消して、新しい結果を使います（差し替えは元に戻せません）" });
+  if (choice === "cancel") {
+    await cancel.run();
+    swapRestoreHeld();
+    $("swap-status").textContent = `やめました（差し替えのドット ${h.n} 個はそのまま残っています）。`;
+    if (touch.single) requestMotion(0); else requestSheets(0);
+    return choice;
+  }
+  swapDropHeld(choice === "save");
+  touchRefresh(); touchPreviewRestart();
+  if (touch.single) requestMotion(0); else requestSheets(0);
+  return choice;
+}
+// シートの設定に足す（時間の入力が間違っていれば、差し替えを入れずに知らせる）
+function swapRequest() {
+  try { $("swap-time-error").hidden = true; return swapDict(); } catch (e) {
+    $("swap-time-error").hidden = false; $("swap-time-error").textContent = e.message; return null;
+  }
+}
+function swapChanged() { touch.swapNote = null; if (touch.single) requestMotion(150); else requestSheets(150); }
+function swapReset() {
+  touch.swaps = new Map(); touch.mode = "edits"; touch.single = false; touch.swapName = null;
+  touch.undo = touch.undo.filter((u) => u.every((ch) => typeof ch.k !== "string"));
+  touch.redo = touch.redo.filter((u) => u.every((ch) => typeof ch.k !== "string"));
+  $("swap-mode").checked = false; $("swap-mode").disabled = false; $("swap-box").hidden = true;
+  for (const el of document.querySelectorAll("#touch-box .edits-only")) el.hidden = false;
+  $("touch-title").textContent = "ドットを直す";
+}
+// シートを作った結果（frames_sheets・motion）の差し替えの記録を「差し替えを描く」欄に出す
+function swapShow(result) {
+  if (touch.swapUrl) { URL.revokeObjectURL(touch.swapUrl); touch.swapUrl = null; }
+  const n = swapCount(), closed = touch.swaps.get("closed"), half = touch.swaps.get("half");
+  const warns = [...(touch.swapNote ? [touch.swapNote] : []), ...(result.swaps_warnings || [])];
+  if (result.swaps_error) warns.unshift(`差し替えを当てられません: ${result.swaps_error.message}`);
+  $("swap-warn").hidden = !warns.length;
+  $("swap-warn-text").textContent = warns.join("\n");
+  if (result.swaps_json && n) {
+    touch.swapUrl = URL.createObjectURL(new Blob([result.swaps_json], { type: "application/json" }));
+    $("swap-save").href = touch.swapUrl;
+    $("swap-save").download = swapFileName();
+    $("swap-save").setAttribute("aria-disabled", "false");
+  } else {
+    $("swap-save").href = "#";
+    $("swap-save").setAttribute("aria-disabled", "true");
+  }
+  const dots = `差し替えのドット: 閉じた目 ${closed ? closed.size : 0}・半分閉じた目 ${half ? half.size : 0}`;
+  const it = result.swaps && result.swaps.items[0];
+  let text;
+  if (!n) text = "差し替えはありません（今までと同じ出力です）。";
+  else if (!closed || !closed.size) text = `「閉じた目」を描くと、まばたきが入ります（${dots}）。`;
+  else if (it && it.applied) {
+    const sw = result.swaps, all = sw.cycle_ms * sw.repeats;
+    text = `まばたき: 動き ${sw.repeats} 周（1 周 ${sw.cycle_ms} ミリ秒・合計 ${all} ミリ秒）のシートに 1 回。`
+      + `${it.start_ms} ミリ秒から ${it.duration_ms} ミリ秒（シートの ${it.frames.map((i) => i + 1).join("・")} フレーム目）。${dots}`;
+  } else if (it) text = `まばたきは入れていません: ${it.message}（${dots}）`;
+  else text = `まばたきは入れていません（${dots}）`;
+  $("swap-status").textContent = text;
+  return it && it.applied ? ` ／ まばたき: 動き ${result.swaps.repeats} 周に 1 回（${it.frames.map((i) => i + 1).join("・")} フレーム目）` : "";
+}
+// 差し替えの見本（開く → 半分 → 閉じる → 半分 を繰り返す。保存には関係しない）
+function swapPreviewTick() {
+  const c = $("touch-preview"), half = touch.swaps.get("half"), steps = [[1, 700]];
+  if (half && half.size) steps.push(["half", 150]);
+  steps.push(["closed", 300]);
+  if (half && half.size) steps.push(["half", 150]);
+  const i = touch.previewPos % steps.length, [k, ms] = steps[i];
+  const s = touch.zoom >= 12 ? 3 : 2;
+  c.width = touch.fw * s; c.height = touch.fh * s;
+  const g = c.getContext("2d");
+  g.imageSmoothingEnabled = false;
+  g.clearRect(0, 0, c.width, c.height);
+  g.drawImage(touchFrameCanvas(k), 0, 0, c.width, c.height);
+  $("touch-preview-label").textContent = { 1: "開いた目", half: "半分閉じた目", closed: "閉じた目" }[k];
+  touch.previewPos = (i + 1) % steps.length;
+  touch.previewTimer = setTimeout(touchPreviewTick, ms);
+}
+// 「1 枚の絵」の動き: 変換した絵を「差し替えを描く」の下の絵にする（直しは無い）。変換し直して大きさが変わったら差し替えを消す
+// 戻り値は true なら確認の窓を出した（閉じた後に動きを作り直すので、呼んだ側はここで止める）
+async function touchSingleSync() {
+  if (framesMode() || !motionOn() || !outImage) return false;
+  const fw = outImage.width, fh = outImage.height;
+  let asked = false;
+  if (!touch.single || touch.version !== spriteVersion) {
+    const note = "";
+    if (touch.single && swapCount() && (touch.fw !== fw || touch.fh !== fh)) {
+      // 絵の大きさが変わった: 差し替えは当てられない。「保存してから捨てる／保存せずに捨てる」を聞く（「やめる」はまだ無い）
+      swapHold(`変換し直して絵の大きさが変わりました（${touch.fw}×${touch.fh} → ${fw}×${fh}）`);
+      asked = true;
+    }
+    if (!touch.single) { swapReset(); touch.edits = new Map(); touch.undo = []; touch.redo = []; touch.changed = new Map(); }
+    const c = document.createElement("canvas");
+    c.width = fw; c.height = fh;
+    const g = c.getContext("2d");
+    g.drawImage(outImage, 0, 0);
+    touch.base = g.getImageData(0, 0, fw, fh).data;
+    touch.W = touch.fw = fw; touch.fh = fh; touch.n = 1; touch.frame = 1; touch.dims = [fw, fh, 1];
+    const cols = new Set();
+    for (let i = 0; i < touch.base.length; i += 4) {
+      if (touch.base[i + 3]) cols.add("#" + [touch.base[i], touch.base[i + 1], touch.base[i + 2]].map((v) => v.toString(16).padStart(2, "0")).join(""));
+    }
+    touch.palette = [...cols].sort();
+    touch.single = true; touch.mode = "swap"; touch.version = spriteVersion;
+    touchPalette();
+    if (note) { $("swap-warn").hidden = false; $("swap-warn-text").textContent = note; }
+  }
+  $("touch-title").textContent = "差し替えを描く（まばたき）";
+  for (const el of document.querySelectorAll("#touch-box .edits-only")) el.hidden = true;
+  $("swap-mode").checked = true;
+  $("swap-box").hidden = false;
+  $("touch-box").hidden = false;
+  touchRefresh();
+  if (!touch.previewTimer) touchPreviewRestart();
+  if (asked) {
+    touch.asking = true;
+    try { await swapCannotApply(null, "1 枚の絵では、前の変換に戻す仕組みがまだ無いため"); } finally { touch.asking = false; }
+  }
+  return asked;
+}
+$("swap-mode").addEventListener("change", () => {
+  touch.mode = $("swap-mode").checked ? "swap" : "edits";
+  $("swap-box").hidden = !$("swap-mode").checked;
+  touch.hover = null; touch.previewPos = 0;
+  touchRefresh(); touchPreviewRestart();
+});
+$("swap-shape").addEventListener("change", () => { touch.hover = null; touchRefresh(); });
+for (const id of ["swap-interval", "swap-close", "swap-half"]) $(id).addEventListener("input", () => { if (swapCount()) swapChanged(); });
+$("swap-clear").addEventListener("click", () => {
+  const k = $("swap-shape").value, m = touch.swaps.get(k);
+  if (!m || !m.size) return;
+  const changes = [...m].map(([key, e]) => ({ k, key, before: e, after: undefined }));
+  touchPushUndo(changes);
+  touchReplay(changes, false);
+  touchChanged(changes);
+});
+$("swap-save").addEventListener("click", (ev) => { if ($("swap-save").getAttribute("aria-disabled") === "true") ev.preventDefault(); });
+$("swap-load").addEventListener("change", async (ev) => {
+  const f = ev.target.files[0];
+  ev.target.value = "";
+  if (!f || !touch.base) return;
+  const fail = (text) => { $("swap-warn").hidden = false; $("swap-warn-text").textContent = text; };
+  let d;
+  try { d = JSON.parse(await f.text()); } catch (e) { fail(`差し替えの一覧（${f.name}）を JSON として読めません。`); return; }
+  if (!d || d.kind !== "sprite_swaps" || !Array.isArray(d.swaps) || !Array.isArray(d.palette)) { fail(`${f.name} は差し替えの一覧（kind: sprite_swaps）ではありません。`); return; }
+  if (d.frame_width !== touch.fw || d.frame_height !== touch.fh) {
+    fail(`差し替えの一覧（${f.name}）は ${d.frame_width}×${d.frame_height} ドットの絵に描いたものです。いまの絵は ${touch.fw}×${touch.fh} ドットなので読み込めません。`);
+    return;
+  }
+  const blink = d.swaps.find((s) => s && s.type === "blink") || {};
+  const next = new Map();
+  for (const k of ["closed", "half"]) {
+    const m = new Map();
+    for (const v of blink[k] || []) {
+      if (!Array.isArray(v) || v.length < 3 || v[0] < 0 || v[1] < 0 || v[0] >= touch.fw || v[1] >= touch.fh) { fail(`差し替えの一覧（${f.name}）のドットの形が違います: ${JSON.stringify(v)}`); return; }
+      const c = v[2] === null ? null : d.palette[v[2]];
+      const was = v.length > 3 ? (v[3] === null ? null : d.palette[v[3]]) : touchColorAt(1, v[0], v[1], true);
+      if (c === undefined || was === undefined) { fail(`差し替えの一覧（${f.name}）の色の番号がパレットにありません: ${JSON.stringify(v)}`); return; }
+      m.set(v[1] * touch.fw + v[0], { c, was });
+    }
+    next.set(k, m);
+  }
+  for (const [id, key] of [["swap-interval", "interval_ms"], ["swap-close", "close_ms"], ["swap-half", "half_ms"]]) {
+    if (Number.isInteger(d[key])) $(id).value = String(d[key]);
+  }
+  const changes = [];
+  for (const k of ["closed", "half"]) {
+    const a = touch.swaps.get(k) || new Map(), b = next.get(k);
+    for (const key of new Set([...a.keys(), ...b.keys()])) changes.push({ k, key, before: a.get(key), after: b.get(key) });
+  }
+  if (!touch.single) { $("swap-mode").checked = true; touch.mode = "swap"; $("swap-box").hidden = false; }
+  touchPushUndo(changes);
+  touchReplay(changes, false);
+  $("swap-warn").hidden = true;
+  touchChanged(changes.length ? changes : [{ k: "closed" }]);
+  $("swap-status").textContent = `差し替えの一覧（${f.name}）を読み込みました。`;
+});
 function touchMessage(text, warn) {
   if (warn) { $("touch-warn").hidden = false; $("touch-warn-text").textContent = text; $("touch-ack").hidden = true; }
   $("touch-status").textContent = warn ? "" : text;
@@ -4401,6 +4729,11 @@ async function touchView(result) {
   c.width = im.width; c.height = im.height;
   const g = c.getContext("2d");
   g.drawImage(im, 0, 0);
+  if (touch.single) { swapReset(); touch.edits = new Map(); touch.undo = []; touch.redo = []; touch.changed = new Map(); }
+  if (swapCount() && (touch.fw !== fw || touch.fh !== fh)) {
+    // コマの大きさが変わった: 差し替えは当てられない（ドットの位置を読み違える）。消す前に脇へ置き、確認の窓で聞く（swapHeld）
+    swapHold(`コマの大きさが変わりました（${touch.fw}×${touch.fh} → ${fw}×${fh}）`);
+  }
   touch.base = g.getImageData(0, 0, im.width, im.height).data;
   touch.W = im.width;
   touch.fw = fw; touch.fh = fh; touch.n = n;
@@ -4449,8 +4782,11 @@ function touchAsk(n, message, cancel, noCancelReason, opts = {}) {
     const d = $("touch-confirm");
     $("touch-confirm-title").textContent = opts.title || "直しを当てられません";
     $("touch-confirm-text").textContent = opts.text || `直したドット ${n} 個を、新しい結果に当てられません。理由: ${message}`;
-    $("touch-confirm-save-help").textContent = `直しの一覧（${opts.saveName || touchFileName()}）をダウンロードしてから、直しを消して新しい結果を使います。`
+    $("touch-confirm-save-help").textContent = opts.saveHelp
+      || `直しの一覧（${opts.saveName || touchFileName()}）をダウンロードしてから、直しを消して新しい結果を使います。`
       + "あとで「直しの一覧を読み込む」や CLI の --edits で使えます";
+    $("touch-confirm-save-label").textContent = opts.saveLabel || "直しを保存してから捨てる（おすすめ）";
+    $("touch-confirm-discard-help").textContent = opts.discardHelp || "直しを消して、新しい結果を使います（直しは元に戻せません）";
     $("touch-confirm-apply").hidden = !opts.apply;
     $("touch-confirm-apply-help").textContent = opts.apply ? opts.apply.help : "";
     $("touch-confirm-cancel").hidden = !cancel;
@@ -4480,12 +4816,25 @@ async function touchCannotApply(message, cancel, noCancelReason, saveFile, opts 
   const n = touchCount();
   if (!n) return null;
   saveFile = saveFile || touchSaveFile();
+  const held = touch.swapHeld;
+  if (held) {
+    // 差し替えも当てられない（コマの大きさが変わった）: 同じ窓でまとめて聞く
+    opts = { ...opts, saveName: `${saveFile.name} と ${held.file.name}`,
+             text: (opts.text || `直したドット ${n} 個を、新しい結果に当てられません。理由: ${message}`)
+               + `（差し替え（まばたき）のドット ${held.n} 個も当てられません: ${held.reason}）`,
+             saveLabel: "直しと差し替えを保存してから捨てる（おすすめ）",
+             saveHelp: `直しの一覧（${saveFile.name}）と差し替えの一覧（${held.file.name}）をダウンロードしてから、両方を消して新しい結果を使います。`
+               + "あとで「…の一覧を読み込む」や CLI の --edits・--swaps で使えます",
+             discardHelp: "直しと差し替えを消して、新しい結果を使います（元に戻せません）" };
+  }
   const choice = await touchAsk(n, message, cancel, noCancelReason, { saveName: saveFile.name, ...opts });
   if (choice === "cancel") {
     await cancel.run();
-    touchMessage(`やめました（直したドット ${n} 個はそのまま残っています）。`, false);
+    if (held) swapRestoreHeld();
+    touchMessage(`やめました（直したドット ${n} 個${held ? `と差し替えのドット ${held.n} 個` : ""}はそのまま残っています）。`, false);
     return choice;
   }
+  if (held) swapDropHeld(choice === "save");
   if (choice === "apply") return choice;
   const keep = choice === "save";
   touchDrop(keep, saveFile);
@@ -4541,7 +4890,11 @@ async function touchAfterConvert(snap) {
                           help: "前の結果・範囲・直しに戻し、変えた変換の設定の入力欄も前の値に戻します" } : null;
   const why = "前の結果がもう無いため（画像を選び直した・入力の種類を変えたなど）";
   await touchView(r);
-  if (!touchCount()) { touchShow(r); return; }
+  if (!touchCount()) {
+    touchShow(r);
+    if (touch.swapHeld) await swapCannotApply(cancel, why);
+    return;
+  }
   if (carry) { await touchCarry(carry, prev, saveFile); return; }
   if (prev && (prev[0] !== r.frame_width || prev[1] !== r.frame_height || touchMaxFrame() > r.frame_count)) {
     await touchCannotApply(`コマの大きさか数が変わりました（${prev[0]}×${prev[1]}・${prev[2]} コマ → ${r.frame_width}×${r.frame_height}・${r.frame_count} コマ）`, cancel, why, saveFile);
