@@ -119,7 +119,7 @@ python -m apps.sprite chara2.png -o out/sprite/chara2.png --palette out/sprite/g
 | `--stretch-split auto\|N\|P%` | 伸びの分ける高さ（auto は呼吸と同じ探し方） |
 | `--keep-small-parts` | 目・頬など（同じ色の塊で縦 3 ドット以下・面積 24 ドット以下）の長さを変えない（呼吸・うなずく・伸びだけ。既定は切） |
 
-- `--swaps JSON`: ブラウザ版の「差し替えを描く」で保存した `<出力名>_<動き>_swaps.json` で、シートの中にまばたきを入れる（下の「[差し替え](#差し替えまばたき---swaps)」）
+- `--swaps JSON`: ブラウザ版の「差し替えを描く」で保存した `<出力名>_<動き>_swaps.json` で、シートの中にまばたきを入れる。口パクがあれば、しゃべりのシートも書く（下の「[差し替え](#差し替えまばたき---swaps)」）
 - 動きごとのオプションをほかの動きに付けるとエラー（例 `--breathe-depth は --motion sway では使えません`）
 - 作れないとき（決まりを守れない形）は動きを付けずに警告し、シートは書かない（変換の結果は保存する）。指定した高さの近くで作れないときは
   「近くで分けられる高さ: 13、16」のように試せる数を出す（勝手に別の高さで作らない）。画像の外の高さはエラー（終了コード 1）
@@ -304,6 +304,28 @@ python -m apps.sprite 正面歩き.png --frames --frame-count 3 --frame-order 1,
   `placements`（元のフレームごとの `shift`・`match`・`used`）・`frames_not_used`（入れなかったフレームと `code`））と、入れたフレームの `frames[].swap`（`{"type": "blink", "shape": "closed"}`）を足す。
   `.piskel` は速さを 1 つしか持てないので、短いフレームもいちばん多い時間で再生される（本当の時間は JSON）。読み戻しでは、まばたきのフレームを「同じ元のコマが違う」として数えない
 
+### 口パク（しゃべりのシート）
+
+一覧に `{"type": "talk", "open": [...], "half": [...]}`（`open` = 開いた口。いる、`half` = 半分開いた口。なくてもよい）があると、
+**ふつうのシートとは別に「しゃべりのシート」も書く**（ふつうのシートは今までと同じ。まばたきだけが入る）。閉じた口は 1 コマ目のまま。
+
+```bash
+python -m apps.sprite chara.png --motion breathe --gif --swaps chara_sprite_breathe_swaps.json   # ふつうのシート＋しゃべりのシート
+python -m apps.sprite chara.png --gif --swaps chara_sprite_talk_swaps.json                       # 動きなし: 口だけ動く
+```
+
+- 出力: 1 枚の絵は `<出力名>_<動き>_talk_sheet.png` / `.json`（`--gif` なら `<出力名>_<動き>_talk.gif`）。`--motion` なし（口パクがある一覧のときだけ使える）は
+  `<出力名>_talk_sheet.png`。コマが並んだ絵は `<出力名>_<名前>_talk_<幅>x<高さ>_<N>f.png`（`--mirror` なら `<名前>_talk_mirror`、`--piskel`・`--gif` も同じ名前）
+- 口の動き: 半分の口が無ければ 閉じる → 開く、あれば 閉じる → 半分 → 開く → 半分 のくり返し。決まった順番で、乱数は使わない。
+  切り替えの時間は一覧の `talk_ms`（40〜1000。`null` は自動で、半分なし 150・半分あり 100 ミリ秒）。`talk_ms` は口パクがあるときだけ書く（まばたきだけの一覧は前と同じ）
+- 周の数: シート全体の時間が口の 1 回りでちょうど割り切れるように動きを繰り返す（まばたきもあれば、まばたきの周の数から探す。20 秒まで）。
+  割り切れなければ、口の切り替えの時間を 2% まで伸び縮みさせる（どちらでも、シートの終わりと始まりで口がつながる）。口・まばたき・元のフレームの境目で時間を分け、20 ミリ秒未満の切れ端は作らない
+- まばたきも入る（ふつうのシートと同じ決め方）。目と口の四角が重なるフレームは、口を優先してまばたきを入れずに警告する（`overlap`）
+- 口の当て方はまばたきと同じ（±`search` ドットで探す。`low_match`・`edge`・`foot`・`crossing`・`intrusion`・`seam` のフレームは閉じた口のまま警告）。
+  入らないフレームが半分以上なら、しゃべりのシートは書かずに、理由と次に試せること（口のまわりまで広く描く・動きを小さくする・動きなしにする）を警告する（終了コード 0。ふつうのシートは書く）
+- JSON の `swaps` は `talk_ms` と、`items[]` に口パク（`type: "talk"`・`step_ms`・`pattern`・`steps`・`step_ms_used`・`frames`・`placements`）とまばたきの記録。
+  `frames[].swap` は、そのフレームに入れた形（`{"talk": "open", "blink": "closed"}`。どちらかだけのこともある）
+
 ## 手直ししたシートの読み戻し（`--readback`）
 
 Piskel などで直したシート（PNG か `.piskel`）と元の JSON から、JSON・GIF・左右反転・横 1 列に並べ直したシート・.piskel を作り直す。**直したドットはそのまま使う**。手順は [sprite-edit.md](sprite-edit.md)。
@@ -351,7 +373,7 @@ python -m apps.sprite 書き出した.png --readback walk_walk_53x91_4f.json --o
 | `same_as_first` | （`--same-as-first` のとき）範囲・コマごとのずれ・合い方・写したか（`copied`・`code`）・`changed_dots`・`kept_dots` など |
 | `steady` | （`--steady on` のとき）`mode`・`size`・`reference_frame`・`rows` と、コマごとの `shift`・`restored_dots`・`kept_dots`・`kept_reasons` |
 | `edits` | （`--edits` のとき）`palette`・`dot_count`・元のコマごとの `dots`（[x, y, 色の番号 か null]） |
-| `swaps` / `frames[].swap` | （`--swaps` のとき）まばたきの記録（上の「差し替え」）。1 枚の絵の動きでは `skipped` の前に入る |
+| `swaps` / `frames[].swap` | （`--swaps` のとき）まばたきの記録（上の「差し替え」）。しゃべりのシートでは口パクとまばたきの記録（上の「口パク」）。1 枚の絵の動きでは `skipped` の前に入る |
 | `palette` | （`--frames`、PR #40 から）シートで使った色（`"#rrggbb"`、小さい順）。読み戻しで新しい色を見つけるのに使う |
 | `skipped` | 作らなかった理由・警告の記録（いちばん外の最後。何もなければ `[]`） |
 
