@@ -1,6 +1,7 @@
 """重ね（漫画的エフェクト。retrocore/sprite/fx/）のテスト: 絵の表、置く場所、左右反転、終わり方、重ねた見た目、
 CLI と画面のバイト単位の一致、エフェクトを選ばないときに出力が変わらないこと。"""
 
+import hashlib
 import json
 
 import numpy as np
@@ -40,7 +41,9 @@ def test_all_effects_load_and_use_only_known_colors():
     assert X.effect_names()[:4] == ["surprise", "sweat", "heart", "sleep"]
     for n in X.effect_names():
         e = X.load_effect(n)
-        assert 4 <= e.width <= 20 and 4 <= e.height <= 20
+        if e.anchor != "around":   # 体のまわりは、キャラの大きさで部品の間が変わる
+            assert 2 <= e.width <= 20 and 2 <= e.height <= 20
+        assert all(len(rows[0]) <= 20 and len(rows) <= 20 for rows in e.parts.values())
         assert all(d % 50 == 0 for d in e.durations)   # .piskel にそろえやすい
         frames = X.render(e, (1, 2, 3))
         assert all(f.shape == (e.height, e.width, 4) for f in frames)
@@ -50,7 +53,39 @@ def test_all_effects_load_and_use_only_known_colors():
             assert used <= allowed
             assert set(np.unique(f[..., 3]).tolist()) <= {0, 255}   # 半透明なし
     spec = X.fx_spec()
-    assert [e["loop"] for e in spec["effects"]] == [False, False, True, True]
+    assert [e["loop"] for e in spec["effects"]][:4] == [False, False, True, True]
+    assert len(spec["effects"]) == 16
+    assert {e["anchor"] for e in spec["effects"]} == set(X.ANCHORS)
+    assert all(e["anchor_label"] for e in spec["effects"])
+
+
+# 1 回目の 4 種（surprise・sweat・heart・sleep）の出力: 2 回目の 12 種を足す前のハッシュと同じ（絵・JSON・重ねた見た目）
+FIRST4 = {
+    "surprise": ("27a5002889e0aba7", "79358c9a156ee20a"),
+    "sweat": ("06aaf674b1ee9301", "470df4ae60b06759"),
+    "heart": ("cbb40ed9efd59a3b", "0610a0ca9f815870"),
+    "sleep": ("bbd22bfcdf09f2af", "fdadb89c718a624f"),
+}
+
+
+def _first4_digest(name, mirror):
+    res = make_motion(make_pixel_sprite(), "breathe")
+    fr = [f[:, ::-1].copy() for f in res.frames] if mirror else res.frames
+    once = name in ("surprise", "sweat")
+    fx = X.make_fx(name, fr, mirror, (1, -2), ("hide" if mirror else None) if once else None)
+    h = hashlib.sha256()
+    h.update(X.fx_sheet(fx).tobytes())
+    h.update(X.fx_json(fx, "a.png", "b.png").encode())
+    frames, durations, view = X.composite(fr, res.durations, fx)
+    for f in frames:
+        h.update(f.tobytes())
+    h.update(repr((durations, view)).encode())
+    return h.hexdigest()[:16]
+
+
+@pytest.mark.parametrize("name", list(FIRST4))
+def test_first_four_effects_are_unchanged(name):
+    assert (_first4_digest(name, False), _first4_digest(name, True)) == FIRST4[name]
 
 
 def test_bad_tables_are_rejected():
@@ -61,6 +96,12 @@ def test_bad_tables_are_rejected():
     bad = {"x": {"anchor": "top", "loop": True, "parts": {"a": "o"}, "frames": [([("b", 0, 0)], 100)]}}
     with pytest.raises(X.FxError):
         X.load_effect("x", bad)
+    ref_top = {"x": {"anchor": "top", "loop": True, "parts": {"a": "o"}, "frames": [([("a", "ne", 0, 0)], 100)]}}
+    with pytest.raises(X.FxError):   # 基準つきの部品は体のまわりだけ
+        X.load_effect("x", ref_top)
+    ref_bad = {"x": {"anchor": "around", "loop": True, "parts": {"a": "o"}, "frames": [([("a", "top", 0, 0)], 100)]}}
+    with pytest.raises(X.FxError):
+        X.load_effect("x", ref_bad)
     with pytest.raises(X.FxError):
         X.load_effect("nothing")
 
@@ -84,6 +125,38 @@ def test_top_and_side_positions():
     assert t.position[0] == 13 + 1 + X.GAP
     o = X.make_fx("sweat", [c], offset=(2, -3))
     assert o.position == (t.position[0] + 2, t.position[1] - 3)
+
+
+def test_face_and_upper_face_positions():
+    c = _char()                      # 頭: 上端 2・6 行・x 6〜13
+    fx_, fy = X.face_point(X.head_box(c))
+    assert (fx_, fy) == ((6 + 13 + 1) // 2 + 8 // 4, 2 + X.FACE_ROWS * 6)
+    t = X.make_fx("tears", [c])
+    w, h = t.size
+    assert t.position == (fx_ - w // 2, fy)        # 上端の真ん中を目の下の目安に
+    p = X.make_fx("pale", [c])
+    w, h = p.size
+    assert p.position == ((6 + 13 + 1 - w) // 2, fy - h)   # 下端を目安の行にそろえて、頭の真ん中
+    o = X.make_fx("tears", [c], offset=(-1, 2))
+    assert o.position == (t.position[0] - 1, t.position[1] + 2)
+
+
+def test_around_follows_body_size():
+    small, big = _char(), np.zeros((50, 40, 4), np.uint8)
+    big[5:48, 4:36] = DARK
+    big[6:47, 5:35] = BODY
+    for c in (small, big):
+        body = X.body_box(c)
+        fx = X.make_fx("sparkle", [c])
+        w, h = fx.size
+        x, y = fx.position
+        # 星は体の四角の左右・上のまわりに出る（下は足元の少し上まで）
+        assert x < body["left"] and y < body["top"] and x + w > body["left"] + body["width"]
+        assert body["top"] + body["height"] - 12 < y + h <= body["top"] + body["height"]
+        assert sum((f[..., 3] > 0).any() for f in fx.frames) == len(fx.frames)
+    a, b = X.make_fx("sparkle", [small]), X.make_fx("sparkle", [big])
+    assert b.size[0] - a.size[0] == 32 - 18 and b.size[1] - a.size[1] == 43 - 26   # 大きさの差 = 体の四角の差
+    assert X.body_box(np.zeros((3, 3, 4), np.uint8)) is None
 
 
 def test_mirror_flips_position_but_not_art():
@@ -187,6 +260,23 @@ def test_cli_matches_web_bytes(tmp_path, pixel_png):
     assert info["position"] == {"x": r["position"][0], "y": r["position"][1]} and info["offset"] == {"x": 1, "y": -2}
     bad = json.loads(X.fx_for_web(sheet, sj, json.dumps({"fx": "nothing"})))
     assert not bad["ok"]
+
+
+@pytest.mark.parametrize("name", ["tears", "pale", "sparkle", "idea", "silence"])
+def test_cli_matches_web_bytes_new_effects(tmp_path, pixel_png, name):
+    from apps.sprite import cli
+    import base64
+    d = tmp_path / "o"
+    assert cli.main([str(pixel_png), "-o", str(d / "hero.png"), "-q", "--motion", "breathe",
+                     "--fx", name, "--fx-offset=1,1"]) == 0
+    for stem in ("hero_breathe",):
+        sheet = (d / f"{stem}_sheet.png").read_bytes()
+        sj = (d / f"{stem}_sheet.json").read_text(encoding="utf-8")
+        r = json.loads(X.fx_for_web(sheet, sj, json.dumps({"fx": name, "offset": [1, 1]})))
+        assert r["ok"], r
+        assert r["name"] == f"{stem}_fx_{name}.png"
+        assert base64.b64decode(r["png_base64"]) == (d / r["name"]).read_bytes()
+        assert r["json"].encode("utf-8") == (d / f"{stem}_fx_{name}.json").read_bytes()
 
 
 def test_cli_frames_mirror_piskel_and_web(tmp_path):
