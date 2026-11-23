@@ -124,6 +124,77 @@ def test_low_match_frame_is_not_used_and_warned():
     assert out2.info["swaps"]["items"][0]["applied"] is False and rep2.warnings
 
 
+HAIR = (90, 60, 30, 255)
+
+
+def _with_strand(img, x, y0=3, y1=8):
+    """前髪の 1 本（x 列の y0〜y1 行）を描いた顔。"""
+    out = img.copy()
+    out[y0:y1 + 1, x] = HAIR
+    return out
+
+
+def test_rects_are_split_per_eye_and_near_dots_are_merged():
+    img = _face()
+    d, _ = _blink_dict(img, half=False)
+    sw = S.swaps_from_dict(d).swaps[0]
+    assert sw.rects() == [(6, 8, 2, 2), (12, 8, 2, 2)]
+    # 2 ドット以内のドットは同じ四角
+    near = S.Swap("blink", {"closed": [S.Dot(1, 1, None), S.Dot(3, 1, None), S.Dot(9, 1, None)]})
+    assert near.rects() == [(1, 1, 3, 1), (9, 1, 1, 1)]
+
+
+def test_moving_bangs_between_eyes_are_not_reverted():
+    """目と目の間の前髪がコマごとに動いても、まばたきのコマで 1 コマ目の形に戻らない（四角を目ごとに分けるので入らない）。"""
+    img = _face()
+    f1, f2 = _with_strand(img, 10), _with_strand(img, 9)
+    d, _ = _blink_dict(f1, half=False)
+    out, rep = S.apply_swaps(_anim([f1, f2], [1500, 1500]), f1, S.swaps_from_dict(d), palette_of([f1, f2]))
+    assert rep.items[0]["placements"][1]["used"] and out.info["swap_frames"][1]
+    got = out.frames[1]
+    assert tuple(got[8, 9]) == HAIR and tuple(got[8, 10]) != HAIR   # 2 コマ目の前髪のまま
+    assert np.array_equal(got[:, 8:12], f2[:, 8:12])
+
+
+def test_bangs_crossing_eye_rect_frame_is_not_used():
+    """前髪が目の四角の境目をまたいで動くコマには入れない（入れると四角の中だけ 1 コマ目の形に戻る）。"""
+    img = _face()
+    f1, f2 = img, _with_strand(img, 7, 3, 8)     # 2 コマ目だけ、前髪が左の目の四角に入る
+    d, closed = _blink_dict(f1, half=False)
+    out, rep = S.apply_swaps(_anim([f1, f2], [1500, 1500]), f1, S.swaps_from_dict(d), palette_of([f1, f2]))
+    item = rep.items[0]
+    assert item["frames_not_used"] == [{"frame": 1, "code": S.SKIP_CROSS, "match": item["placements"][1]["match"]}]
+    assert any("2 枚目" in w and "前髪" in w for w in rep.warnings)
+    # 1 コマ目に入れ、2 コマ目の絵はどのフレームでもそのまま
+    for k, m in enumerate(out.info["swap_frames"]):
+        if m:
+            assert np.array_equal(out.frames[k], closed)
+    assert any(np.array_equal(f, f2) for f in out.frames) and not any(
+        (f[3:9, 7] == np.array(HAIR, np.uint8)).all(-1).any() and not np.array_equal(f, f2) for f in out.frames)
+
+
+def test_seam_frame_is_not_used():
+    """置き換えると四角の境目で輪郭が途切れるコマには入れない（same.py と同じ確かめ）。
+    目を輪郭の色で描いて顔の縁に付けた絵で、2 コマ目だけ目の隣の輪郭が欠けている。閉じた目（肌の色）を置くと、肌が外に出る。"""
+    line = (200, 40, 40, 255)
+    img = np.zeros((16, 16, 4), np.uint8)
+    img[2:14, 2:14] = line
+    img[3:13, 3:13] = (250, 220, 190, 255)
+    img[7, 3:5] = line                                # 目（輪郭の色。左の縁に付いている）
+    img[10, 9:12] = line                              # 口
+    f2 = img.copy()
+    f2[7, 2] = 0                                      # 2 コマ目は目の隣の輪郭が欠けている（目が縁になっている）
+    closed = img.copy()
+    closed[7, 3:5] = (250, 220, 190, 255)
+    sw = S.swap_from_image(img, {"closed": closed})
+    assert sw.rects() == [(3, 7, 2, 1)]
+    d = S.swaps_dict(S.SwapSet([sw], 16, 16), palette_of([img]))
+    out, rep = S.apply_swaps(_anim([img, f2], [1500, 1500]), img, S.swaps_from_dict(d), palette_of([img, f2]))
+    nu = rep.items[0]["frames_not_used"]
+    assert [(e["frame"], e["code"]) for e in nu] == [(1, S.SKIP_SEAM)]
+    assert any("段差・輪郭の途切れ" in w for w in rep.warnings)
+
+
 def test_short_pieces_are_merged():
     img = _face()
     d, _ = _blink_dict(img, half=False)
@@ -169,7 +240,8 @@ def test_file_roundtrip():
     text = S.swaps_json(s, palette_of([img]))
     again = S.load_swaps(text)
     assert S.swaps_dict(again, palette_of([img])) == S.swaps_dict(s, palette_of([img]))
-    assert json.loads(text)["swaps"][0]["rect"] == {"x": 6, "y": 8, "w": 8, "h": 2}
+    # 左右の目は別々の四角（目と目の間は入れない）
+    assert json.loads(text)["swaps"][0]["rects"] == [{"x": 6, "y": 8, "w": 2, "h": 2}, {"x": 12, "y": 8, "w": 2, "h": 2}]
     assert S.swaps_file_name("hero", "walk") == "hero_walk_swaps.json"
 
 
@@ -196,8 +268,9 @@ def test_mirror_is_flipped_normal():
     m = S.mirror_swapped(out, mirror)
     assert m.name == "walk_mirror" and m.durations == out.durations
     assert all(np.array_equal(a[:, ::-1], b) for a, b in zip(out.frames, m.frames))
-    r = m.info["swaps"]["items"][0]["rect"]
-    assert r["x"] == img.shape[1] - 6 - 8
+    rs = m.info["swaps"]["items"][0]["rects"]
+    want = [img.shape[1] - r["x"] - r["w"] for r in out.info["swaps"]["items"][0]["rects"]]
+    assert [r["x"] for r in rs] == want and len(rs) >= 2
 
 
 # ---- CLI と画面 ----
@@ -344,7 +417,10 @@ def test_web_page_has_swap_editor():
     html = build_sprite_web.build()
     for key in ('id="swap-mode"', 'id="swap-box"', 'id="swap-shape"', 'id="swap-interval"', 'id="swap-close"',
                 'id="swap-half"', 'id="swap-save"', 'id="swap-load"', 'id="swap-status"', "差し替えを描く",
-                "function swapDict", "function touchSingleSync", "--swaps", "sprite_swaps"):
+                "function swapDict", "function touchSingleSync", "--swaps", "sprite_swaps",
+                # 大きさが変わって当てられないときの確認の窓（「ドットを直す」と同じ窓）
+                "function swapCannotApply", "function swapHold", "function swapRestoreHeld", 'id="touch-confirm-save-label"',
+                "差し替えを保存してから捨てる", "直しと差し替えを保存してから捨てる", "1 枚の絵では、前の変換に戻す仕組みがまだ無いため"):
         assert key in html, key
     # 説明の文は「？」の中（class="help"）に入れる
     assert 'class="note help" data-help-at="touch-title">「差し替えを描く」' in html
