@@ -1,4 +1,4 @@
-"""重ね（漫画的エフェクト）: キャラのシートとは別の小さなスプライトシートで、！・汗・ハート・Zzz などをキャラに重ねる。
+"""重ね（漫画的エフェクト）: キャラのシートとは別の小さなスプライトシートで、！・汗・ハート・Zzz・？・キラキラなど（14 種）をキャラに重ねる。
 
     from retrocore.sprite.fx import make_fx, fx_json, composite
     fx = make_fx("surprise", anim.frames)                        # 置く場所はキャラの 1 コマ目から自動
@@ -10,7 +10,11 @@
 - 絵と動きは `art.py` の文字の表（画面と CLI で同じもの）。動きは、ずらす・絵を切り替える・消す（点滅）だけ。拡大・縮小はしない
 - 色は決まった色。輪郭（`o`）だけは、キャラのシルエットの縁に出ている色のうちいちばん暗い色に合わせる
 - 置く場所はキャラの 1 コマ目から自動で決める: 上から 1/4 の行（3 行以上）を頭とみなし、「頭の上」は頭の左右の真ん中・上端の
-  1 ドット上、「頭の横」は頭の右端の 1 ドット右（縦は頭の上から 1/3 のあたりにエフェクトの真ん中）。そこから (x, y) ずらせる
+  1 ドット上、「頭の横」は頭の右端の 1 ドット右（縦は頭の上から 1/3 のあたりにエフェクトの真ん中）。
+  「顔」は目の位置が分からないので、頭の範囲からの目安（`face_point()`: 頭の真ん中から幅の 1/4 右・頭の上端から頭の行の 2 倍下）に
+  エフェクトの上端の真ん中を置く。「顔の上半分」は同じ目安の行の上に、頭の左右の真ん中でエフェクトの下端をそろえる。
+  「体のまわり」は絵全体の四角（`body_box()`）の角・辺の真ん中を基準に部品を置く（キャラの大きさで部品の間が変わる）。
+  どれもそこから (x, y) ずらせる
 - キャラを左右反転したシートでは、置く場所（ずらした分も）を左右反転する。エフェクトの絵は反転しない（文字が裏返らないように）
 - JSON の `position` は、キャラのコマの左上から見たエフェクトのコマの左上（ドット。右と下が +。キャラのコマの外ならマイナスもある）
 - 1 回で終わるもの（`loop` が false）は、最後のコマで止めて残す（`end` = "keep"。既定）か、最後に透明のコマを足して消す（"hide"）
@@ -31,12 +35,14 @@ from . import art
 
 ENDS = {"keep": "最後の形で止めて残す", "hide": "最後に消す"}
 DEFAULT_END = "keep"
-ANCHORS = {"top": "頭の上", "side": "頭の横"}
+ANCHORS = {"top": "頭の上", "side": "頭の横", "face": "顔", "upper_face": "顔の上半分", "around": "体のまわり"}
+REFS = ("nw", "n", "ne", "w", "e", "sw", "s", "se")   # 体のまわり（around）の部品の基準（絵全体の四角の角・辺の真ん中）
 FX_VERSION = 1
 FX_FORMAT = "sprite-fx"
 HEAD_RATIO = 0.25        # 上から何割の行を頭とみなすか
 HEAD_MIN_ROWS = 3
 GAP = 1                  # 頭とエフェクトのあいだに空ける透明のドット
+FACE_ROWS = 2            # 顔（目の下）の目安: 頭の上端から、頭とみなした行の数の何倍下か
 HIDE_MS = 100            # 「消す」で最後に足す透明のコマの時間
 HOLD_MS = 1000           # 重ねた GIF・画面の再生で、1 回で終わるものの最後の形を見せておく時間（この後にキャラの周の切れ目まで）
 MAX_COMBINED_MS = 12000  # 重ねた見た目の長さの上限（キャラの周とエフェクトの周の最小公倍数がこれより長いときは切る）
@@ -63,6 +69,7 @@ class Effect:
     durations: list
     width: int
     height: int
+    origin: tuple = (0, 0)   # 体のまわり（around）だけ: 絵全体の四角の左上から見た、エフェクトのコマの左上
 
 
 @dataclass
@@ -108,8 +115,21 @@ def parse_part(text: str, colors: dict | None = None) -> list[str]:
     return rows
 
 
-def load_effect(name: str, effects: dict | None = None) -> Effect:
-    """名前のエフェクトを読む（`art.EFFECTS`）。全部のコマが入る四角を計算する。"""
+def _ref_point(ref: str, box: tuple[int, int]) -> tuple[int, int]:
+    """絵全体の四角（幅・高さ）の角・辺の真ん中の点（四角の左上が 0, 0。右・下の辺は四角のすぐ外の線）。"""
+    w, h = box
+    xs = {"w": 0, "c": w // 2, "e": w}
+    ys = {"n": 0, "c": h // 2, "s": h}
+    v = ref[0] if ref[0] in "ns" else "c"
+    u = ref[-1] if ref[-1] in "we" else "c"
+    return xs[u], ys[v]
+
+
+def load_effect(name: str, effects: dict | None = None, box: tuple[int, int] | None = None) -> Effect:
+    """名前のエフェクトを読む（`art.EFFECTS`）。全部のコマが入る四角を計算する。
+
+    `box` は体のまわり（around）のときの絵全体の四角の (幅, 高さ)。基準つきの部品 `(名前, 基準, x, y)` の位置をこれで決める
+    （None なら 0×0 の四角として読む。名前・置く場所などを見るだけのとき）。"""
     effects = art.EFFECTS if effects is None else effects
     if name not in effects:
         raise FxError(f"知らないエフェクトです: {name}（使えるのは {', '.join(effects)}）")
@@ -126,20 +146,38 @@ def load_effect(name: str, effects: dict | None = None) -> Effect:
     for placed, ms in frames:
         if isinstance(ms, bool) or not isinstance(ms, int) or ms < 10:
             raise FxError(f"{name} のコマの時間は 10 以上の整数（ミリ秒）にしてください: {ms}")
-        for pname, x, y in placed:
+        for item in placed:
+            pname, x, y = _place(name, d["anchor"], item, box)
             if pname not in parts:
                 raise FxError(f"{name} のコマに知らない部品があります: {pname}")
             rows = parts[pname]
-            boxes.append((int(x), int(y), int(x) + len(rows[0]), int(y) + len(rows)))
+            boxes.append((x, y, x + len(rows[0]), y + len(rows)))
     if not boxes:
         raise FxError(f"{name} のどのコマにも部品がありません")
     x0 = min(b[0] for b in boxes)
     y0 = min(b[1] for b in boxes)
     w = max(b[2] for b in boxes) - x0
     h = max(b[3] for b in boxes) - y0
-    placements = [[(p, int(x) - x0, int(y) - y0) for p, x, y in placed] for placed, _ in frames]
+    placements = [[(p, x - x0, y - y0) for p, x, y in (_place(name, d["anchor"], it, box) for it in placed)]
+                  for placed, _ in frames]
     return Effect(name, str(d.get("label", name)), d["anchor"], bool(d.get("loop", False)), parts, placements,
-                  [int(ms) for _, ms in frames], int(w), int(h))
+                  [int(ms) for _, ms in frames], int(w), int(h), (int(x0), int(y0)))
+
+
+def _place(name: str, anchor: str, item, box) -> tuple[str, int, int]:
+    """置く部品 `(名前, x, y)` か `(名前, 基準, x, y)`（体のまわりだけ）を、`(名前, x, y)` にする。"""
+    if len(item) == 3:
+        pname, x, y = item
+        return pname, int(x), int(y)
+    if len(item) != 4:
+        raise FxError(f"{name} の置く部品は (名前, x, y) か (名前, 基準, x, y) にしてください: {item}")
+    pname, ref, x, y = item
+    if anchor != "around":
+        raise FxError(f"{name}: 基準つきの部品（{ref}）は、置く場所が around のときだけ使えます")
+    if ref not in REFS:
+        raise FxError(f"{name} の部品の基準は {' / '.join(REFS)} のどれかにしてください: {ref}")
+    px, py = _ref_point(ref, box or (0, 0))
+    return pname, px + int(x), py + int(y)
 
 
 def effect_names() -> list[str]:
@@ -187,11 +225,40 @@ def head_box(frame: np.ndarray) -> dict | None:
     return {"top": top, "rows": n, "left": int(cols[0]), "right": int(cols[-1])}
 
 
+def body_box(frame: np.ndarray) -> dict | None:
+    """絵全体の範囲: 不透明な所を囲むいちばん小さな四角の左・上・幅・高さ。不透明なドットが無ければ None。"""
+    opaque = np.asarray(frame)[..., 3] > 0
+    rows = np.flatnonzero(opaque.any(axis=1))
+    if len(rows) == 0:
+        return None
+    cols = np.flatnonzero(opaque.any(axis=0))
+    return {"left": int(cols[0]), "top": int(rows[0]), "width": int(cols[-1] - cols[0] + 1),
+            "height": int(rows[-1] - rows[0] + 1)}
+
+
+def face_point(head: dict) -> tuple[int, int]:
+    """顔（右の目の下のあたり）の目安の点。目の位置は分からないので頭の範囲から決める: 横は頭の真ん中から頭の幅の 1/4 右、
+    縦は頭の上端から頭とみなした行の数の 2 倍下（2〜3 頭身のキャラで目の下あたり。合わなければずらす欄で直す）。"""
+    cx = (head["left"] + head["right"] + 1) // 2
+    width = head["right"] - head["left"] + 1
+    return cx + width // 4, head["top"] + FACE_ROWS * head["rows"]
+
+
 def auto_position(effect: Effect, frame: np.ndarray) -> tuple[int, int]:
     """反転していないキャラの 1 コマ目に対する、エフェクトのコマの左上（ずらす前）。"""
     head = head_box(frame)
     if head is None:
         raise FxError("キャラの絵に不透明なドットが無いので、エフェクトを置く場所を決められません")
+    if effect.anchor == "around":
+        body = body_box(frame)
+        return body["left"] + effect.origin[0], body["top"] + effect.origin[1]
+    if effect.anchor == "face":
+        fx_, fy = face_point(head)
+        return int(fx_ - effect.width // 2), int(fy)
+    if effect.anchor == "upper_face":
+        _, fy = face_point(head)
+        x = (head["left"] + head["right"] + 1 - effect.width) // 2
+        return int(x), int(fy - effect.height)
     if effect.anchor == "top":
         x = (head["left"] + head["right"] + 1 - effect.width) // 2
         y = head["top"] - GAP - effect.height
@@ -253,6 +320,10 @@ def make_fx(name: str, char_frames, mirror: bool = False, offset=(0, 0), end=Non
         raise FxError(f"キャラのコマは 高さ×幅×4（RGBA）にしてください: {first.shape}")
     ch, cw = first.shape[:2]
     upright = first[:, ::-1] if mirror else first   # 置く場所は反転していない向きで決めて、あとで反転する
+    if effect.anchor == "around":                    # 体のまわり: 部品の間をキャラの大きさで決め直す
+        body = body_box(upright)
+        if body is not None:
+            effect = load_effect(name, effects, (body["width"], body["height"]))
     x, y = auto_position(effect, upright)
     x, y = x + dx, y + dy
     if mirror:

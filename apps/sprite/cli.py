@@ -626,7 +626,7 @@ def build_parser() -> argparse.ArgumentParser:
                     help="--write-motion-spec で書く分ける高さ（at）の書き方。number（既定）は下から何ドット目の数（このキャラ用）、"
                          "percent はキャラの高さに対する割合（\"35.0%%\"。別のキャラにも使う）。auto はそのまま")
     fx = p.add_argument_group(
-        "重ね（--fx。！・汗・ハート・Zzz などの漫画的エフェクトを、キャラのシートとは別の小さなシートにして重ねる。"
+        "重ね（--fx。！・汗・ハート・Zzz・？・怒りマーク・キラキラなど 14 種の漫画的エフェクトを、キャラのシートとは別の小さなシートにして重ねる。"
         "--motion・--motion-spec・--frames と一緒に使う）")
     fx.add_argument("--fx", choices=fx_mod.effect_names(), default=None,
                     help="重ねるエフェクト（1 つ）。" + "、".join(f"{e['name']} = {e['label']}（{e['anchor_label']}・"
@@ -637,10 +637,10 @@ def build_parser() -> argparse.ArgumentParser:
                          "--gif なら重ねた見た目の GIF <…>_fx_<名前>.gif、--frames --piskel ならレイヤー「キャラ」「エフェクト」に分けた "
                          "<…>_fx_<名前>.piskel も書く")
     fx.add_argument("--fx-offset", type=_fx_offset, default=None, metavar="X,Y",
-                    help="自動で決めた置く場所（頭の上・頭の横）からずらす量（ドット。右と下が +）。− で始まるときは "
+                    help="自動で決めた置く場所（頭の上・頭の横・顔・顔の上半分・体のまわり）からずらす量（ドット。右と下が +）。− で始まるときは "
                          "--fx-offset=-1,2 のように = でつなぐ。左右反転のシートでは左右も反転する")
     fx.add_argument("--fx-end", choices=list(fx_mod.ENDS), default=None,
-                    help="1 回で終わるエフェクト（surprise・sweat）の終わり方。"
+                    help="1 回で終わるエフェクト（" + "・".join(e["name"] for e in fx_mod.fx_spec()["effects"] if not e["loop"]) + "）の終わり方。"
                          + "、".join(f"{k} = {v}" for k, v in fx_mod.ENDS.items()) + f"（既定 {fx_mod.DEFAULT_END}）")
     fr = p.add_argument_group(
         "コマを切り分けてそろえる（--frames。何コマも横に並んだ 1 枚の絵（AI が描いた歩き・走りなど）を、"
