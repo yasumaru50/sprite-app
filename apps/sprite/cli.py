@@ -97,7 +97,7 @@ MAX_PREVIEW_SCALE = 32
 # コマを切り分けてそろえる（--frames）のオプション（--frames と一緒にだけ使える）
 FRAME_OPTIONS = ("frame_count", "align", "align_y", "frame_grid", "frame_order", "frame_duration", "frame_name", "frame_root_y",
                  "mirror", "flicker", "flicker_rows", "steady", "steady_size", "steady_rows",
-                 "same_ranges", "same_search", "same_from", "edits", "join", "join_height")
+                 "same_ranges", "same_search", "same_from", "edits", "join", "join_match_height")
 # 手直しの読み戻し（--readback）だけのオプション
 READBACK_OPTIONS = ("original", "same_frames", "fix_colors")
 # 読み戻しで使えるほかのオプション（ほかの変換・動きのオプションは使えない）
@@ -659,11 +659,11 @@ def build_parser() -> argparse.ArgumentParser:
                          "（長い動きを AI に何枚かに分けて描かせたとき）。1 枚の中のコマは 1 つでも何コマでもよい。"
                          "グリッドはファイルごとに見つけ、パレットは全部のファイルで 1 つ、大きさと足元は全部のコマでそろえる。"
                          "出力名は 1 つ目のファイルの名前（-o で変えられる）。--join が無いときは、今までどおり 1 枚ずつ別々に変換する")
-    fr.add_argument("--join-height", choices=["auto", "off"], default=None,
-                    help="--join で、キャラの高さ（ファイルの中でいちばん高いコマ）をいちばん小さいファイルに合わせるか。"
-                         f"auto（既定）= 違いが {round(join_mod.HEIGHT_MAX_RATIO * 100)}% までなら、ドット絵に戻すときの格子の大きさを"
-                         "ファイルごとに少し変えて合わせる（完成したドット絵の拡大・縮小はしない）。それより大きい違いは合わせずに警告する。"
-                         "off = 合わせない（違いは警告だけ）")
+    fr.add_argument("--join-match-height", action="store_const", const=True, default=None,
+                    help="--join で、キャラの高さ（ファイルの中でいちばん高いコマ）をいちばん小さいファイルに合わせる"
+                         f"（違いが {round(join_mod.HEIGHT_MAX_RATIO * 100)}% までのとき。ドット絵に戻すときの格子の大きさを"
+                         "ファイルごとに少し変える。完成したドット絵の拡大・縮小はしない）。既定は合わせず、高さの違いを警告するだけ"
+                         "（しゃがみ・ジャンプのコマだけのファイルが混ざっても、ほかのファイルを小さくしないため）")
     fr.add_argument("--frame-count", type=_frame_count, default=None, metavar="N",
                     help="コマの数。見つかった数が違えば作らずに警告し、理由を <出力名>_<名前>_skipped.json に書く")
     fr.add_argument("--align", choices=list(frames_mod.ALIGNS), default=None,
@@ -829,8 +829,8 @@ def check_frames_args(parser: argparse.ArgumentParser, args: argparse.Namespace)
                      "（体全体の上下は --frame-root-y で付けられます）")
     if args.input_type != "pixel":
         parser.error("--frames はドット絵風の入力（--input-type pixel、既定）だけで使えます")
-    if args.join_height is not None and not args.join:
-        parser.error("--join-height は --join と一緒に指定してください")
+    if args.join_match_height and not args.join:
+        parser.error("--join-match-height は --join と一緒に指定してください")
     if args.grid_origin is not None:
         parser.error("--frames では --grid-origin は使えません（コマごとにグリッドのずれが違うため、線はコマごとに合わせます）")
     n = len(args.frame_order) if args.frame_order else args.frame_count
@@ -1388,7 +1388,7 @@ def write_frames(args: argparse.Namespace, images: list, settings: SpriteSetting
             return 1
     try:
         res = join_mod.convert_frame_files(images, settings, fs, on_step=on_step,
-                                           match_height=(args.join_height or "auto") == "auto")
+                                           match_height=bool(args.join_match_height))
     except ValueError as e:
         from retrocore.sprite.touchup import TouchupError
         if isinstance(e, TouchupError):

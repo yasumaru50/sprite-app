@@ -3,7 +3,8 @@
 - ファイルが 1 つのときは今までの `convert_frames()` とバイト単位で同じ（シートの JSON にファイルの記録は付かない）
 - 1 枚の絵を 2 つのファイルに切り分けてつなげると、1 枚のまま変換したときと同じコマになる
 - 並び順を入れ替えても、各ファイルのコマの中身は同じで、番号（sources）だけが変わる。パレットは全部のファイルで 1 つ
-- キャラの高さ: 1 割までの違いは格子を変えて合わせる（記録・メモ）、それより大きい違いは合わせずに警告（skipped の join_height）
+- キャラの高さ: 既定は合わせずに違いを警告する（skipped の join_height。しゃがみ・ジャンプのファイルでほかを小さくしないため）。
+  合わせる指定（match_height・CLI の --join-match-height）のときは 1 割までの違いを格子を変えて合わせ、それより大きい違いは警告だけ
 - 直しの一覧（edits.json）: つなげたときはファイルの何コマ目か・置いた位置を書き、並び順を入れ替えても同じ絵の同じ所に付く。
   前の形（版 1）は番号で当てる。外したファイルの直しは当てない
 - CLI と画面（frames_convert_bytes にファイルの並びを渡す）の出力はバイト単位で同じ
@@ -142,9 +143,21 @@ def base_file():
     return _row([_variant(0), _variant(1)])
 
 
-def test_height_within_ten_percent_is_matched_by_the_grid(base_file):
+def test_height_is_not_matched_by_default_but_warned(base_file):
     tall = _row(_tall(26), seed=5)        # 24 → 26 ドット（約 8%）
     res = J.convert_frame_files([("a.png", base_file), ("b.png", tall)], SpriteSettings(), F.FrameSettings())
+    b = res.files[1]
+    assert b.status == "off" and b.scale == 1.0 and b.height_used == b.height > res.files[0].height
+    e = [e for e in res.skipped if e["code"] == "join_height"]
+    assert len(e) == 1 and e[0]["file"] == "b.png" and e[0]["result"] == "held"
+    assert any("b.png" in w and "印を付けると" in w and "--join-match-height" in w for w in res.warnings)
+    assert not any("倍" in n for n in res.notes)
+
+
+def test_height_within_ten_percent_is_matched_by_the_grid(base_file):
+    tall = _row(_tall(26), seed=5)        # 24 → 26 ドット（約 8%）
+    res = J.convert_frame_files([("a.png", base_file), ("b.png", tall)], SpriteSettings(), F.FrameSettings(),
+                                match_height=True)
     a, b = res.files
     assert (a.status, b.status) == ("base", "adjusted") and b.height > a.height and b.height_used == a.height
     assert 1.03 < b.scale < 1.15 and b.dot_size[0] > b.detected[0]
@@ -153,15 +166,12 @@ def test_height_within_ten_percent_is_matched_by_the_grid(base_file):
     assert not [e for e in res.skipped if e["code"] == "join_height"]
     info = b.info()
     assert info["height_match"] == "adjusted" and info["grid_scale"] == round(b.scale, 4)
-    off = J.convert_frame_files([("a.png", base_file), ("b.png", tall)], SpriteSettings(), F.FrameSettings(),
-                                match_height=False)
-    assert off.files[1].status == "off" and off.files[1].scale == 1.0
-    assert [e["code"] for e in off.skipped if e["stage"] == "frames"] == ["join_height"]
 
 
 def test_height_far_apart_is_warned_and_not_matched(base_file):
     big = _row(_tall(30), seed=7)         # 24 → 30 ドット（25%）
-    res = J.convert_frame_files([("a.png", base_file), ("b.png", big)], SpriteSettings(), F.FrameSettings())
+    res = J.convert_frame_files([("a.png", base_file), ("b.png", big)], SpriteSettings(), F.FrameSettings(),
+                                match_height=True)
     b = res.files[1]
     assert b.status == "too_far" and b.scale == 1.0 and b.height_used == b.height
     e = [e for e in res.skipped if e["code"] == "join_height"]
@@ -325,7 +335,7 @@ def test_cli_join_option_errors(tmp_path, halves):
     from retrocore.sprite import save_rgba
     a = tmp_path / "a.png"
     save_rgba(halves[0], a)
-    for argv in ([str(a), "--join"], [str(a), "--frames", "--join-height", "off"]):
+    for argv in ([str(a), "--join"], [str(a), "--frames", "--join-match-height"]):
         with pytest.raises(SystemExit):
             main(argv)
 
@@ -340,3 +350,49 @@ def test_join_runs_with_int32_numpy(halves):
         got = J.convert_frame_files([("a.png", halves[0]), ("b.png", tall)], SpriteSettings(), F.FrameSettings())
         F.flicker_image(got.frames, F.flicker_report(got.frames), 2, file_starts=J.file_starts(got))
     assert all(np.array_equal(a, b) for a, b in zip(want.frames, got.frames))
+
+
+def test_cli_join_match_height_and_web_write_the_same_bytes(tmp_path, base_file):
+    from apps.sprite.cli import main
+    from retrocore.sprite import save_rgba
+    from retrocore.sprite.convert import frames_convert_bytes, frames_sheets
+    tall = _row(_tall(26), seed=5)
+    a, b = tmp_path / "a.png", tmp_path / "b.png"
+    save_rgba(base_file, a)
+    save_rgba(tall, b)
+    for flag, status in (([], "off"), (["--join-match-height"], "adjusted")):
+        out = tmp_path / ("out" + "".join(flag))
+        assert main([str(a), str(b), "--frames", "--join", "-o", str(out / "j.png"), "-q"] + flag) == 0
+        w = frames_convert_bytes([("a.png", a.read_bytes()), ("b.png", b.read_bytes())], {"match_height": bool(flag)})
+        assert w["files"][1]["height_match"] == status
+        sh = frames_sheets({"token": w["token"], "base": "j"})
+        s = sh["sheets"][0]
+        assert (out / s["name"]).read_bytes() == s["png"]
+        assert (out / s["name"]).with_suffix(".json").read_text(encoding="utf-8") == s["json"]
+
+
+def test_web_swaps_warn_when_first_frame_changes(halves):
+    """画面で描いた差し替え（1 コマ目の記録 base 付き）は、並び順を変えて 1 コマ目が別の絵になると注意を返す（CLI の --swaps と同じ文）。"""
+    from retrocore.sprite.convert import encode_png, frames_convert_bytes, frames_sheets
+    from retrocore.sprite.swap import base_warning, load_swaps
+    da, db = encode_png(halves[0]), encode_png(halves[1])
+    w = frames_convert_bytes([("a.png", da), ("b.png", db)], {})
+    res = J.convert_frame_files([("a.png", halves[0]), ("b.png", halves[1])], SpriteSettings(), F.FrameSettings())
+    f = res.frames[0]
+    ys, xs = np.nonzero(f[..., 3])
+    x, y = int(xs[len(xs) // 2]), int(ys[len(ys) // 2])
+    pal = T.palette_of(res.frames)
+    cur = "#%02x%02x%02x" % tuple(int(v) for v in f[y, x, :3])
+    other = next(c for c in pal if c != cur)
+    w0, h0 = res.size
+    d = {"version": 1, "kind": "sprite_swaps", "name": "frames", "frame_width": w0, "frame_height": h0, "palette": pal,
+         "base": {"file": "a.png", "file_frame": 1},
+         "swaps": [{"type": "blink", "closed": [[x, y, pal.index(other), pal.index(cur)]]}]}
+    same = frames_sheets({"token": w["token"], "base": "j", "swaps": d})
+    assert same["ok"] and "swaps_base_warning" not in same
+    assert '"base": {"file": "a.png", "file_frame": 1}' in same["swaps_json"]
+    w2 = frames_convert_bytes([("b.png", db), ("a.png", da)], {})
+    moved = frames_sheets({"token": w2["token"], "base": "j", "swaps": d})
+    assert moved["ok"] and moved["swaps_base_warning"] == base_warning(load_swaps(json.dumps(d)), [("b.png", 1)])
+    assert "a.png の 1 コマ目" in moved["swaps_base_warning"]
+    assert '"base": {"file": "a.png", "file_frame": 1}' in moved["swaps_json"]   # 保存する一覧は描いたときの記録のまま

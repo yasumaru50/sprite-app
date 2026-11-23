@@ -104,7 +104,7 @@
   | frames | `frame_count` | 見つかったコマの数が `--frame-count` と合わない（`extra` に `expected`・`found`・`boxes`） | held |
   | frames | `no_frames` | コマが見つからない（不透明な画素が無い） | held |
   | frames | `empty_frame` | グリッドに合わせたら不透明なマスが無くなったコマがある | held |
-  | frames | `join_height` | つなげたファイルのキャラの高さの違いが 1 割より大きくて合わせなかった（`--join-height off` のときは違いがあれば。`file`・`height`・`target`・`ratio`。シートは作る） | held |
+  | frames | `join_height` | つなげたファイルのキャラの高さが違うのに合わせなかった（既定。`--join-match-height` のときは違いが 1 割より大きいときだけ。`file`・`height`・`target`・`ratio`。シートは作る） | held |
   | frames | `join_shift` | つなげたファイルの境目で体の位置・足元が大きくずれる（`frames`・`files`・`loop`・`shift`。自動では混ぜない。シートは作る） | held |
   | grid | `grid_not_found` | 全部のコマを合わせても、ドットの格子が見つからない（今はコマの切り分けのときだけ） | held |
   | same_as_first | `low_match` | 範囲が 1 コマ目と合う位置が見つからない（合い方が低い） | held |

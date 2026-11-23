@@ -956,7 +956,7 @@ def frames_convert_bytes(data, request: dict) -> dict:
     "error": 説明, "skipped_json": 理由の JSON, "boxes": 見つかったコマ（分かれば）}。設定の間違いなど: {"ok": False, "error", "detail"}。
 
     別々のファイルの絵をつなげるとき（CLI の --join）は、`data` を [(ファイルの名前, バイト列), ...]（並べた順）にする。
-    `request` の "match_height": False でキャラの高さを合わせない（CLI の --join-height off）。結果には、どのときも
+    `request` の "match_height": True でキャラの高さを合わせる（CLI の --join-match-height。既定は合わせない）。結果には、どのときも
     "files": ファイルごとの記録（`join.JoinFile.info()` と "boxes"）, "sources": コマごとの [ファイルの名前, 何コマ目か],
     "joins": 境目の記録, "file_starts": 2 つ目からのファイルの 1 コマ目の番号 が入る（1 つのときの絵・ファイルは前と同じ）。
     """
@@ -970,7 +970,7 @@ def frames_convert_bytes(data, request: dict) -> dict:
         settings.validate()
         fs = _frame_settings(dict(request.get("frames") or {}))
         name = str(request.get("name") or F.DEFAULT_NAME)
-        match_height = request.get("match_height", True)
+        match_height = request.get("match_height", False)
         if not isinstance(match_height, bool):
             raise ValueError(f"match_height は true か false で指定してください: {match_height}")
         files = [("image", data)] if isinstance(data, (bytes, bytearray, memoryview)) else list(data)
@@ -1234,7 +1234,9 @@ def frames_sheets(request: dict, result=None) -> dict:
         got = _apply_swaps_view(out, anims[0], swaps, result.frames[0], pal)
         if got is not anims[0]:
             anims = [got] + [mirror_swapped(got, a) for a in anims[1:]]
-        first = tuple(result.sources[0]) if getattr(result, "joined", False) else None
+        # つなげたとき: 描いた 1 コマ目の記録（読み込んだ一覧・画面で描いたときの記録があればそれ、無ければいまの 1 コマ目）
+        first = (tuple(swaps.base) if swaps.base is not None else tuple(result.sources[0])) \
+            if getattr(result, "joined", False) else None
         out["swaps_json"] = swaps_json(swaps, pal, first)   # 保存する <出力名>_<名前>_swaps.json の中身
         from .swap import base_warning
         msg = base_warning(swaps, result.sources if first is not None else None)

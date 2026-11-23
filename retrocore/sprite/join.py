@@ -11,7 +11,7 @@
 
 1. **ファイルごと**: 背景除去 → コマの切り分け（1 枚の中のコマは 1 つでも何コマでもよい）→ グリッド検出（ドットの大きさも
    ファイルごとに見つける。AI はファイルごとに大きさを変えて描くため）→ 1 ドット＝1 画素のコマ
-2. **高さを合わせる**: ファイルの中でいちばん高いコマの高さ（ドット）を、ファイルの「キャラの高さ」とする。
+2. **高さを合わせる**（`match_height=True` のときだけ。既定は合わせずに違いを警告する）: ファイルの中でいちばん高いコマの高さ（ドット）を、ファイルの「キャラの高さ」とする。
    いちばん小さいファイルより `HEIGHT_TOLERANCE` ドットより高いファイルは、ドット絵に戻すときの格子を少し大きくして
    （`HEIGHT_TRIES` 回まで試す）、いちばん小さいファイルと同じ高さにする。完成したドット絵の拡大・縮小はしない（新しい色・ぼけが出ないように）。
    違いが `HEIGHT_MAX_RATIO`（1 割）より大きいときは合わせずに警告する（AI に描き直させる前提。大きく変えるとドットがつぶれる）
@@ -108,10 +108,11 @@ def _match_height(subs, s, mode: str, period, height: int, target: int):
 
 
 def convert_frame_files(images: list, settings=None, frame_settings=None,
-                        on_step: Callable[[StepResult], None] | None = None, match_height: bool = True):
+                        on_step: Callable[[StepResult], None] | None = None, match_height: bool = False):
     """別々のファイルの絵（`images` は (名前, RGBA) の並び。並べた順につなげる）を 1 つの動きとして変換し、そろえる。
 
-    `match_height` が False ならキャラの高さを合わせない（違いは警告だけ）。作らなかったときは `frames.FramesError` か
+    `match_height` が True のときだけキャラの高さを合わせる（既定は合わせない。しゃがみ・ジャンプのコマだけのファイルが混ざると、
+    ほかのファイルが黙って小さくされてしまうため。迷ったら何もしない）。合わせないときも違いは警告する。作らなかったときは `frames.FramesError` か
     `GridNotFoundError`（どのファイルかを文の先頭に書く）。戻り値は `frames.FramesResult`（`files`・`sources` 付き）。
     """
     from . import frames as F
@@ -196,10 +197,10 @@ def convert_frame_files(images: list, settings=None, frame_settings=None,
         used = h
         if i != base and h - target > HEIGHT_TOLERANCE:
             ratio = h / target - 1
-            if not match_height:
-                status = "off"
-            elif ratio > HEIGHT_MAX_RATIO:
+            if ratio > HEIGHT_MAX_RATIO:
                 status = "too_far"
+            elif not match_height:
+                status = "off"
             else:
                 mode = fs.grid if fs.grid != "auto" else ("shared" if got[5] else "each")
                 new, hh = _match_height(subs, s, mode, period, h, target)
@@ -213,11 +214,14 @@ def convert_frame_files(images: list, settings=None, frame_settings=None,
                 else:
                     status = "too_far"
             if status in ("too_far", "off"):
-                msg = (f"{name} のキャラの高さ {h} ドットは、いちばん小さい {names[base]}（{target} ドット）より "
-                       f"{ratio * 100:.0f}% 高いので、" + ("合わせませんでした（高さの自動合わせが切）。"
-                                                          if status == "off" else
-                                                          f"合わせませんでした（自動で合わせるのは {HEIGHT_MAX_RATIO * 100:.0f}% まで）。")
-                       + "AI に同じ大きさで描き直させるか、大きさの近いファイルどうしでつなげてください")
+                head = f"{name} のキャラの高さ {h} ドットは、いちばん小さい {names[base]}（{target} ドット）より {ratio * 100:.0f}% 高い"
+                if status == "off":
+                    msg = (head + "です（高さは合わせていません）。同じポーズで大きさだけが違うなら、「キャラの高さを合わせる」に"
+                           "印を付けると（CLI は --join-match-height）合わせられます。しゃがみ・ジャンプなどポーズの違いなら、そのままで大丈夫です")
+                else:
+                    msg = (head + f"ので、合わせませんでした（自動で合わせられるのは {HEIGHT_MAX_RATIO * 100:.0f}% まで）。"
+                           "AI に同じ大きさで描き直させるか、大きさの近いファイルどうしでつなげてください"
+                           "（しゃがみ・ジャンプなどポーズの違いなら、そのままで大丈夫です）")
                 warnings.append(msg)
                 skipped.append({"stage": "frames", "code": "join_height", "message": msg, "file": name,
                                 "height": int(h), "target": int(target), "ratio": round(float(ratio), 3),
