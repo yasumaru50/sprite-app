@@ -1,0 +1,5 @@
+*.png binary
+# 回帰テストのゴールデン・フィクスチャはバイト単位で比較するため改行を変換しない
+tests/golden/** -text
+tests/fixtures/** -text
+apps/sprite/web/sprite-app.html text eol=lf

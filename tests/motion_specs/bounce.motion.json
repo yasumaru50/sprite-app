@@ -1,0 +1,15 @@
+{
+  "format": "sprite-motion",
+  "version": 1,
+  "name": "bounce",
+  "loop": true,
+  "tracks": {
+    "root_y": {"type": "root", "axis": "y"}
+  },
+  "frames": [
+    {"ms": 150},
+    {"ms": 150, "root_y": -1},
+    {"ms": 150, "root_y": -2},
+    {"ms": 150, "root_y": -1}
+  ]
+}

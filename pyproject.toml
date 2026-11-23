@@ -1,0 +1,14 @@
+[project]
+name = "sprite-app"
+version = "0.1.0"
+description = "AI 画像からドット絵のスプライトと動きを作るアプリ（CLI とブラウザ版）"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.26", "Pillow>=10.1"]
+
+[tool.setuptools.packages.find]
+include = ["apps*", "retrocore*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

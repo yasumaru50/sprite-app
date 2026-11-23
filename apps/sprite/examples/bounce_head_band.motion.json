@@ -1,0 +1,19 @@
+{
+  "format": "sprite-motion",
+  "version": 1,
+  "name": "bounce_head_band",
+  "loop": true,
+  "regions": {
+    "head": {"type": "band", "bottom": "50%", "top": "100%"}
+  },
+  "tracks": {
+    "head_y": {"type": "deform", "region": "head", "axis": "y"},
+    "root_y": {"type": "root", "axis": "y"}
+  },
+  "frames": [
+    {"ms": 300, "head_y": -1},
+    {"ms": 150, "root_y": -1},
+    {"ms": 150, "head_y": 1, "root_y": -2},
+    {"ms": 150, "root_y": -1}
+  ]
+}

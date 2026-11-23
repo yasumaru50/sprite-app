@@ -1,0 +1,210 @@
+{
+ "info": {
+  "cross_segments": [
+   [
+    0,
+    10
+   ],
+   [
+    0,
+    14
+   ],
+   [
+    10,
+    1
+   ],
+   [
+    1,
+    11
+   ],
+   [
+    1,
+    12
+   ],
+   [
+    14,
+    1
+   ],
+   [
+    11,
+    2
+   ],
+   [
+    12,
+    2
+   ],
+   [
+    12,
+    9
+   ],
+   [
+    14,
+    10
+   ],
+   [
+    14,
+    11
+   ]
+  ],
+  "dither_coverage": 0.6470262664165103,
+  "dither_mask_sha256": "716079b14d62a0d2e73cc072db3db3d254b964ac2a00129f335ce1e871fe7ca1",
+  "dither_mask_shape": [
+   400,
+   533
+  ],
+  "outline_coverage": 0.0,
+  "ramps": [
+   [
+    0,
+    1,
+    2,
+    3
+   ],
+   [
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+   ],
+   [
+    10,
+    11,
+    12
+   ],
+   [
+    13,
+    14
+   ]
+  ]
+ },
+ "mode": "P",
+ "palette": [
+  [
+   85,
+   68,
+   51
+  ],
+  [
+   136,
+   102,
+   85
+  ],
+  [
+   187,
+   136,
+   119
+  ],
+  [
+   221,
+   170,
+   153
+  ],
+  [
+   68,
+   119,
+   204
+  ],
+  [
+   85,
+   119,
+   204
+  ],
+  [
+   102,
+   136,
+   204
+  ],
+  [
+   119,
+   153,
+   221
+  ],
+  [
+   136,
+   170,
+   221
+  ],
+  [
+   136,
+   187,
+   221
+  ],
+  [
+   102,
+   119,
+   51
+  ],
+  [
+   102,
+   153,
+   51
+  ],
+  [
+   102,
+   170,
+   51
+  ],
+  [
+   34,
+   17,
+   17
+  ],
+  [
+   204,
+   34,
+   51
+  ]
+ ],
+ "pixel_aspect": 1.0,
+ "settings": {
+  "background": [
+   0,
+   0,
+   0
+  ],
+  "brightness": 0,
+  "colors": 16,
+  "contrast": 0,
+  "custom_height": 200,
+  "custom_width": 320,
+  "dither": "bayer4",
+  "dither_strength": 0.75,
+  "fit": "fit",
+  "mode": "style",
+  "palette_source": "kmeans",
+  "perceptual": false,
+  "pixel_aspect": 1.0,
+  "pixel_size": 4,
+  "preset": "PC-98 640×400",
+  "resample": "box",
+  "saturation": 0,
+  "snap_4096": true,
+  "style_cross_ramp": 0.6,
+  "style_cross_ramp_max_hue": 120.0,
+  "style_cross_ramp_max_lum": 40.0,
+  "style_despeckle": 1,
+  "style_dither_strength": 1.0,
+  "style_grad_high": 7.0,
+  "style_grad_low": 0.6,
+  "style_hue_separation": true,
+  "style_mask_curvature": 2.5,
+  "style_outline": false,
+  "style_outline_color": null,
+  "style_outline_thickness": 1,
+  "style_outline_threshold": 40.0,
+  "style_pattern": "checker",
+  "style_ramp_extend": false,
+  "style_ramps": 0,
+  "style_reserve_skin": true,
+  "style_smooth": "bilateral",
+  "style_smooth_strength": 0.5,
+  "style_steps": 0
+ },
+ "size": [
+  533,
+  400
+ ],
+ "used_colors": 15
+}

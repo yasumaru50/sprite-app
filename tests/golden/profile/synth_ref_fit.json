@@ -1,0 +1,122 @@
+{
+ "distance": 0.19961520622326234,
+ "evaluations": 8,
+ "history": [
+  [
+   {
+    "saturation": 0,
+    "style_despeckle": 2,
+    "style_grad_high": 12.0,
+    "style_grad_low": 0.3,
+    "style_mask_curvature": 8.0,
+    "style_outline_threshold": 39.1,
+    "style_pattern": "bayer4",
+    "style_smooth_strength": 0.74
+   },
+   0.21839803621420734
+  ],
+  [
+   {
+    "saturation": 0,
+    "style_despeckle": 2,
+    "style_grad_high": 12.0,
+    "style_grad_low": 0.7,
+    "style_mask_curvature": 8.0,
+    "style_outline_threshold": 39.1,
+    "style_pattern": "bayer4",
+    "style_smooth_strength": 0.74
+   },
+   0.25089939292500146
+  ],
+  [
+   {
+    "saturation": 0,
+    "style_despeckle": 2,
+    "style_grad_high": 15.0,
+    "style_grad_low": 0.3,
+    "style_mask_curvature": 8.0,
+    "style_outline_threshold": 39.1,
+    "style_pattern": "bayer4",
+    "style_smooth_strength": 0.74
+   },
+   0.22132195841155464
+  ],
+  [
+   {
+    "saturation": 0,
+    "style_despeckle": 2,
+    "style_grad_high": 9.0,
+    "style_grad_low": 0.3,
+    "style_mask_curvature": 8.0,
+    "style_outline_threshold": 39.1,
+    "style_pattern": "bayer4",
+    "style_smooth_strength": 0.74
+   },
+   0.2210071130601311
+  ],
+  [
+   {
+    "saturation": 0,
+    "style_despeckle": 2,
+    "style_grad_high": 12.0,
+    "style_grad_low": 0.3,
+    "style_mask_curvature": 10.0,
+    "style_outline_threshold": 39.1,
+    "style_pattern": "bayer4",
+    "style_smooth_strength": 0.74
+   },
+   0.22175398010137778
+  ],
+  [
+   {
+    "saturation": 0,
+    "style_despeckle": 2,
+    "style_grad_high": 12.0,
+    "style_grad_low": 0.3,
+    "style_mask_curvature": 6.0,
+    "style_outline_threshold": 39.1,
+    "style_pattern": "bayer4",
+    "style_smooth_strength": 0.74
+   },
+   0.22158463646885665
+  ],
+  [
+   {
+    "saturation": 25,
+    "style_despeckle": 2,
+    "style_grad_high": 12.0,
+    "style_grad_low": 0.3,
+    "style_mask_curvature": 8.0,
+    "style_outline_threshold": 39.1,
+    "style_pattern": "bayer4",
+    "style_smooth_strength": 0.74
+   },
+   0.22508227553304638
+  ],
+  [
+   {
+    "saturation": -25,
+    "style_despeckle": 2,
+    "style_grad_high": 12.0,
+    "style_grad_low": 0.3,
+    "style_mask_curvature": 8.0,
+    "style_outline_threshold": 39.1,
+    "style_pattern": "bayer4",
+    "style_smooth_strength": 0.74
+   },
+   0.2023929840010401
+  ]
+ ],
+ "overrides": {
+  "saturation": -25,
+  "style_despeckle": 2,
+  "style_grad_high": 12.0,
+  "style_grad_low": 0.3,
+  "style_mask_curvature": 8.0,
+  "style_outline_threshold": 39.1,
+  "style_pattern": "bayer4",
+  "style_smooth_strength": 0.74
+ },
+ "penalty": 0.027777777777777776,
+ "start_distance": 0.21839803621420734
+}

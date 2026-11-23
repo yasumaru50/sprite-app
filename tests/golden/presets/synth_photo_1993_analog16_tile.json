@@ -1,0 +1,165 @@
+{
+ "info": {
+  "cross_segments": null,
+  "dither_coverage": 0.9304033771106942,
+  "dither_mask_sha256": "730bf36c484a6ac4c45d77bc3469cd6ef23b6fc8fb987cf95efc2da95cbc64d6",
+  "dither_mask_shape": [
+   400,
+   533
+  ],
+  "outline_coverage": 0.0038133208255159475,
+  "ramps": [
+   [
+    0,
+    1,
+    2,
+    3
+   ],
+   [
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+   ],
+   [
+    10,
+    11,
+    12
+   ],
+   [
+    13,
+    14
+   ]
+  ]
+ },
+ "mode": "P",
+ "palette": [
+  [
+   85,
+   68,
+   51
+  ],
+  [
+   136,
+   102,
+   85
+  ],
+  [
+   187,
+   136,
+   119
+  ],
+  [
+   221,
+   170,
+   153
+  ],
+  [
+   68,
+   119,
+   204
+  ],
+  [
+   85,
+   119,
+   204
+  ],
+  [
+   102,
+   136,
+   204
+  ],
+  [
+   119,
+   153,
+   221
+  ],
+  [
+   136,
+   170,
+   221
+  ],
+  [
+   136,
+   187,
+   221
+  ],
+  [
+   102,
+   119,
+   51
+  ],
+  [
+   102,
+   153,
+   51
+  ],
+  [
+   102,
+   170,
+   51
+  ],
+  [
+   34,
+   17,
+   17
+  ],
+  [
+   204,
+   34,
+   51
+  ]
+ ],
+ "pixel_aspect": 1.0,
+ "settings": {
+  "background": [
+   0,
+   0,
+   0
+  ],
+  "brightness": 0,
+  "colors": 16,
+  "contrast": 0,
+  "custom_height": 200,
+  "custom_width": 320,
+  "dither": "bayer4",
+  "dither_strength": 0.75,
+  "fit": "fit",
+  "mode": "style",
+  "palette_source": "kmeans",
+  "perceptual": false,
+  "pixel_aspect": 1.0,
+  "pixel_size": 4,
+  "preset": "PC-98 640×400",
+  "resample": "box",
+  "saturation": 0,
+  "snap_4096": true,
+  "style_cross_ramp": 0.0,
+  "style_cross_ramp_max_hue": 140.0,
+  "style_cross_ramp_max_lum": 45.0,
+  "style_despeckle": 1,
+  "style_dither_strength": 1.0,
+  "style_grad_high": 10.0,
+  "style_grad_low": 0.4,
+  "style_hue_separation": true,
+  "style_mask_curvature": 2.5,
+  "style_outline": true,
+  "style_outline_color": null,
+  "style_outline_thickness": 1,
+  "style_outline_threshold": 40.0,
+  "style_pattern": "tile2",
+  "style_ramp_extend": false,
+  "style_ramps": 0,
+  "style_reserve_skin": true,
+  "style_smooth": "bilateral",
+  "style_smooth_strength": 0.45,
+  "style_steps": 0
+ },
+ "size": [
+  533,
+  400
+ ],
+ "used_colors": 15
+}

@@ -1,0 +1,313 @@
+{
+ "schema": "retro98-db-record",
+ "version": 1,
+ "id": "synth/synth_cg",
+ "group": "synth",
+ "file": "synth_cg.png",
+ "check": {
+  "ok": true,
+  "reason": null
+ },
+ "width": 200,
+ "height": 120,
+ "analyzed": true,
+ "recovered": false,
+ "lines": 400,
+ "native_width": 200,
+ "native_height": 120,
+ "n_colors": 7,
+ "palette": [
+  {
+   "hex": "#FFF",
+   "rgb": [
+    255,
+    255,
+    255
+   ],
+   "share": 0.525
+  },
+  {
+   "hex": "#FDC",
+   "rgb": [
+    255,
+    221,
+    204
+   ],
+   "share": 0.236
+  },
+  {
+   "hex": "#46C",
+   "rgb": [
+    68,
+    102,
+    204
+   ],
+   "share": 0.0938
+  },
+  {
+   "hex": "#8BF",
+   "rgb": [
+    136,
+    187,
+    255
+   ],
+   "share": 0.0938
+  },
+  {
+   "hex": "#E98",
+   "rgb": [
+    238,
+    153,
+    136
+   ],
+   "share": 0.0333
+  },
+  {
+   "hex": "#000",
+   "rgb": [
+    0,
+    0,
+    0
+   ],
+   "share": 0.0098
+  },
+  {
+   "hex": "#294",
+   "rgb": [
+    34,
+    153,
+    68
+   ],
+   "share": 0.0083
+  }
+ ],
+ "ramps": [
+  {
+   "colors": [
+    "#000",
+    "#FFF"
+   ],
+   "hue_deg": null,
+   "share": 0.5348
+  },
+  {
+   "colors": [
+    "#E98",
+    "#FDC"
+   ],
+   "hue_deg": 18.8,
+   "share": 0.2693
+  },
+  {
+   "colors": [
+    "#46C",
+    "#8BF"
+   ],
+   "hue_deg": 219.6,
+   "share": 0.1875
+  },
+  {
+   "colors": [
+    "#294"
+   ],
+   "hue_deg": 137.1,
+   "share": 0.0083
+  }
+ ],
+ "dither": {
+  "ratio": 0.439,
+  "pattern_mix": {
+   "checker": 0.3508,
+   "tile": 0.6435,
+   "other": 0.0057
+  },
+  "groups": {
+   "checker": 0.154,
+   "tile": 0.2825,
+   "other": 0.0025
+  },
+  "classes": {
+   "checker": 0.154,
+   "tile2x2": 0.1124,
+   "stripe": 0.0,
+   "tile4x4": 0.1207,
+   "ordered_mix": 0.0494,
+   "irregular": 0.0025
+  }
+ },
+ "mix": {
+  "pair_count": 7736,
+  "relation": {
+   "same_ramp_adjacent": 0.8621,
+   "same_ramp_far": 0.0,
+   "cross_ramp": 0.1379
+  },
+  "pairs": [
+   {
+    "colors": [
+     "#46C",
+     "#8BF"
+    ],
+    "share": 0.5752,
+    "relation": "same_ramp_adjacent",
+    "lum_diff": 76.0,
+    "hue_diff": 10.7
+   },
+   {
+    "colors": [
+     "#E98",
+     "#FDC"
+    ],
+    "share": 0.2868,
+    "relation": "same_ramp_adjacent",
+    "lum_diff": 52.8,
+    "hue_diff": 10.0
+   },
+   {
+    "colors": [
+     "#294",
+     "#FFF"
+    ],
+    "share": 0.1245,
+    "relation": "cross_ramp",
+    "lum_diff": 147.3,
+    "hue_diff": null
+   },
+   {
+    "colors": [
+     "#FDC",
+     "#FFF"
+    ],
+    "share": 0.007,
+    "relation": "cross_ramp",
+    "lum_diff": 25.8,
+    "hue_diff": null
+   },
+   {
+    "colors": [
+     "#46C",
+     "#FFF"
+    ],
+    "share": 0.0032,
+    "relation": "cross_ramp",
+    "lum_diff": 151.5,
+    "hue_diff": null
+   },
+   {
+    "colors": [
+     "#8BF",
+     "#FFF"
+    ],
+    "share": 0.0032,
+    "relation": "cross_ramp",
+    "lum_diff": 75.5,
+    "hue_diff": null
+   }
+  ],
+  "lum_diff": {
+   "bin_edges": [
+    0,
+    16,
+    32,
+    48,
+    64,
+    96,
+    128,
+    256
+   ],
+   "hist": [
+    0.0,
+    0.007,
+    0.0,
+    0.2868,
+    0.5785,
+    0.0,
+    0.1277
+   ],
+   "mean": 78.12,
+   "median": 76.04,
+   "p90": 147.27
+  },
+  "hue_diff": {
+   "bin_edges": [
+    0,
+    15,
+    30,
+    60,
+    90,
+    181
+   ],
+   "hist": [
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   "mean": 10.5,
+   "median": 10.7,
+   "p90": 10.7,
+   "chromatic_share": 0.8621
+  },
+  "cross_ramp": {
+   "lum_diff": {
+    "bin_edges": [
+     0,
+     16,
+     32,
+     48,
+     64,
+     96,
+     128,
+     256
+    ],
+    "hist": [
+     0.0,
+     0.0506,
+     0.0,
+     0.0,
+     0.0234,
+     0.0,
+     0.926
+    ],
+    "mean": 139.54,
+    "median": 147.27,
+    "p90": 147.27
+   },
+   "hue_diff": {
+    "bin_edges": [
+     0,
+     15,
+     30,
+     60,
+     90,
+     181
+    ],
+    "hist": [
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0
+    ],
+    "mean": 0.0,
+    "median": 0.0,
+    "p90": 0.0,
+    "chromatic_share": 0.0
+   }
+  }
+ },
+ "outline": {
+  "dark_edge_ratio": 0.6941,
+  "outline_pixel_ratio": 0.0098,
+  "color": "#000",
+  "thickness_median": 1.0
+ },
+ "fill": {
+  "flat_ratio": 0.5508,
+  "isolated_ratio": 0.0025,
+  "median_region_pixels": 9720
+ },
+ "gpl_path": "palettes/synth/synth_cg.gpl",
+ "record_path": "records/synth/synth_cg.json"
+}

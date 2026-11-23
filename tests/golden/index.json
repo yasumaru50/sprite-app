@@ -1,0 +1,105 @@
+{
+ "normal/synth_photo_default": [
+  "normal/synth_photo_default.json",
+  "normal/synth_photo_default.png"
+ ],
+ "normal/synth_photo_dither_floyd": [
+  "normal/synth_photo_dither_floyd.json",
+  "normal/synth_photo_dither_floyd.png"
+ ],
+ "normal/synth_photo_res_320x200_fill_lanczos": [
+  "normal/synth_photo_res_320x200_fill_lanczos.json",
+  "normal/synth_photo_res_320x200_fill_lanczos.png"
+ ],
+ "normal/synth_alpha_background": [
+  "normal/synth_alpha_background.json",
+  "normal/synth_alpha_background.png"
+ ],
+ "normal/synth_photo_preset_pc98_16_bayer4": [
+  "normal/synth_photo_preset_pc98_16_bayer4.json",
+  "normal/synth_photo_preset_pc98_16_bayer4.png"
+ ],
+ "normal/synth_photo_preset_pc98_16_floyd": [
+  "normal/synth_photo_preset_pc98_16_floyd.json",
+  "normal/synth_photo_preset_pc98_16_floyd.png"
+ ],
+ "normal/synth_photo_preset_pc98_digital8_bayer4": [
+  "normal/synth_photo_preset_pc98_digital8_bayer4.json",
+  "normal/synth_photo_preset_pc98_digital8_bayer4.png"
+ ],
+ "normal/synth_photo_preset_pc98_digital8_floyd": [
+  "normal/synth_photo_preset_pc98_digital8_floyd.json",
+  "normal/synth_photo_preset_pc98_digital8_floyd.png"
+ ],
+ "normal/synth_photo_preset_vga16_bayer4": [
+  "normal/synth_photo_preset_vga16_bayer4.json",
+  "normal/synth_photo_preset_vga16_bayer4.png"
+ ],
+ "normal/synth_photo_preset_vga16_floyd": [
+  "normal/synth_photo_preset_vga16_floyd.json",
+  "normal/synth_photo_preset_vga16_floyd.png"
+ ],
+ "transfer/synth_photo_synth_ref_auto": [
+  "transfer/synth_photo_synth_ref_auto.gpl",
+  "transfer/synth_photo_synth_ref_auto.json",
+  "transfer/synth_photo_synth_ref_auto.png"
+ ],
+ "transfer/synth_photo_synth_ref_mediancut": [
+  "transfer/synth_photo_synth_ref_mediancut.json",
+  "transfer/synth_photo_synth_ref_mediancut.png"
+ ],
+ "transfer/synth_photo_synth_ref_style": [
+  "transfer/synth_photo_synth_ref_style.json",
+  "transfer/synth_photo_synth_ref_style.png"
+ ],
+ "style/synth_photo_default": [
+  "style/synth_photo_default.json",
+  "style/synth_photo_default.png"
+ ],
+ "style/synth_photo_cross_ramp": [
+  "style/synth_photo_cross_ramp.json",
+  "style/synth_photo_cross_ramp.png"
+ ],
+ "style/synth_alpha_default": [
+  "style/synth_alpha_default.json",
+  "style/synth_alpha_default.png"
+ ],
+ "presets/synth_photo_1983_digital8_tile": [
+  "presets/synth_photo_1983_digital8_tile.json",
+  "presets/synth_photo_1983_digital8_tile.png"
+ ],
+ "presets/synth_photo_1987_analog16_flat": [
+  "presets/synth_photo_1987_analog16_flat.json",
+  "presets/synth_photo_1987_analog16_flat.png"
+ ],
+ "presets/synth_photo_1990_analog16_checker": [
+  "presets/synth_photo_1990_analog16_checker.json",
+  "presets/synth_photo_1990_analog16_checker.png"
+ ],
+ "presets/synth_photo_1993_analog16_tile": [
+  "presets/synth_photo_1993_analog16_tile.json",
+  "presets/synth_photo_1993_analog16_tile.png"
+ ],
+ "presets/synth_photo_1995_analog16_ordered": [
+  "presets/synth_photo_1995_analog16_ordered.json",
+  "presets/synth_photo_1995_analog16_ordered.png"
+ ],
+ "profile/synth_ref": [
+  "profile/synth_photo_synth_ref_cross.json",
+  "profile/synth_photo_synth_ref_cross.png",
+  "profile/synth_photo_synth_ref_fit.json",
+  "profile/synth_photo_synth_ref_fit.png",
+  "profile/synth_photo_synth_ref_plain.json",
+  "profile/synth_photo_synth_ref_plain.png",
+  "profile/synth_ref_fit.json",
+  "profile/synth_ref_profile.json",
+  "profile/synth_ref_settings_cross.json",
+  "profile/synth_ref_settings_plain.json"
+ ],
+ "export_db/synth": [
+  "export_db/index.csv",
+  "export_db/palettes/synth/synth_cg.gpl",
+  "export_db/records/synth/synth_cg.json",
+  "export_db/records/synth/synth_cg_bad.json"
+ ]
+}

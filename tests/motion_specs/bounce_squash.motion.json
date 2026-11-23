@@ -1,0 +1,19 @@
+{
+  "format": "sprite-motion",
+  "version": 1,
+  "name": "bounce_squash",
+  "loop": true,
+  "regions": {
+    "upper": {"type": "split", "at": "auto"}
+  },
+  "tracks": {
+    "upper_y": {"type": "deform", "region": "upper", "axis": "y"},
+    "root_y": {"type": "root", "axis": "y"}
+  },
+  "frames": [
+    {"ms": 150, "upper_y": -1},
+    {"ms": 150, "root_y": -1},
+    {"ms": 150, "root_y": -2},
+    {"ms": 150, "root_y": -1}
+  ]
+}

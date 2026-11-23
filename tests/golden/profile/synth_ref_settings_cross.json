@@ -1,0 +1,41 @@
+{
+ "notes": [
+  "色数: お手本 7.0 色 → 8 色 (16 色モード想定で上限 16)",
+  "ランプ: 2 段以上のランプ 3.0 本 → 3 本 (段数は自動配分)",
+  "ディザ: 率 43.9% → 勾配マスク 0.3〜12.0 (曲率許容 8.0); 市松 15.4% / 2×2系 11.2% / 4×4・規則混在 17.0% → bayer4",
+  "彩度: お手本の平均彩度 0.17 → 彩度補正 +0",
+  "塗り: ベタ領域 55% → 平滑化の強さ 0.74",
+  "孤立ピクセル 0.2% → 除去 2 回",
+  "輪郭: エッジ上の暗色 69% → 輪郭あり (色 #000, 太さ 1, 閾値 39.1)",
+  "ランプ間の混色: お手本のランプ間の組 14% → 度合い 0.2 (明度差 ≤ 64.0, 色相差 ≤ 180°)",
+  "解像度: 400 ライン → PC-98 640×400"
+ ],
+ "overrides": {
+  "colors": 8,
+  "mode": "style",
+  "preset": "PC-98 640×400",
+  "saturation": 0,
+  "snap_4096": true,
+  "style_cross_ramp": 0.2,
+  "style_cross_ramp_max_hue": 180.0,
+  "style_cross_ramp_max_lum": 64.0,
+  "style_despeckle": 2,
+  "style_dither_strength": 1.0,
+  "style_grad_high": 12.0,
+  "style_grad_low": 0.3,
+  "style_mask_curvature": 8.0,
+  "style_outline": true,
+  "style_outline_color": [
+   0,
+   0,
+   0
+  ],
+  "style_outline_thickness": 1,
+  "style_outline_threshold": 39.1,
+  "style_pattern": "bayer4",
+  "style_ramps": 3,
+  "style_smooth": "bilateral",
+  "style_smooth_strength": 0.74,
+  "style_steps": 0
+ }
+}

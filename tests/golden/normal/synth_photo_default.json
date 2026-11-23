@@ -1,0 +1,136 @@
+{
+ "info": {},
+ "mode": "P",
+ "palette": [
+  [
+   17,
+   17,
+   17
+  ],
+  [
+   68,
+   51,
+   51
+  ],
+  [
+   204,
+   34,
+   51
+  ],
+  [
+   119,
+   85,
+   68
+  ],
+  [
+   68,
+   119,
+   204
+  ],
+  [
+   102,
+   136,
+   51
+  ],
+  [
+   85,
+   119,
+   204
+  ],
+  [
+   153,
+   119,
+   102
+  ],
+  [
+   102,
+   136,
+   204
+  ],
+  [
+   102,
+   170,
+   51
+  ],
+  [
+   187,
+   136,
+   119
+  ],
+  [
+   119,
+   153,
+   221
+  ],
+  [
+   119,
+   170,
+   221
+  ],
+  [
+   136,
+   187,
+   221
+  ],
+  [
+   204,
+   170,
+   153
+  ],
+  [
+   153,
+   187,
+   238
+  ]
+ ],
+ "pixel_aspect": 1.0,
+ "settings": {
+  "background": [
+   0,
+   0,
+   0
+  ],
+  "brightness": 0,
+  "colors": 16,
+  "contrast": 0,
+  "custom_height": 200,
+  "custom_width": 320,
+  "dither": "bayer4",
+  "dither_strength": 0.75,
+  "fit": "fit",
+  "mode": "normal",
+  "palette_source": "kmeans",
+  "perceptual": false,
+  "pixel_aspect": 1.0,
+  "pixel_size": 4,
+  "preset": "PC-98 640×400",
+  "resample": "box",
+  "saturation": 0,
+  "snap_4096": true,
+  "style_cross_ramp": 0.0,
+  "style_cross_ramp_max_hue": 180.0,
+  "style_cross_ramp_max_lum": 32.0,
+  "style_despeckle": 1,
+  "style_dither_strength": 1.0,
+  "style_grad_high": 7.0,
+  "style_grad_low": 0.6,
+  "style_hue_separation": true,
+  "style_mask_curvature": 2.5,
+  "style_outline": false,
+  "style_outline_color": null,
+  "style_outline_thickness": 1,
+  "style_outline_threshold": 40.0,
+  "style_pattern": "checker",
+  "style_ramp_extend": false,
+  "style_ramps": 0,
+  "style_reserve_skin": true,
+  "style_smooth": "bilateral",
+  "style_smooth_strength": 0.5,
+  "style_steps": 0
+ },
+ "size": [
+  533,
+  400
+ ],
+ "used_colors": 16
+}
