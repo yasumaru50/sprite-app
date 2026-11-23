@@ -215,12 +215,31 @@
   #edit-images figcaption { font-size: 0.88em; color: var(--muted); }
   .file-name { font-size: 0.82em; color: var(--muted); word-break: break-all; }
   table.motion-table th small.col-region select { font-size: 0.95em; padding: 1px 2px; border-width: 2px; }
+  /* 説明の文（「？」を押したときだけ出す） */
+  .help:not(.open) { display: none !important; }
+  .help-row { display: inline-flex; align-items: center; gap: 6px; }
+  button.help-btn { width: 1.6em; height: 1.6em; padding: 0 !important; margin: 0 0 0 6px; border-radius: 50%;
+                    font-size: 0.8em !important; font-weight: 700; line-height: 1; vertical-align: middle;
+                    background: transparent; color: var(--accent); border: 1px solid var(--accent); flex: none; }
+  .help-row button.help-btn { margin-left: 0; }
+  button.help-btn[aria-expanded=true] { background: var(--accent); color: var(--accent-text); }
+  button.help-btn:focus-visible, #help-all:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .top-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-bottom: 12px; }
+  .top-head h1 { margin: 0; }
+  #help-all { padding: 4px 14px; font-size: 0.9em; }
+  .help.choices { margin-top: 2px; }
+  .help.choices div { margin: 1px 0; }
+  .field .help { max-width: 22em; }
+  .lead.help { margin-top: -6px; }
 </style>
 </head>
 <body>
 <main>
-  <h1>Sprite App（ブラウザ版）</h1>
-  <p class="lead">ドット絵風の画像（AI が描いたドット絵など）を、1 ドット＝1 画素のスプライトに直します。
+  <div class="top-head">
+    <h1 id="app-title">Sprite App（ブラウザ版）</h1>
+    <button type="button" id="help-all" class="secondary" aria-pressed="false">説明をすべて表示</button>
+  </div>
+  <p class="lead help" data-help-at="app-title">ドット絵風の画像（AI が描いたドット絵など）を、1 ドット＝1 画素のスプライトに直します。
     画像はこのパソコンの中だけで処理され、どこにも送られません。</p>
 
   <section class="panel">
@@ -230,25 +249,26 @@
     </div>
     <div class="input-kind" role="radiogroup" aria-label="入力の種類">
       <label class="check"><input type="radio" name="input-kind" value="single" id="kind-single" checked>
-        <span><b>1 枚の絵</b><small>キャラが 1 人だけ描かれた絵（呼吸などの動きも付けられます）</small></span></label>
+        <span><b>1 枚の絵</b><small class="help" data-help-at="kind-help">キャラが 1 人だけ描かれた絵（呼吸などの動きも付けられます）</small></span></label>
       <label class="check"><input type="radio" name="input-kind" value="frames" id="kind-frames">
-        <span><b>コマが並んだ絵</b><small>歩き・走りなど、同じキャラが横に何コマも並んだ絵（コマの間に背景だけのすき間があること）</small></span></label>
+        <span><b>コマが並んだ絵</b><small class="help" data-help-at="kind-help">歩き・走りなど、同じキャラが横に何コマも並んだ絵（コマの間に背景だけのすき間があること）</small></span></label>
+      <span id="kind-help" data-help-name="入力の種類"></span>
     </div>
     <div class="controls" style="margin-top:14px">
       <div class="field">
         <label for="colors">色数</label>
         <input type="number" id="colors" step="1">
-        <small id="colors-help"></small>
+        <small id="colors-help" class="help"></small>
       </div>
       <div class="field">
         <label for="cleanup">クリーンアップ</label>
         <select id="cleanup"></select>
-        <small>余計なドットを片付ける強さ</small>
+        <small class="help" id="cleanup-help">余計なドットを片付ける強さ</small>
       </div>
       <div class="field">
         <label for="outline">縁取り</label>
         <select id="outline"></select>
-        <small>キャラクターの外側の輪郭（「細く」は、コマの絵などで 2 ドットの太さになった外側の輪郭を 1 ドットにします）</small>
+        <small class="help" id="outline-help">キャラクターの外側の輪郭（「細く」は、コマの絵などで 2 ドットの太さになった外側の輪郭を 1 ドットにします）</small>
       </div>
       <div class="field" style="min-width:auto">
         <button id="convert" disabled>② 変換する</button>
@@ -258,57 +278,60 @@
       </div>
     </div>
     <div id="frames-settings" hidden>
-      <h3>コマの切り分けとそろえ方（変えたら「② 変換する」をもう一度押します）</h3>
+      <h3 id="frames-cut-title">コマの切り分けとそろえ方</h3>
+      <div class="note help" data-help-at="frames-cut-title">変えたら「② 変換する」をもう一度押します。</div>
       <div class="controls">
         <div class="field">
           <label for="frame-count">コマの数</label>
           <input type="number" id="frame-count" step="1" placeholder="自動">
-          <small id="frame-count-help">絵に並んでいるコマの数。空なら自動で数えます（数が違えば作らずに知らせます）</small>
+          <small id="frame-count-help" class="help">絵に並んでいるコマの数。空なら自動で数えます（数が違えば作らずに知らせます）</small>
         </div>
         <div class="field">
           <label for="frame-align">横のそろえ方</label>
           <select id="frame-align"></select>
-          <small>コマごとの左右の位置を、何に合わせるか</small>
+          <small class="help" id="frame-align-help">コマごとの左右の位置を、何に合わせるか</small>
         </div>
         <div class="field">
           <label for="frame-align-y">縦のそろえ方</label>
           <select id="frame-align-y"></select>
-          <small>歩きは「足元」、足が地面から離れる走り・跳びは「頭の高さ」</small>
+          <small class="help" id="frame-align-y-help">歩きは「足元」、足が地面から離れる走り・跳びは「頭の高さ」</small>
         </div>
         <div class="field">
           <label for="frame-steady">ちらつきを減らす</label>
           <select id="frame-steady"></select>
-          <small>「あり」は、上の方（頭のあたり）で 1 コマ目と違う小さな点・短い線だけを 1 コマ目の色に戻します（腕・脚・目や口の形の違いは戻しません）</small>
+          <small class="help" id="frame-steady-help">「あり」は、上の方（頭のあたり）で 1 コマ目と違う小さな点・短い線だけを 1 コマ目の色に戻します（腕・脚・目や口の形の違いは戻しません）</small>
         </div>
       </div>
-      <h3>再生の順番と時間（変えるとすぐ作り直します。変換はやり直しません）</h3>
+      <h3 id="frames-play-title">再生の順番と時間</h3>
+      <div class="note help" data-help-at="frames-play-title">変えるとすぐ作り直します。変換はやり直しません。</div>
       <div class="controls">
         <div class="field">
           <label for="frame-order">順番</label>
           <div class="inline"><input type="text" id="frame-order" inputmode="numeric" spellcheck="false" placeholder="1,2,3,4">
             <button type="button" class="secondary" id="order-pingpong" style="padding:4px 10px;font-size:0.85em">行って戻る</button></div>
-          <small id="frame-order-help">左のコマから 1, 2, … 。空なら左から順。同じコマを何度使っても OK（例 1,2,3,2）</small>
+          <small id="frame-order-help" class="help">左のコマから 1, 2, … 。空なら左から順。同じコマを何度使っても OK（例 1,2,3,2）</small>
         </div>
         <div class="field">
           <label for="frame-duration">1 コマの時間</label>
           <input type="text" id="frame-duration" inputmode="numeric" spellcheck="false">
-          <small id="frame-duration-help"></small>
+          <small id="frame-duration-help" class="help"></small>
         </div>
         <div class="field">
           <label for="frame-root">体の上下</label>
           <select id="frame-root">
             <option value="none" selected>なし</option>
-            <option value="even">あり（2・4… コマ目で 1 ドット上がる: 0,-1,0,-1）</option>
-            <option value="odd">あり（1・3… コマ目で 1 ドット上がる: -1,0,-1,0）</option>
+            <option value="even">あり（0,-1,0,-1）</option>
+            <option value="odd">あり（-1,0,-1,0）</option>
             <option value="custom">自分で入れる…</option>
           </select>
           <input type="text" id="frame-root-y" inputmode="numeric" spellcheck="false" placeholder="0,-1,0,-1" hidden aria-label="体の上下（ドット。− が上）">
-          <small>走りで体ごと跳ねて見せるとき。− が上（ドット）。数は順番の数と同じ</small>
+          <small class="help">走りで体ごと跳ねて見せるとき。− が上（ドット）。数は順番の数と同じ。
+            「あり（0,-1,0,-1）」は 2・4… コマ目で、「あり（-1,0,-1,0）」は 1・3… コマ目で 1 ドット上がります</small>
         </div>
         <div class="field">
           <label for="frame-name">名前</label>
           <input type="text" id="frame-name" spellcheck="false">
-          <small>保存するファイルの名前に入ります（walk・run など。半角英数字）</small>
+          <small class="help">保存するファイルの名前に入ります（walk・run など。半角英数字）</small>
         </div>
       </div>
     </div>
@@ -355,20 +378,21 @@
   </section>
 
   <section class="panel" id="motion-panel">
-    <h2 class="title" id="motion-title">動き</h2>
+    <h2 class="title" id="motion-head"><span id="motion-title">動き</span></h2>
     <div class="motion-choice" id="motion-choice" role="radiogroup" aria-label="付ける動き">
       <label class="check"><input type="radio" name="motion" value="none" id="motion-none" checked> なし</label>
       <!-- 呼吸・横揺れ・浮遊・弾む・うなずく・伸びの選択肢は、Python の動きの一覧（MOTIONS）から足す -->
       <label class="check" id="motion-table-label" hidden><input type="radio" name="motion" value="table" id="motion-table"> 表（自分で編集）</label>
     </div>
-    <div class="table-entry">
+    <div class="note help choices" id="motion-choice-help" data-help-at="motion-head"></div>
+    <div class="table-entry" id="table-entry">
       <button type="button" class="secondary" id="table-open" disabled>表で編集</button>
       <button type="button" class="secondary" id="table-load-btn">表を読み込む（.motion.json）</button>
       <input type="file" id="table-file" accept=".json,application/json" hidden>
-      <span class="note" id="table-entry-note">「表で編集」は、選んでいる動き（呼吸など）を、フレームごとの数の表にして細かく直せます（慣れてから使う機能です）。</span>
+      <span class="note help" id="table-entry-note" data-help-at="table-entry" data-help-name="表で編集">「表で編集」は、選んでいる動き（呼吸など）を、フレームごとの数の表にして細かく直せます（慣れてから使う機能です）。</span>
     </div>
     <div id="table-load-error" class="message error" role="alert" hidden><div id="table-load-error-text" style="white-space:pre-wrap"></div></div>
-    <div class="note" id="motion-off-note">動きを選ぶと、変換結果から動きを作って再生し、スプライトシート（PNG と JSON）を保存できます。
+    <div class="note help" id="motion-off-note" data-help-at="motion-head">動きを選ぶと、変換結果から動きを作って再生し、スプライトシート（PNG と JSON）を保存できます。
       「なし」のときは今までどおり 1 枚の PNG だけです。</div>
     <div id="motion-body" hidden>
       <div id="table-editor" hidden>
@@ -376,7 +400,7 @@
           <div class="field">
             <label for="table-name">動きの名前</label>
             <input type="text" id="table-name" spellcheck="false">
-            <small>英数字と _・-（シートのファイル名に使う）</small>
+            <small class="help">英数字と _・-（シートのファイル名に使う）</small>
           </div>
         </div>
         <div class="region-editor" id="region-editor">
@@ -389,7 +413,7 @@
           </div>
           <div class="region-right">
             <div class="region-tools">
-              <b>動かす範囲</b>
+              <b id="region-title">動かす範囲</b>
               <button type="button" class="secondary" id="region-add-rect">＋ 四角</button>
               <button type="button" class="secondary" id="region-add-band">＋ 帯</button>
               <button type="button" class="secondary" id="region-add-split">＋ 分け目</button>
@@ -402,21 +426,21 @@
               </table>
             </div>
             <div class="note" id="region-empty-note">範囲がありません。「＋ 四角」「＋ 帯」を押すか、絵の上をドラッグすると四角を描けます。</div>
-            <div class="note" id="region-how">絵の上でドラッグすると、選んでいる範囲を描き直します（何も選んでいなければ新しい四角）。
+            <div class="note help" id="region-how" data-help-at="region-title">絵の上でドラッグすると、選んでいる範囲を描き直します（何も選んでいなければ新しい四角）。
               枠の端（白い印）をつかむと端だけ、枠の中をつかむと全体を動かせます。帯は横いっぱいで、上下だけ動きます。
               枠を押すとその範囲を選び、何も無い所を押すと選ぶのをやめます。</div>
-            <div class="note" id="region-help"></div>
+            <div class="note help" id="region-help" data-help-at="region-title"></div>
             <div class="hint-buttons" id="region-use"></div>
           </div>
         </div>
         <div class="table-scroll">
           <table class="motion-table" id="table-grid"><thead id="table-thead"></thead><tbody id="table-tbody"></tbody></table>
         </div>
-        <div class="actions" style="margin-top:8px">
+        <div class="actions" style="margin-top:8px" id="table-add-row" data-help-name="表">
           <button type="button" class="secondary" id="table-add">＋ 行を足す</button>
           <span class="note" id="table-rows-note"></span>
         </div>
-        <div class="note">1 行が 1 フレームです（上から順に再生）。数はドットで、空のマスは 0（動かさない）。
+        <div class="note help" data-help-at="table-add-row">1 行が 1 フレームです（上から順に再生）。数はドットで、空のマスは 0（動かさない）。
           upper_x・upper_y は、見出しの「範囲」で選んだ範囲だけが動きます（分け目なら分け目から上、帯・四角なら囲んだ中だけ。upper_y は − で縮む、+ で伸びる）。
           足元は動きません。足元も動くのは root_y（体全体の上下）だけです。
           同じ行で upper_x と upper_y を一緒に使うのは、まだ作れません（行を分けてください）。数を変えると、少し待ってからプレビューを作り直します。</div>
@@ -425,12 +449,13 @@
           <span class="note" id="table-save-note"></span>
         </div>
         <div id="table-save-box" hidden>
-          <div><b>高さの保存のしかた</b>（分け目の高さ・帯と四角の端を数字で指定したときの書き方）</div>
+          <div id="save-height-title" data-help-name="高さの保存のしかた"><b>高さの保存のしかた</b></div>
+          <div class="note help" data-help-at="save-height-title">分け目の高さ・帯と四角の端を数字で指定したときの書き方です。</div>
           <div class="motion-choice" role="radiogroup" aria-label="高さの保存のしかた">
             <label class="check"><input type="radio" name="spec-height" value="number" checked> 数（このキャラ用）</label>
             <label class="check"><input type="radio" name="spec-height" value="percent"> 割合（別のキャラにも使う）</label>
           </div>
-          <div class="note">数は「下から何ドット目」をそのまま書きます。割合は透明の部分を除いたキャラの高さに対する割合で書くので、
+          <div class="note help" data-help-at="save-height-title">数は「下から何ドット目」をそのまま書きます。割合は透明の部分を除いたキャラの高さに対する割合で書くので、
             背の違うキャラで読んでも、だいたい同じ場所で分けます。帯・四角の左・右の端は、透明の部分を除いたキャラの幅に対する割合で書きます。
             「自動」の高さはどちらでも自動のままです。読み込んだ割合の端で、直していないものは読み込んだまま書きます。</div>
           <div class="actions">
@@ -446,36 +471,36 @@
             <select id="split-mode"><option value="auto">自動</option><option value="number">数字で指定</option></select>
             <input type="number" id="split" min="1" step="1" disabled aria-label="分ける高さ（下から何ドット目か）">
           </div>
-          <small id="split-help">下から何ドット目か（1 = いちばん下の行）</small>
+          <small id="split-help" class="help">下から何ドット目か（1 = いちばん下の行）</small>
         </div>
         <div class="field" id="height-field" hidden>
           <label for="bounce-height">弾む高さ</label>
           <select id="bounce-height"></select>
-          <small id="height-help">ドット（いちばん上で何ドット浮くか）</small>
+          <small id="height-help" class="help">ドット（いちばん上で何ドット浮くか）</small>
         </div>
         <div class="field">
           <label for="frames">フレーム数</label>
           <input type="number" id="frames" step="1">
-          <small id="frames-help"></small>
+          <small id="frames-help" class="help"></small>
         </div>
         <div class="field">
           <label for="duration">表示時間（ミリ秒）</label>
           <input type="text" id="duration" inputmode="numeric">
-          <small id="duration-help"></small>
+          <small id="duration-help" class="help"></small>
         </div>
         <div class="field" id="depth-field">
           <label for="depth">下がる量</label>
           <select id="depth"></select>
-          <small id="depth-help">ドット</small>
+          <small id="depth-help" class="help">ドット</small>
         </div>
         <div class="field" id="amount-field" hidden>
           <label for="amount" id="amount-label">揺れ幅</label>
           <select id="amount"></select>
-          <small id="amount-help">ドット（2 は上ほど大きく揺れる）</small>
+          <small id="amount-help" class="help">ドット（2 は上ほど大きく揺れる）</small>
         </div>
         <div class="field" id="keep-field" hidden>
           <label class="check"><input type="checkbox" id="keep-small-parts"> 小さな部品を守る</label>
-          <small>縮める・伸ばすときに、目・頬など（同じ色の塊で縦 3 ドット以下）の長さを変えない（CLI の --keep-small-parts）</small>
+          <small class="help">縮める・伸ばすときに、目・頬など（同じ色の塊で縦 3 ドット以下）の長さを変えない（CLI の --keep-small-parts）</small>
         </div>
         <div class="field" style="min-width:auto">
           <button id="motion-reset" class="secondary" type="button">動きの設定を最初に戻す</button>
@@ -528,11 +553,12 @@
         <a id="dl-flicker" class="button secondary" aria-disabled="true" href="#">ちらつきの見える化（PNG）</a>
         <a id="dl-flicker-json" class="button secondary" aria-disabled="true" href="#">ちらつきの記録（JSON）</a>
       </div>
-      <div class="note" id="frames-extra-note" hidden>左右反転のシートは、反対の向きに歩かせるとき用です。ちらつきの見える化は、上の方（頭のあたり）で
+      <div class="note help" id="frames-extra-note" data-help-at="motion-head" hidden>左右反転のシートは、反対の向きに歩かせるとき用です。ちらつきの見える化は、上の方（頭のあたり）で
         1 コマ目と違うドットを赤紫の枠で囲んだ画像です（自動では直しません。手直しの目印にしてください）。</div>
       <div id="same-box" hidden>
-        <h3>1 コマ目と同じにする範囲（頭など。変えるとすぐ写し直します。変換はやり直しません）</h3>
-        <div class="note">下の 1 コマ目の上を<b>マウスでドラッグ</b>すると、四角い範囲を描けます（何個でも足せます）。2 コマ目以降で、
+        <h3 id="same-title">1 コマ目と同じにする範囲</h3>
+        <div class="note help" data-help-at="same-title">頭など。変えるとすぐ写し直します。変換はやり直しません。
+          下の 1 コマ目の上を<b>マウスでドラッグ</b>すると、四角い範囲を描けます（何個でも足せます）。2 コマ目以降で、
           範囲の中身がいちばんよく合う位置（上下左右「位置を探す幅」ドット以内）を探し、そこに 1 コマ目のドットをそのまま写します。
           目・口は 1 コマ目とまったく同じになるか、そのコマのままです（混ざりません）。合い方が低い・境目で段差や輪郭の途切れができる・
           目や口に腕などが入ってくるコマは写さずに理由を出します。写した結果は、そのまま再生と保存（シート・JSON・GIF・反転・.piskel）に入ります。</div>
@@ -546,12 +572,12 @@
           <button type="button" id="same-back" class="secondary" disabled>元に戻す</button>
         </div>
         <div class="actions">
-          <label for="same-text">数で足す</label>
+          <label for="same-text" id="same-text-label">数で足す</label>
           <input type="text" id="same-text" placeholder="x,y,幅,高さ" style="width:9em" aria-describedby="same-text-help">
           <button type="button" id="same-add" class="secondary">範囲を足す</button>
-          <small id="same-text-help" class="note">左上が 0,0（ドット）。CLI の --same-as-first と同じ書き方</small>
+          <small id="same-text-help" class="note help" data-help-at="same-text-label">左上が 0,0（ドット）。CLI の --same-as-first と同じ書き方</small>
         </div>
-        <div class="note" id="same-help"><b>マウス</b>: 何も無い所をドラッグ = 新しい範囲／範囲の内側をドラッグ = 動かす／
+        <div class="note help" id="same-help" data-help-at="same-title"><b>マウス</b>: 何も無い所をドラッグ = 新しい範囲／範囲の内側をドラッグ = 動かす／
           辺・角をドラッグ = 大きさを変える／クリックか下の一覧で選ぶ。
           <b>キーボード</b>（絵をクリックしてから）: 矢印 = 選んだ範囲を 1 ドット動かす／Shift＋矢印 = 右下の角を動かして大きさを変える／
           Delete = 選んだ範囲を消す／Esc = 選ぶのをやめる／Ctrl＋Z = 元に戻す。計算はマウスを離したとき・キーを止めたときだけ。</div>
@@ -565,8 +591,9 @@
         <div class="actions"><a id="dl-same" class="button secondary" aria-disabled="true" href="#">範囲の図（PNG）</a></div>
       </div>
       <div id="touch-box" hidden>
-        <h3>ドットを直す（ちらつき・ゴミ・輪郭を数ドット直す。大きな描き直しは Piskel で）</h3>
-        <div class="note">コマごとにドットを塗る・消すと、そのまま再生と保存（シート・JSON・GIF・左右反転・.piskel）に入ります。
+        <h3 id="touch-title">ドットを直す</h3>
+        <div class="note help" data-help-at="touch-title">ちらつき・ゴミ・輪郭を数ドット直す所です（大きな描き直しは Piskel で）。
+          コマごとにドットを塗る・消すと、そのまま再生と保存（シート・JSON・GIF・左右反転・.piskel）に入ります。
           直しは<b>元のコマ</b>に入るので、順番 1,2,3,2 の 2 番目と 4 番目は 1 回直せば両方変わります。使える色はシートのパレットだけです（新しい色は作れません）。
           上の「1 コマ目と同じにする範囲」や変換の設定を変えても、直しはその上に重ね直します（下の色が変わったドットは数を知らせます）。</div>
         <div class="actions touch-tools" style="margin-top:6px">
@@ -587,7 +614,7 @@
           <button type="button" id="touch-clear" class="secondary" disabled>直しを全部消す</button>
         </div>
         <div id="touch-palette" role="group" aria-label="パレット（クリックで色を選ぶ）"></div>
-        <div class="note" id="touch-help"><b>マウス</b>: 左ドラッグ = 描く（ペン・消しゴム）／右クリック・右ドラッグ = 消しゴム／Alt＋クリック = スポイト（色を拾ってペンに戻る）。
+        <div class="note help" id="touch-help" data-help-at="touch-title"><b>マウス</b>: 左ドラッグ = 描く（ペン・消しゴム）／右クリック・右ドラッグ = 消しゴム／Alt＋クリック = スポイト（色を拾ってペンに戻る）。
           <b>キー</b>（カーソルが絵の上にあるとき・この欄を選んでいるとき）: B ペン／E 消しゴム／I スポイト／「,」「.」前後のコマ／O 前のコマを薄く重ねる・やめる／
           Ctrl＋Z 元に戻す／Ctrl＋Y か Ctrl＋Shift＋Z やり直し。元に戻すは 1 回のドラッグを 1 つと数えて 50 回まで。前のコマの重ね（再生の順番で 1 つ前。1 コマ目は最後のコマ）は見るためだけで、保存には入りません。</div>
         <div class="touch-row">
@@ -601,12 +628,12 @@
         <div class="note" id="touch-cursor">&nbsp;</div>
         <div id="touch-status" role="status" aria-live="polite"></div>
         <div id="touch-warn" class="message warn" style="white-space:normal" hidden><div id="touch-warn-text" style="white-space:pre-wrap"></div><div class="actions"><button type="button" id="touch-ack" class="secondary">確かめた（印と警告を消す）</button></div></div>
-        <div class="actions">
+        <div class="actions" id="touch-io" data-help-name="直しの一覧">
           <a id="touch-save" class="button secondary" aria-disabled="true" href="#">直しの一覧を保存（JSON）</a>
           <label for="touch-load">直しの一覧を読み込む</label>
           <input type="file" id="touch-load" accept=".json,application/json">
         </div>
-        <div class="note">直しの一覧（<code>&lt;出力名&gt;_&lt;名前&gt;_edits.json</code>）は、CLI の <code>--edits</code> でも同じように当てられます（中身はバイト単位で同じになります）。</div>
+        <div class="note help" data-help-at="touch-io">直しの一覧（<code>&lt;出力名&gt;_&lt;名前&gt;_edits.json</code>）は、CLI の <code>--edits</code> でも同じように当てられます（中身はバイト単位で同じになります）。</div>
       </div>
       <dialog id="touch-confirm" aria-labelledby="touch-confirm-title" aria-describedby="touch-confirm-text">
         <h3 id="touch-confirm-title">直しを当てられません</h3>
@@ -635,36 +662,36 @@
         </select>
         <input type="color" id="gif-bg-color" value="#203040" hidden aria-label="GIF の背景の色">
       </div>
-      <div class="note" id="gif-note">GIF はサイトに載せたり人に見せたりする用です（ゲームにはシートの PNG と JSON を使います）。
+      <div class="note help" id="gif-note" data-help-at="gif-controls" data-help-name="GIF">GIF はサイトに載せたり人に見せたりする用です（ゲームにはシートの PNG と JSON を使います）。
         各フレームはシートと同じ絵で、ドットをそのまま大きくします。CLI では <code id="gif-cli">--gif</code>。</div>
       <div class="note" id="gif-status" role="status" aria-live="polite"></div>
-      <div class="note">PNG と JSON は 2 つで 1 組です。同じフォルダに置いてください（JSON の "image" に PNG の名前が書いてあります）。
+      <div class="note help" data-help-at="motion-head">PNG と JSON は 2 つで 1 組です。同じフォルダに置いてください（JSON の "image" に PNG の名前が書いてあります）。
         ファイルの中身は CLI の <code id="cli-equiv">--motion breathe</code> と同じです。</div>
     </div>
   </section>
 
   <section class="panel" id="edit-panel">
-    <h2 class="title">直したシートを読み戻す（Piskel などで手直ししたあと）</h2>
-    <div class="note">Piskel で直したシートと、Sprite App で保存したシートの情報（JSON）を選ぶと、時間・順番・足元は JSON のまま、
+    <h2 class="title" id="edit-title">直したシートを読み戻す</h2>
+    <div class="note help" data-help-at="edit-title">Piskel などで手直ししたあとに使います。Piskel で直したシートと、Sprite App で保存したシートの情報（JSON）を選ぶと、時間・順番・足元は JSON のまま、
       直したドットはそのまま使って、JSON・GIF・左右反転のシート・横 1 列に並べ直したシートを作り直します。
       新しい色・半透明のドットなどがあれば知らせて、場所の画像を出します（勝手には直しません）。変換の準備（上の Python の読み込み）ができてから使えます。</div>
     <div class="controls" style="margin-top:10px">
       <div class="field">
         <label for="edit-file">A. 直したファイル（.piskel か PNG）</label>
         <input type="file" id="edit-file" accept=".piskel,.png,image/png">
-        <small>Piskel の Save → Save offline as File の .piskel か、Export → PNG で書き出したシート</small>
+        <small class="help">Piskel の Save → Save offline as File の .piskel か、Export → PNG で書き出したシート</small>
         <span class="file-name" id="edit-file-name"></span>
       </div>
       <div class="field">
         <label for="edit-json">B. 元のシートの情報（JSON）</label>
         <input type="file" id="edit-json" accept=".json,application/json">
-        <small>シートを保存したときの「⑤ シートの情報を保存（JSON）」のファイル</small>
+        <small class="help">シートを保存したときの「⑤ シートの情報を保存（JSON）」のファイル</small>
         <span class="file-name" id="edit-json-name"></span>
       </div>
       <div class="field">
         <label for="edit-orig">C. 直す前のシート（PNG・なくてもよい）</label>
         <input type="file" id="edit-orig" accept=".png,image/png">
-        <small>選ぶと、直したドットに印を付けた画像も作ります（前の版の JSON では、色を比べるのにも使います）</small>
+        <small class="help">選ぶと、直したドットに印を付けた画像も作ります（前の版の JSON では、色を比べるのにも使います）</small>
         <span class="file-name" id="edit-orig-name"></span>
       </div>
     </div>
@@ -672,11 +699,11 @@
       <div class="field">
         <label for="edit-same">同じコマを 2 回使う順番（1,2,3,2 など）</label>
         <select id="edit-same"></select>
-        <small>シートには再生する順に 1 コマずつ並んでいます。直した結果が違えば知らせます</small>
+        <small class="help" id="edit-same-help">シートには再生する順に 1 コマずつ並んでいます。直した結果が違えば知らせます</small>
       </div>
       <div class="field">
         <label class="check" style="font-weight:600"><input type="checkbox" id="edit-fix"> おかしな色を直す</label>
-        <small>元のパレットに無い色をいちばん近い元の色に、半透明を透明か不透明にします（ふだんは切）</small>
+        <small class="help">元のパレットに無い色をいちばん近い元の色に、半透明を透明か不透明にします（ふだんは切）</small>
       </div>
       <div class="field">
         <label for="edit-gif-scale">GIF の拡大</label>
@@ -698,14 +725,14 @@
       <div class="actions" id="edit-files"></div>
       <details id="edit-notes-box"><summary>読み方のメモ</summary><ul id="edit-notes"></ul></details>
       <div id="edit-images"></div>
-      <div class="note">ファイルの中身は CLI の <code id="edit-cli">--readback</code> と同じです。</div>
+      <div class="note help" data-help-at="edit-title">ファイルの中身は CLI の <code id="edit-cli">--readback</code> と同じです。</div>
     </div>
   </section>
 
   <footer>
-    処理は <a href="https://pyodide.org/">Pyodide</a>（ブラウザの中で動く Python）で、CLI（<code>python -m apps.sprite</code>）と
-    同じ Python のコードを使います。初回は Pyodide をインターネットから読み込むので、つながった状態で開いてください。
-    Pyodide __PYODIDE_VERSION__ ／ ビルド __BUILD_ID__
+    <span class="help" data-help-at="build-line">処理は <a href="https://pyodide.org/">Pyodide</a>（ブラウザの中で動く Python）で、CLI（<code>python -m apps.sprite</code>）と
+    同じ Python のコードを使います。初回は Pyodide をインターネットから読み込むので、つながった状態で開いてください。</span>
+    <span id="build-line" data-help-name="このページ">Pyodide __PYODIDE_VERSION__ ／ ビルド __BUILD_ID__</span>
   </footer>
 </main>
 
@@ -842,18 +869,94 @@ const PYODIDE_URL = "https://cdn.jsdelivr.net/pyodide/v__PYODIDE_VERSION__/full/
 const SPEC = JSON.parse(document.getElementById("settings-spec").textContent);
 const $ = (id) => document.getElementById(id);
 
+// ---- 説明の文（ふだんは隠し、見出しや項目の横の「？」を押したときだけ出す。もう一度押すと隠れる） ----
+// 説明の文には class="help" を付ける。「？」を置く場所は data-help-at（要素の id）か、無ければ同じ欄（.field）の最初の label。
+// 同じ場所を指す説明は 1 つの「？」でまとめて出し入れする。いちばん上の「説明をすべて表示」で全部を出し入れする（最初は隠す）。
+const HELP = { all: false, seq: 0, buttons: [] };
+function helpAnchor(el) {
+  if (el.dataset.helpAt) return $(el.dataset.helpAt);
+  const field = el.closest(".field");
+  return field ? field.querySelector("label") : null;
+}
+function helpTargets(btn) { return btn.getAttribute("aria-controls").split(" ").map((id) => $(id)).filter(Boolean); }
+function setHelpOpen(btn, open) {
+  btn.setAttribute("aria-expanded", String(open));
+  for (const el of helpTargets(btn)) el.classList.toggle("open", open);
+}
+// 説明がどれも出せない（hidden）ときは「？」も隠す
+function syncHelpButton(btn) { btn.hidden = helpTargets(btn).every((el) => el.hidden); }
+function addHelp(el, anchor) {
+  if (!el.id) el.id = `help-${++HELP.seq}`;
+  let btn = anchor.helpButton;
+  if (!btn) {
+    const name = (el.dataset.helpName || anchor.dataset.helpName || anchor.textContent).replace(/\s+/g, " ").trim();
+    btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "help-btn";
+    btn.textContent = "？";
+    btn.title = "説明を出す・隠す";
+    btn.setAttribute("aria-label", `「${name}」の説明`);
+    btn.setAttribute("aria-controls", "");
+    btn.addEventListener("click", () => setHelpOpen(btn, btn.getAttribute("aria-expanded") !== "true"));
+    if (anchor.tagName === "LABEL") {   // label の中に置くと入力欄の名前に混ざるので、横に並べる
+      const row = document.createElement("span");
+      row.className = "help-row";
+      anchor.replaceWith(row);
+      row.append(anchor, btn);
+    } else {
+      anchor.appendChild(btn);
+    }
+    anchor.helpButton = btn;
+    HELP.buttons.push(btn);
+  }
+  btn.setAttribute("aria-controls", `${btn.getAttribute("aria-controls")} ${el.id}`.trim());
+  setHelpOpen(btn, HELP.all);
+  new MutationObserver(() => syncHelpButton(btn)).observe(el, { attributes: true, attributeFilter: ["hidden"] });
+  syncHelpButton(btn);
+}
+function setHelpAll(open) {
+  HELP.all = open;
+  HELP.buttons = HELP.buttons.filter((b) => b.isConnected);
+  for (const b of HELP.buttons) setHelpOpen(b, open);
+  $("help-all").textContent = open ? "説明をすべて隠す" : "説明をすべて表示";
+  $("help-all").setAttribute("aria-pressed", String(open));
+}
+for (const el of document.querySelectorAll(".help")) {
+  const anchor = helpAnchor(el);
+  if (anchor) addHelp(el, anchor); else el.classList.add("open");   // 置き場所が無い説明は隠さない
+}
+$("help-all").addEventListener("click", () => setHelpAll(!HELP.all));
+// 選ぶ欄の文字は短くし（「（」より前）、長い説明は「？」の中に一覧で出す
+function shortLabel(label) { const i = label.indexOf("（"); return i > 0 ? label.slice(0, i) : label; }
+function addChoiceHelp(help, choices, cli) {
+  if (!help) return;
+  const box = document.createElement("div");
+  box.className = "choices";
+  for (const [value, label] of choices) {
+    const d = document.createElement("div");
+    const b = document.createElement("b");
+    b.textContent = shortLabel(label);
+    d.appendChild(b);
+    const rest = label.slice(b.textContent.length).replace(/^（(.*)）$/, "$1");
+    d.appendChild(document.createTextNode((rest ? `：${rest}` : "") + (cli ? `（CLI では ${value}）` : "")));
+    box.appendChild(d);
+  }
+  help.appendChild(box);
+}
+
 // ---- 設定の欄（選択肢と既定値は Python 側から埋め込んだもの。CLI の既定と同じ） ----
-function fillSelect(sel, spec) {
+function fillSelect(sel, spec, help, cli) {
   sel.innerHTML = "";
   for (const [value, label] of spec.choices) {
     const o = document.createElement("option");
     o.value = value;
-    o.textContent = `${value}：${label}` + (value === spec.default ? "（既定）" : "");
+    o.textContent = shortLabel(label) + (value === spec.default ? "（既定）" : "");
     sel.appendChild(o);
   }
+  addChoiceHelp(help, spec.choices, cli);
 }
-fillSelect($("cleanup"), SPEC.cleanup);
-fillSelect($("outline"), SPEC.outline);
+fillSelect($("cleanup"), SPEC.cleanup, $("cleanup-help"), true);
+fillSelect($("outline"), SPEC.outline, $("outline-help"), true);
 $("colors").min = SPEC.colors.min;
 $("colors").max = SPEC.colors.max;
 $("colors-help").textContent = `${SPEC.colors.min}〜${SPEC.colors.max}（既定 ${SPEC.colors.default}）。透明は数えない`;
@@ -1198,9 +1301,10 @@ for (const [value, label] of MSPEC.choices) {
   const r = document.createElement("input");
   r.type = "radio"; r.name = "motion"; r.value = value; r.id = `motion-${value}`;
   l.appendChild(r);
-  l.appendChild(document.createTextNode(" " + label));
+  l.appendChild(document.createTextNode(" " + shortLabel(label)));
   $("motion-choice").appendChild(l);
 }
+addChoiceHelp($("motion-choice-help"), MSPEC.choices, false);
 $("motion-choice").appendChild($("motion-table-label"));   // 「表（自分で編集）」はプリセットの後ろ（表を開くまで隠す）
 const motion = {
   sheetImg: null, info: null, sheetUrl: null, jsonUrl: null, frame: 0, playing: true, timer: null,
@@ -3090,9 +3194,9 @@ const same = { ranges: [], img: null, scale: 8, drag: null, edit: null, sel: -1,
 const touch = { edits: new Map(), base: null, W: 0, fw: 0, fh: 0, n: 0, palette: [], frame: 1, tool: "pen", color: null,
                 zoom: 12, grid: true, onion: false, undo: [], redo: [], stroke: null, hover: null, over: false,
                 changed: new Map(), dims: null, inFlight: false, again: false, saveUrl: null, previewTimer: null, previewPos: 0 };
-fillSelect($("frame-align"), FSPEC.align);
-fillSelect($("frame-align-y"), FSPEC.align_y);
-fillSelect($("frame-steady"), FSPEC.steady);
+fillSelect($("frame-align"), FSPEC.align, $("frame-align-help"));
+fillSelect($("frame-align-y"), FSPEC.align_y, $("frame-align-y-help"));
+fillSelect($("frame-steady"), FSPEC.steady, $("frame-steady-help"));
 $("frame-count").min = 1;
 $("frame-count").max = FSPEC.max_frames;
 $("frame-duration-help").textContent = `ミリ秒（既定 ${FSPEC.duration}）。歩きは 150、走りは 100 くらいが目安。150,100,150,100 のようにコマごとにも書ける`;
@@ -3119,6 +3223,7 @@ function layoutFrames() {
   $("motion-title").textContent = on ? "コマの再生と保存" : "動き";
   for (const id of ["motion-choice", "table-load-error"]) if (on) $(id).hidden = true;
   $("motion-choice").hidden = on;
+  $("motion-choice-help").hidden = on;
   document.querySelector(".table-entry").hidden = on;
   $("frames-extra").hidden = !on;
   $("frames-extra-note").hidden = !on;
@@ -4499,14 +4604,17 @@ function showPiskelHint(sheet, flash) {
   h.innerHTML = "";
   const b = document.createElement("b");
   const pk = sheet.piskel_name || sheet.name.replace(/\.png$/, ".piskel");
-  b.textContent = "Piskel で直すときは：「Piskel で直す用（.piskel）を保存」→ Piskel の Import → Load .piskel file → Browse .piskel files";
+  b.textContent = "Piskel で直すときの手順";
   const p = document.createElement("div");
-  p.textContent = `開くファイル: ${pk}（${n} コマ・1 コマ ${w}×${hh}・速さが入っています）。`
+  p.className = "help";
+  p.textContent = "「Piskel で直す用（.piskel）を保存」→ Piskel の Import → Load .piskel file → Browse .piskel files。"
+    + `開くファイル: ${pk}（${n} コマ・1 コマ ${w}×${hh}・速さが入っています）。`
     + `PNG のシート（${sheet.name}）を使うときは Import → Browse images → Import as spritesheet → 幅 ${w}・高さ ${hh}。`
     + "コマごとの時間は Piskel には入らないので、JSON に残っている値を使います（直した後も JSON は捨てないでください）。"
     + "直したら Piskel の Save → Save offline as File で .piskel を保存し、このページの下の「直したシートを読み戻す」で選びます。"
     + "手順は docs/sprite-edit.md にあります。";
   h.appendChild(b); h.appendChild(p);
+  addHelp(p, b);
   h.hidden = false;
   if (flash) { h.classList.remove("flash"); void h.offsetWidth; h.classList.add("flash"); }
 }
@@ -4559,7 +4667,7 @@ layoutFrames();
 // 作るファイルの中身は CLI の --readback --gif --mirror --piskel と同じ関数なので、同じファイル・同じ設定なら同じバイトになる。
 const edit = { file: null, json: null, orig: null, result: null, urls: [], frames: [], frame: 0, playing: true, timer: null,
                img: null, seq: 0 };
-fillSelect($("edit-same"), { default: "keep", choices: [["keep", "そのまま使う（違えば知らせる）"], ["first", "先に出てくるコマに合わせる"]] });
+fillSelect($("edit-same"), { default: "keep", choices: [["keep", "そのまま使う（違えば知らせる）"], ["first", "先に出てくるコマに合わせる"]] }, $("edit-same-help"));
 for (let n = SPEC.gif.min; n <= SPEC.gif.max; n++) {
   const o = document.createElement("option");
   o.value = String(n);
