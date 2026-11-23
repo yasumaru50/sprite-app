@@ -1,0 +1,15 @@
+{
+ "schema": "retro98-db-record",
+ "version": 1,
+ "id": "synth/synth_cg_bad",
+ "group": "synth",
+ "file": "synth_cg_bad.png",
+ "check": {
+  "ok": false,
+  "reason": "16 段階から外れた色 1 色"
+ },
+ "width": 200,
+ "height": 120,
+ "analyzed": false,
+ "record_path": "records/synth/synth_cg_bad.json"
+}

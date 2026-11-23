@@ -1,0 +1,159 @@
+{
+ "info": {
+  "cross_segments": null,
+  "dither_coverage": 0.1175281425891182,
+  "dither_mask_sha256": "630886ff13c3a261b5b74b9b35c1b4cf9235dc8d7c777e09feff627600545a55",
+  "dither_mask_shape": [
+   400,
+   533
+  ],
+  "outline_coverage": 0.004474671669793621,
+  "ramps": [
+   [
+    0,
+    1,
+    2,
+    3
+   ],
+   [
+    4,
+    5,
+    6,
+    7
+   ],
+   [
+    8,
+    9,
+    10
+   ],
+   [
+    11,
+    12,
+    13
+   ]
+  ]
+ },
+ "mode": "P",
+ "palette": [
+  [
+   85,
+   68,
+   51
+  ],
+  [
+   136,
+   102,
+   85
+  ],
+  [
+   170,
+   136,
+   119
+  ],
+  [
+   204,
+   170,
+   153
+  ],
+  [
+   68,
+   119,
+   204
+  ],
+  [
+   85,
+   136,
+   204
+  ],
+  [
+   119,
+   153,
+   221
+  ],
+  [
+   136,
+   187,
+   221
+  ],
+  [
+   102,
+   119,
+   51
+  ],
+  [
+   102,
+   153,
+   51
+  ],
+  [
+   102,
+   170,
+   51
+  ],
+  [
+   34,
+   17,
+   17
+  ],
+  [
+   85,
+   51,
+   51
+  ],
+  [
+   204,
+   34,
+   51
+  ]
+ ],
+ "pixel_aspect": 1.0,
+ "settings": {
+  "background": [
+   0,
+   0,
+   0
+  ],
+  "brightness": 0,
+  "colors": 16,
+  "contrast": 0,
+  "custom_height": 200,
+  "custom_width": 320,
+  "dither": "bayer4",
+  "dither_strength": 0.75,
+  "fit": "fit",
+  "mode": "style",
+  "palette_source": "kmeans",
+  "perceptual": false,
+  "pixel_aspect": 1.0,
+  "pixel_size": 4,
+  "preset": "PC-98 640×400",
+  "resample": "box",
+  "saturation": 0,
+  "snap_4096": true,
+  "style_cross_ramp": 0.0,
+  "style_cross_ramp_max_hue": 45.0,
+  "style_cross_ramp_max_lum": 24.0,
+  "style_despeckle": 2,
+  "style_dither_strength": 0.8,
+  "style_grad_high": 4.0,
+  "style_grad_low": 1.2,
+  "style_hue_separation": true,
+  "style_mask_curvature": 2.5,
+  "style_outline": true,
+  "style_outline_color": null,
+  "style_outline_thickness": 1,
+  "style_outline_threshold": 35.0,
+  "style_pattern": "checker",
+  "style_ramp_extend": false,
+  "style_ramps": 4,
+  "style_reserve_skin": true,
+  "style_smooth": "kuwahara",
+  "style_smooth_strength": 0.45,
+  "style_steps": 4
+ },
+ "size": [
+  533,
+  400
+ ],
+ "used_colors": 14
+}

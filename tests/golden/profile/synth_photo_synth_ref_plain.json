@@ -1,0 +1,125 @@
+{
+ "info": {
+  "cross_segments": null,
+  "dither_coverage": 0.9392542213883678,
+  "dither_mask_sha256": "f2dd00df5647c6b3d36f1a878d679049ad74e02bfeb7e3bcc445dd9ffe05e8fc",
+  "dither_mask_shape": [
+   400,
+   533
+  ],
+  "outline_coverage": 0.004596622889305816,
+  "ramps": [
+   [
+    0,
+    1,
+    2
+   ],
+   [
+    3,
+    4,
+    5
+   ],
+   [
+    6,
+    7
+   ]
+  ]
+ },
+ "mode": "P",
+ "palette": [
+  [
+   102,
+   68,
+   68
+  ],
+  [
+   153,
+   119,
+   102
+  ],
+  [
+   204,
+   170,
+   136
+  ],
+  [
+   68,
+   119,
+   204
+  ],
+  [
+   102,
+   153,
+   221
+  ],
+  [
+   136,
+   187,
+   221
+  ],
+  [
+   102,
+   136,
+   51
+  ],
+  [
+   102,
+   170,
+   51
+  ]
+ ],
+ "pixel_aspect": 1.0,
+ "settings": {
+  "background": [
+   0,
+   0,
+   0
+  ],
+  "brightness": 0,
+  "colors": 8,
+  "contrast": 0,
+  "custom_height": 200,
+  "custom_width": 320,
+  "dither": "bayer4",
+  "dither_strength": 0.75,
+  "fit": "fit",
+  "mode": "style",
+  "palette_source": "kmeans",
+  "perceptual": false,
+  "pixel_aspect": 1.0,
+  "pixel_size": 4,
+  "preset": "PC-98 640×400",
+  "resample": "box",
+  "saturation": 0,
+  "snap_4096": true,
+  "style_cross_ramp": 0.0,
+  "style_cross_ramp_max_hue": 180.0,
+  "style_cross_ramp_max_lum": 32.0,
+  "style_despeckle": 2,
+  "style_dither_strength": 1.0,
+  "style_grad_high": 12.0,
+  "style_grad_low": 0.3,
+  "style_hue_separation": true,
+  "style_mask_curvature": 8.0,
+  "style_outline": true,
+  "style_outline_color": [
+   0,
+   0,
+   0
+  ],
+  "style_outline_thickness": 1,
+  "style_outline_threshold": 39.1,
+  "style_pattern": "bayer4",
+  "style_ramp_extend": false,
+  "style_ramps": 3,
+  "style_reserve_skin": true,
+  "style_smooth": "bilateral",
+  "style_smooth_strength": 0.74,
+  "style_steps": 0
+ },
+ "size": [
+  533,
+  400
+ ],
+ "used_colors": 8
+}

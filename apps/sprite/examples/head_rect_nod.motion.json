@@ -1,0 +1,16 @@
+{
+  "format": "sprite-motion",
+  "version": 1,
+  "name": "head_rect_nod",
+  "loop": true,
+  "regions": {
+    "head": {"type": "rect", "left": "15%", "right": "100%", "bottom": "50%", "top": "100%"}
+  },
+  "tracks": {
+    "head_y": {"type": "deform", "region": "head", "axis": "y"}
+  },
+  "frames": [
+    {"ms": 600},
+    {"ms": 200, "head_y": -1}
+  ]
+}

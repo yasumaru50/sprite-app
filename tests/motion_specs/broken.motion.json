@@ -1,0 +1,20 @@
+{
+  "format": "sprite-motion",
+  "version": 1,
+  "name": "broken",
+  "loop": true,
+  "regions": {
+    "upper": {"type": "split", "at": 3}
+  },
+  "tracks": {
+    "upper_y": {"type": "deform", "region": "upper", "axis": "y"},
+    "root_y": {"type": "root", "axis": "y"}
+  },
+  "frames": [
+    {"ms": 200},
+    {"ms": 200, "upper_y": -1},
+    {"ms": 200, "upper_y": 1},
+    {"ms": 200, "upper_y": -1, "root_y": -1},
+    {"ms": 200, "root_y": -1}
+  ]
+}
