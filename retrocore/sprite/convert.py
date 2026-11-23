@@ -952,6 +952,12 @@ def _touchup_apply(finished, edits) -> tuple:
         return finished, {"code": e.code, "message": str(e)}
 
 
+def _edits_origins(res) -> bool:
+    """直しの一覧に、ファイルが 1 つのときもコマを置いた位置（origin）を書くか。縦のそろえ方 keep・コマごとの上げ下げを
+    使ったときだけ（上げ下げを変えて変換し直しても、直しがキャラの同じ所に付くように。使わないときのファイルは前と同じ）。"""
+    return res.align_y == "keep" or getattr(res, "shift_y", None) is not None
+
+
 def frames_convert_bytes(data, request: dict) -> dict:
     """コマが並んだ絵を変換してそろえる（例外は投げない）。`request` は
     {"settings": 変換の設定（convert_for_web と同じ）, "frames": {"frame_count": N か None, "align", "align_y",
@@ -1023,6 +1029,7 @@ def frames_convert_bytes(data, request: dict) -> dict:
            # 裏返したコマ（順番の r）の中で、各コマの絵を置いた位置（裏返したコマの直しの origin）
            "mirror_offsets": [[int(x), int(y)] for x, y in res.mirror_offsets()],
            "shift_y": None if res.shift_y is None else [int(v) for v in res.shift_y],
+           "edits_origin": _edits_origins(res),   # 保存する直しの一覧に origin を書くか（ファイルが 1 つのとき）
            "file_starts": [f.first for f in res.files[1:]]}
     out.update(_frames_view(res))
     return out
@@ -1063,8 +1070,9 @@ def frames_same(request: dict) -> dict:
     if edits is not None and err is None:
         from .touchup import palette_of, touchup_dict, touchup_json
         pal = palette_of(finished.frames)
-        out["edits"] = touchup_dict(edits, pal, finished.sources, finished.offsets, finished.mirror_offsets())
-        out["edits_json"] = touchup_json(edits, pal, finished.sources, finished.offsets, finished.mirror_offsets())
+        og = _edits_origins(finished)
+        out["edits"] = touchup_dict(edits, pal, finished.sources, finished.offsets, finished.mirror_offsets(), og)
+        out["edits_json"] = touchup_json(edits, pal, finished.sources, finished.offsets, finished.mirror_offsets(), og)
     out.update(_frames_view(res))
     return out
 
@@ -1138,8 +1146,9 @@ def frames_edits(request: dict) -> dict:
     out = {"ok": True, "applied": True, "token": _FRAMES_CACHE["token"], "edits": None, "edits_json": None}
     if _FRAMES_CACHE["edits"] is not None:
         pal = palette_of(finished.frames)
-        out["edits"] = touchup_dict(edits, pal, finished.sources, finished.offsets, finished.mirror_offsets())
-        out["edits_json"] = touchup_json(edits, pal, finished.sources, finished.offsets, finished.mirror_offsets())
+        og = _edits_origins(finished)
+        out["edits"] = touchup_dict(edits, pal, finished.sources, finished.offsets, finished.mirror_offsets(), og)
+        out["edits_json"] = touchup_json(edits, pal, finished.sources, finished.offsets, finished.mirror_offsets(), og)
     out.update(_frames_view(res))
     return out
 

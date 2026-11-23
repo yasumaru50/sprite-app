@@ -252,9 +252,9 @@ def touchup_from_dict(d) -> Touchup:
     return Touchup(frames=frames, frame_width=size.get("frame_width"), frame_height=size.get("frame_height"),
                    frame_count=size.get("frame_count"), name=name,
                    frame_files={k: v for k, v in where.items() if k in frames or k in mframes},
-                   frame_origins={k: v for k, v in origins.items() if k in frames and k in where},
+                   frame_origins={k: v for k, v in origins.items() if k in frames},
                    mirror_frames=mframes,
-                   mirror_origins={k: v for k, v in morigins.items() if k in mframes and k in where})
+                   mirror_origins={k: v for k, v in morigins.items() if k in mframes})
 
 
 def load_touchup(text: str) -> Touchup:
@@ -270,12 +270,14 @@ def _joined(sources) -> bool:
 
 
 def touchup_dict(t: Touchup, palette: list[str], sources: list | None = None, offsets: list | None = None,
-                 mirror_offsets: list | None = None) -> dict:
+                 mirror_offsets: list | None = None, origins: bool = False) -> dict:
     """直しの一覧のファイルの辞書（`palette` は番号の元。直しの色と下の色が全部入っていること）。
 
     `sources`（つなげた結果の、コマごとの (ファイルの名前, 何コマ目か)）が 2 つ以上のファイルなら、版 2 でファイルの記録も書く。
     `offsets`（コマごとの、キャンバスに置いた位置）があれば `origin` も書く（裏返したコマの直しは `mirror_offsets` の位置）。
     裏返したコマの直しがあれば版 3 で、その項目に `"mirrored": true` を付ける（同じ元のコマの直しの後に置く）。
+    `origins` なら、ファイルが 1 つのときも `origin` を書く（縦のそろえ方 keep・コマごとの上げ下げを使ったとき。上げ下げを
+    変えて変換し直しても、直しを置いた位置で付け直せるように。版は 1 のまま。使わないときのファイルは前と同じ）。
     """
     pal = list(palette)
     for dots in list(t.frames.values()) + list(t.mirror_frames.values()):
@@ -299,6 +301,9 @@ def touchup_dict(t: Touchup, palette: list[str], sources: list | None = None, of
             e = {"source_frame": int(k)}
             if m:
                 e["mirrored"] = True
+            offs = mirror_offsets if m else offsets
+            if origins and offs is not None and k <= len(offs):
+                e["origin"] = [int(offs[k - 1][0]), int(offs[k - 1][1])]
             e["dots"] = [dot(d) for d in v]
             return e
         return {"version": version or 1, "kind": KIND, "name": t.name, "frame_width": t.frame_width,
@@ -324,9 +329,9 @@ def touchup_dict(t: Touchup, palette: list[str], sources: list | None = None, of
 
 
 def touchup_json(t: Touchup, palette: list[str], sources: list | None = None, offsets: list | None = None,
-                 mirror_offsets: list | None = None) -> str:
+                 mirror_offsets: list | None = None, origins: bool = False) -> str:
     """直しの一覧のファイルの中身（1 つのドットを 1 行に書く。差分が見やすいように）。"""
-    d = touchup_dict(t, palette, sources, offsets, mirror_offsets)
+    d = touchup_dict(t, palette, sources, offsets, mirror_offsets, origins)
     lines = ["{"]
     head = {k: v for k, v in d.items() if k != "frames"}
     for k, v in head.items():
@@ -446,16 +451,19 @@ def apply_touchup_all(frames: list[np.ndarray], t: Touchup):
 
 def remap_touchup(t: Touchup, sources: list | None, offsets: list | None = None, size=None,
                   mirror_offsets: list | None = None) -> Touchup:
-    """ファイルの記録（`frame_files`）のある直しを、今のコマの番号に付け直す（ファイルの並び順を入れ替えたとき）。
+    """直しを、今のコマの番号と置いた位置に付け直す（ファイルの並び順を入れ替えた・コマの上げ下げを変えたとき）。
 
-    `sources` は今のコマごとの (ファイルの名前, 何コマ目か)。直しにファイルの記録が無ければ（前の形）、そのまま返す。
-    直したコマのファイルが今の一覧に無ければ TouchupError（`CODE_FILE`）。`offsets`（今のコマを置いた位置）と直しの `origin` が
-    あれば、置いた位置の違いだけドットをずらし、コマの大きさの確かめはしない（はみ出せば当てるときに `CODE_OUTSIDE`）。
+    `sources` は今のコマごとの (ファイルの名前, 何コマ目か)。ファイルの記録（`frame_files`）のあるコマは、そのファイルの何コマ目かで
+    今のコマを探す（無ければ番号のまま）。直したコマのファイルが今の一覧に無ければ TouchupError（`CODE_FILE`）。
+    `offsets`（今のコマを置いた位置）と直しの `origin` があれば、置いた位置の違いだけドットをずらし、コマの大きさの確かめはしない
+    （ファイルが 1 つのときも。はみ出せば当てるときに `CODE_OUTSIDE`）。ファイルの記録も `origin` も無ければ（前の形）、そのまま返す。
     """
     import dataclasses
-    if t is None or not t.frame_files or sources is None:
+    if t is None or (not t.frame_files and not t.frame_origins and not t.mirror_origins):
         return t
-    index = {(n, int(k)): i + 1 for i, (n, k) in enumerate(sources)}
+    if t.frame_files and sources is None:
+        return t
+    index = {(n, int(k)): i + 1 for i, (n, k) in enumerate(sources or [])}
     where, missing = {}, []
     moved = False
 
@@ -463,16 +471,16 @@ def remap_touchup(t: Touchup, sources: list | None, offsets: list | None = None,
         nonlocal moved
         frames, origins = {}, {}
         for k, dots in src.items():
-            if k not in t.frame_files:
-                frames[k] = dots
-                continue
-            key = t.frame_files[k]
-            new = index.get((key[0], int(key[1])))
-            if new is None:
-                missing.append(f"{key[0]} の {key[1]} コマ目")
-                continue
+            key = t.frame_files.get(k)
+            if key is None:
+                new = k   # ファイルの記録が無い（ファイルが 1 つ）: 番号のまま、置いた位置だけ付け直す
+            else:
+                new = index.get((key[0], int(key[1])))
+                if new is None:
+                    missing.append(f"{key[0]} の {key[1]} コマ目")
+                    continue
             o = src_origins.get(k)
-            if o is not None and offs is not None:
+            if o is not None and offs is not None and new <= len(offs):
                 no = (int(offs[new - 1][0]), int(offs[new - 1][1]))
                 dx, dy = no[0] - o[0], no[1] - o[1]
                 if dx or dy:
@@ -480,7 +488,8 @@ def remap_touchup(t: Touchup, sources: list | None, offsets: list | None = None,
                 origins[new] = no
                 moved = True
             frames[new] = dots
-            where[new] = key
+            if key is not None:
+                where[new] = key
         return dict(sorted(frames.items())), origins
 
     frames, origins = remap(t.frames, t.frame_origins, offsets)
@@ -489,7 +498,8 @@ def remap_touchup(t: Touchup, sources: list | None, offsets: list | None = None,
         raise TouchupError(CODE_FILE, f"{CODE_TEXT[CODE_FILE]}（{'、'.join(dict.fromkeys(missing))}）")
     out = dataclasses.replace(t, frames=frames, frame_files=where, frame_origins=origins,
                               mirror_frames=mframes, mirror_origins=morigins,
-                              frame_count=len(sources) if t.frame_count is not None else None)
+                              frame_count=len(sources) if t.frame_count is not None and sources is not None
+                              else t.frame_count)
     if moved:   # 置いた位置でずらしたので、キャンバスの大きさが変わっていても当てられる（大きさは今のものにする）
         out.frame_width, out.frame_height = (None, None) if size is None else (int(size[0]), int(size[1]))
     return out

@@ -79,7 +79,8 @@ DEFAULT_FLICKER_RATIO = 0.5    # ちらつきを数える範囲: キャンバス
 FLICKER_SHIFT_X = 1            # ちらつきを数えるとき、基準のコマに重ねるずれの範囲（体の上下・左右の 1 ドットの揺れは数えない）
 FLICKER_SHIFT_Y = 2
 MAX_FRAMES = 64
-MAX_SHIFT_Y = 256              # コマごとの上げ下げ（`FrameSettings.shift_y`）の大きさの上限（ドット）
+MAX_SHIFT_Y = 256              # コマごとの上げ下げ（`FrameSettings.shift_y`）の大きさの上限（ドット）。キャラの高さ（ふつう 50〜120 ドット）より
+                               # 十分大きい。これより大きいと、シートが上げ下げの分だけ広がって、とても大きな絵になるため
 FLIP_WARNING = ("左右で違う物（リボン・持ち物など）は反対側に移ります。必要なら裏返したコマを「ドットを直す」で直してください"
                 "（裏返したコマだけの直しは、元のコマには入りません）")
 GRID_MODES = {
@@ -147,7 +148,8 @@ class FrameSettings:
                                                         for v in vals):
                 raise ValueError(f"コマごとの上げ下げは、コマの数だけの整数で指定してください: {self.shift_y}")
             if any(abs(int(v)) > MAX_SHIFT_Y for v in vals):
-                raise ValueError(f"コマごとの上げ下げは −{MAX_SHIFT_Y}〜{MAX_SHIFT_Y} ドットで指定してください: {self.shift_y}")
+                raise ValueError(f"コマごとの上げ下げは −{MAX_SHIFT_Y}〜{MAX_SHIFT_Y} ドットで指定してください"
+                                 f"（シートが上げ下げの分だけ広がるので、大きすぎる絵にならないように）: {self.shift_y}")
         if self.edits is not None:
             from .touchup import Touchup
             if not isinstance(self.edits, Touchup):

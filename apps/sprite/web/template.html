@@ -324,7 +324,8 @@
           <label for="frame-shift-y">コマごとの上げ下げ</label>
           <input type="text" id="frame-shift-y" inputmode="numeric" spellcheck="false" placeholder="なし（例 0,-3,-6,0）">
           <small class="help" id="frame-shift-y-help">元のコマごとに、そろえた位置から何ドット上げる・下げるか（− が上）。数は元のコマの数と同じ。空ならなし。
-            ジャンプの高さが自動でうまく出ないときに使います（CLI の --frame-shift-y）</small>
+            ジャンプの高さが自動でうまく出ないときに使います（CLI の --frame-shift-y）。−256〜256 ドット（シートはそのぶん広がります）。
+            直したドットがあっても、上げ下げ・そろえ方だけを変えたときは、キャラの同じ所に付け直します</small>
         </div>
         <div class="field">
           <label for="frame-steady">ちらつきを減らす</label>
@@ -3826,7 +3827,7 @@ function frameShiftY(count) {
   if (t === "") return null;
   const list = intList(t, "コマごとの上げ下げ", true);
   if (count && list.length !== count) throw new Error(`コマごとの上げ下げの数（${list.length}）は、コマの数（${count}）と同じにしてください。`);
-  if (list.some((v) => Math.abs(v) > FSPEC.max_shift_y)) throw new Error(`コマごとの上げ下げは −${FSPEC.max_shift_y}〜${FSPEC.max_shift_y} ドットで入れてください。`);
+  if (list.some((v) => Math.abs(v) > FSPEC.max_shift_y)) throw new Error(`コマごとの上げ下げは −${FSPEC.max_shift_y}〜${FSPEC.max_shift_y} ドットで入れてください（シートが上げ下げの分だけ広がるので、大きすぎる絵にならないように）。いまは「${t}」。`);
   return list;
 }
 function intList(text, what, signed) {
@@ -3952,7 +3953,7 @@ async function runFramesConvert() {
         + result.steady.frames.map((f) => `${f.source_frame} コマ目 ${f.restored_dots}`).join("、") + "）。" : ""), false);
     window.__framesTimings = (window.__framesTimings || []).concat([{ seconds: Number(sec), frames: result.frame_count }]);
     await sameAfterConvert(result);
-    await touchAfterConvert(snap);
+    await touchAfterConvert(snap, usedInputs);
     await runSheets();
   } catch (e) {
     clearResult("変換できませんでした");
@@ -4607,6 +4608,7 @@ function touchBind(r = frames.result) {
   touch.editSources = r && r.sources ? r.sources.map((v) => v.slice()) : null;
   touch.editOffsets = r && r.offsets ? r.offsets.map((v) => v.slice()) : null;
   touch.editMirrorOffsets = r && r.mirror_offsets ? r.mirror_offsets.map((v) => v.slice()) : null;
+  touch.editOriginSave = !!(r && r.edits_origin);
   touch.editFw = touch.fw; touch.editFh = touch.fh;   // 直しの一覧のキー（y*幅+x）を作ったときのコマの幅（並び順を変えて幅が変わっても読み違えないように）
 }
 // つなげた結果か（ファイルが 2 つ以上）
@@ -5008,7 +5010,10 @@ function touchDict(opts = {}) {
     const dots = [...m.keys()].sort((a, b) => a - b).map((key) => { const e = m.get(key); return [key % fw, Math.floor(key / fw), idx(e.c), idx(e.was)]; });
     const where = withFiles && src[sf - 1] ? { file: src[sf - 1][0], file_frame: src[sf - 1][1] } : {};
     const offs = k < 0 ? touch.editMirrorOffsets : touch.editOffsets;
-    if (where.file && offs && offs[sf - 1]) where.origin = offs[sf - 1].slice();
+    // コマを置いた位置（origin）: つなげたときと、Python に渡すとき（ファイルが 1 つでも。上げ下げを変えても同じ所に付け直すため）。
+    // 保存するファイルは、つなげたときと、縦のそろえ方 keep・上げ下げを使ったときだけ（使わないときのファイルは前と同じ）
+    const withOrigin = where.file || (opts.files !== false && opts.origins !== false && (!opts.forSave || touch.editOriginSave));
+    if (withOrigin && offs && offs[sf - 1]) where.origin = offs[sf - 1].slice();
     if (k < 0) mirrored = true;
     fr.push(k < 0 ? { source_frame: sf, mirrored: true, ...where, dots } : { source_frame: sf, ...where, dots });
   }
@@ -5538,7 +5543,14 @@ async function runTouch() {
   }
 }
 // 変換し直したとき: 直しがあれば当て直す（大きさ・コマの数が変われば、捨てる前に確かめる）
-async function touchAfterConvert(snap) {
+// 変換し直したときに変えたのが、コマを置く位置だけ（上げ下げ・そろえ方）か。そのときは、コマの絵そのものは前と同じなので、
+// ファイルが 1 つでも直しをコマを置いた位置（origin）で付け直せる（色数などを変えると絵の大きさが 1 ドット変わることがあり、位置だけでは合わせられない）
+const TOUCH_PLACEMENT_INPUTS = ["frame-shift-y", "frame-align-y", "frame-align"];
+function touchPlacementOnly(snap, used) {
+  if (!snap || !used || !snap.inputs) return false;
+  return Object.keys(used).every((id) => TOUCH_PLACEMENT_INPUTS.includes(id) || snap.inputs[id] === used[id]);
+}
+async function touchAfterConvert(snap, used) {
   const r = frames.result;
   const prev = touch.dims;   // 前に直したときのコマの大きさと数（clearFrames では消さない）
   const carry = touch.carry;   // 画像を選び直した（前の画像の直しが残っている）
@@ -5557,13 +5569,15 @@ async function touchAfterConvert(snap) {
     return;
   }
   if (carry) { await touchCarry(carry, prev, saveFile); touchBind(r); return; }
-  // つなげたとき（前かいまの結果のファイルが 2 つ以上）は、コマの大きさ・番号が変わっても Python がファイルの記録とコマを置いた位置で付け直す
-  const remap = joinedSources(touch.editSources) || joinedSources(r.sources);
+  // コマの大きさ・番号・置いた位置が変わっても、Python がファイルの記録とコマを置いた位置（origin）で付け直す
+  // （つなげたとき・ファイルが 1 つでも上げ下げなどで置いた位置が変わったとき）。付け直すとはみ出すなら、当てられない確認の窓を出す
+  const joined = joinedSources(touch.editSources) || joinedSources(r.sources);
+  const remap = joined || (!!touch.editOffsets && touchPlacementOnly(snap, used));
   if (!remap && prev && (prev[0] !== r.frame_width || prev[1] !== r.frame_height || touchMaxFrame() > r.frame_count)) {
     await touchCannotApply(`コマの大きさか数が変わりました（${prev[0]}×${prev[1]}・${prev[2]} コマ → ${r.frame_width}×${r.frame_height}・${r.frame_count} コマ）`, cancel, why, saveFile);
     return;
   }
-  const { result } = await call({ type: "frames-edits", request: { token: frames.token, edits: touchDict() } });
+  const { result } = await call({ type: "frames-edits", request: { token: frames.token, edits: touchDict({ origins: remap }) } });
   if (!result.ok) { touchMessage(result.error, true); return; }
   if (!result.applied) { await touchCannotApply(result.error, cancel, why, saveFile); return; }
   if (remap) touchAdopt(result.edits);
@@ -5581,7 +5595,7 @@ function touchAdopt(d) {
   touch.edits = next;
   touch.undo = touch.undo.filter((u) => u.every((ch) => typeof ch.k === "string"));
   touch.redo = touch.redo.filter((u) => u.every((ch) => typeof ch.k === "string"));
-  touchMessage("ファイルの並び順を変えたので、直したドットを同じ絵のコマに付け直しました（元に戻す・やり直すの記録は消しました）。", false);
+  touchMessage("コマの並び順か置いた位置（上げ下げなど）が変わったので、直したドットをキャラの同じ所に付け直しました（元に戻す・やり直すの記録は消しました）。", false);
 }
 // 画像を選び直して変換した後: 前の画像で直したドットをどうするかを確認の窓で聞く（直しがあるときだけ）。
 // 「新しい画像にも当てる」はコマの大きさが同じで、当てられるときだけ出す（下の色が変わるドットの数を窓に出す）。

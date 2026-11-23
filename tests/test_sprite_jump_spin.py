@@ -488,3 +488,153 @@ def test_runs_with_int32_numpy(jump_strip, plain):
     with emulate_int32():
         got = run()
     assert all(np.array_equal(a, b) for a, b in zip(want[0], got[0])) and want[1] == got[1]
+
+
+# ---- 大きな上げ下げ・上げ下げを変えたあとの直し ----
+
+def test_large_shift_grows_sheet(keep, jump_strip):
+    """キャラの高さくらい（何十ドット）上げても作れる。シートはそのぶん広がる。"""
+    h = keep.size[1]
+    big = -(h - 1)
+    r = F.convert_frames(jump_strip, SpriteSettings(), F.FrameSettings(frame_count=3, align_y="keep", shift_y=(0, big, 0)))
+    air = [r.size[1] - _bottom(f) for f in r.frames]
+    a0 = [keep.size[1] - _bottom(f) for f in keep.frames]
+    assert air[1] == a0[1] - big and air[0] == 0
+    assert r.size[1] >= h - big - 1
+    info = F.frames_sheet_info(F.assemble_frames(r), "x.png")
+    assert info["frames"][1]["air"] == air[1] and info["ground_y"] == r.size[1]
+    # 下げる方も（足元より下へ。地面の線はいちばん低い足元）
+    r2 = F.convert_frames(jump_strip, SpriteSettings(), F.FrameSettings(frame_count=3, align_y="keep", shift_y=(0, 0, 40)))
+    assert [r2.size[1] - _bottom(f) for f in r2.frames][2] == 0
+
+
+def test_shift_limit_message():
+    with pytest.raises(ValueError, match=f"−{F.MAX_SHIFT_Y}〜{F.MAX_SHIFT_Y}"):
+        F.FrameSettings(shift_y=(0, -(F.MAX_SHIFT_Y + 1))).validate()
+    F.FrameSettings(shift_y=(0, -F.MAX_SHIFT_Y, F.MAX_SHIFT_Y)).validate()
+
+
+def _edits_on(res, k, color_from=None):
+    """元の k コマ目の不透明なドット 3 つ（キャラの上）を別の色にする直し（下の色つき）。"""
+    f = res.frames[k - 1]
+    pal = T.palette_of(res.frames)
+    ys, xs = np.nonzero(f[..., 3] > 0)
+    pick = [len(ys) // 4, len(ys) // 2, 3 * len(ys) // 4]
+    dots = []
+    for i in pick:
+        x, y = int(xs[i]), int(ys[i])
+        under = _hex(f[y, x])
+        new = next(c for c in pal if c != under)
+        dots.append([x, y, pal.index(new), pal.index(under)])
+    return {"version": 1, "kind": "sprite_edits", "name": "jump", "frame_width": res.size[0], "frame_height": res.size[1],
+            "frame_count": len(res.frames), "palette": pal, "frames": [{"source_frame": k, "dots": dots}]}
+
+
+def _painted(res, k, t):
+    """直しを当てたコマで、直したドットの (コマの絵の中の位置 → 色)。"""
+    out = T.touchup_result(res, t)
+    ox, oy = res.offsets[k - 1]
+    return {(d.x - ox, d.y - oy): _hex(out.frames[k - 1][d.y, d.x]) for d in out.touchup.frames[0].dots}
+
+
+def test_edits_follow_shift_change_single_file(jump_strip):
+    """ファイルが 1 つでも、直しの一覧の origin（コマを置いた位置）で付け直すので、上げ下げを変えても同じ所に付く。"""
+    a = F.convert_frames(jump_strip, SpriteSettings(), F.FrameSettings(frame_count=3, align_y="keep"))
+    d = _edits_on(a, 2)
+    t = T.touchup_from_dict(d)
+    pal = T.palette_of(a.frames)
+    saved = json.loads(T.touchup_json(t, pal, a.sources, a.offsets, a.mirror_offsets(), origins=True))
+    assert saved["version"] == 1 and saved["frames"][0]["origin"] == list(a.offsets[1])
+    want = _painted(a, 2, t)
+    for shift in ((0, -30, 0), (0, 12, 0), (-5, 0, 0)):
+        b = F.convert_frames(jump_strip, SpriteSettings(), F.FrameSettings(frame_count=3, align_y="keep", shift_y=shift))
+        assert b.offsets[1] != a.offsets[1] or b.size != a.size
+        got = _painted(b, 2, T.touchup_from_dict(saved))
+        assert got == want                          # キャラの同じ所・同じ色
+        # 前の形（origin なし）は番号と座標のまま（今までと同じ。大きさが違えば当てない）
+        old = T.touchup_from_dict(d)
+        if b.size != a.size:
+            with pytest.raises(T.TouchupError):
+                T.touchup_result(b, old)
+    # CLI の --edits でも同じ（変換の中で付け直す）
+    b = F.convert_frames(jump_strip, SpriteSettings(),
+                         F.FrameSettings(frame_count=3, align_y="keep", shift_y=(0, -30, 0), edits=T.touchup_from_dict(saved)))
+    ref = T.touchup_result(F.convert_frames(jump_strip, SpriteSettings(),
+                                            F.FrameSettings(frame_count=3, align_y="keep", shift_y=(0, -30, 0))),
+                           T.touchup_from_dict(saved))
+    assert all(np.array_equal(x, y) for x, y in zip(b.frames, ref.frames))
+
+
+def test_edits_that_fall_outside_are_not_applied(jump_strip):
+    """付け直すとキャンバスの外に出るときは、黙ってずらさず当てない（画面では確認の窓）。"""
+    a = F.convert_frames(jump_strip, SpriteSettings(), F.FrameSettings(frame_count=3, align_y="keep"))
+    pal = T.palette_of(a.frames)
+    ox, oy = a.offsets[1]
+    d = {"version": 1, "kind": "sprite_edits", "frame_width": a.size[0], "frame_height": a.size[1], "frame_count": 3,
+         "palette": pal, "frames": [{"source_frame": 2, "origin": [ox, oy + 50], "dots": [[0, 0, 0]]}]}
+    with pytest.raises(T.TouchupError) as e:
+        T.touchup_result(a, T.touchup_from_dict(d))
+    assert e.value.code == T.CODE_OUTSIDE
+
+
+def test_mirror_edits_follow_shift_change(jump_strip):
+    a = F.convert_frames(jump_strip, SpriteSettings(), F.FrameSettings(frame_count=3, align_y="keep"))
+    d, *_ = _mirror_edits(a)
+    t = T.touchup_from_dict(d)
+    pal = T.palette_of(a.frames)
+    saved = T.touchup_json(t, pal, a.sources, a.offsets, a.mirror_offsets(), origins=True)
+    want = T.touchup_result(a, t).flipped_frame(2)
+    b = F.convert_frames(jump_strip, SpriteSettings(), F.FrameSettings(frame_count=3, align_y="keep", shift_y=(0, -20, 0)))
+    got = T.touchup_result(b, T.load_touchup(saved)).flipped_frame(2)
+
+    def body(img):
+        ys, xs = np.nonzero(img[..., 3] > 0)
+        return img[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
+    assert np.array_equal(body(got), body(want))
+
+
+def test_saved_edits_keep_old_form_without_new_options(plain):
+    """keep も上げ下げも使わないときの直しの一覧は前と同じ（origin を書かない）。"""
+    from retrocore.sprite.convert import _edits_origins
+    assert not _edits_origins(plain)
+    d, *_ = _mirror_edits(plain)
+    t = T.touchup_from_dict(d)
+    pal = T.palette_of(plain.frames)
+    assert "origin" not in T.touchup_json(t, pal, plain.sources, plain.offsets, plain.mirror_offsets(),
+                                          origins=_edits_origins(plain))
+
+
+def test_web_edits_follow_shift_change(jump_strip):
+    """画面: 直してから上げ下げを変えて変換し直すと、Python が origin で付け直す（CLI と同じ結果）。"""
+    from PIL import Image
+    import io
+    from retrocore.sprite.convert import _FRAMES_CACHE, frames_convert_bytes, frames_edits
+    buf = io.BytesIO()
+    Image.fromarray(jump_strip[..., :3]).save(buf, format="PNG")
+    data = buf.getvalue()
+    c1 = frames_convert_bytes(data, {"frames": {"frame_count": 3, "align_y": "keep"}, "name": "jump"})
+    assert c1["edits_origin"] is True
+    a = _FRAMES_CACHE["result"]
+    d = _edits_on(a, 2)
+    d["frames"][0]["origin"] = c1["offsets"][1]          # 画面の touchDict と同じ（Python に渡すときは origin つき）
+    e1 = frames_edits({"token": c1["token"], "edits": d})
+    assert e1["applied"] and '"origin"' in e1["edits_json"]
+    want = _painted(a, 2, T.touchup_from_dict(d))
+    c2 = frames_convert_bytes(data, {"frames": {"frame_count": 3, "align_y": "keep", "shift_y": [0, -25, 0]},
+                                     "name": "jump"})
+    e2 = frames_edits({"token": c2["token"], "edits": d})
+    assert e2["applied"]
+    b = _FRAMES_CACHE["finished"]
+    assert _painted(b, 2, T.touchup_from_dict(e2["edits"])) == want
+    # 外に出るときは当てない（画面は確認の窓を出す）
+    d2 = json.loads(json.dumps(d))
+    d2["frames"][0]["origin"] = [c1["offsets"][1][0], c1["offsets"][1][1] + 200]
+    e3 = frames_edits({"token": c2["token"], "edits": d2})
+    assert e3["ok"] and not e3["applied"] and e3["code"] == T.CODE_OUTSIDE
+
+
+def test_web_page_remaps_only_when_placement_changed():
+    from pathlib import Path
+    html = Path(__file__).resolve().parents[1].joinpath("apps/sprite/web/template.html").read_text(encoding="utf-8")
+    assert 'const TOUCH_PLACEMENT_INPUTS = ["frame-shift-y", "frame-align-y", "frame-align"];' in html
+    assert "touchDict({ origins: remap })" in html

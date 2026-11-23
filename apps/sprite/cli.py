@@ -854,7 +854,8 @@ def check_frames_args(parser: argparse.ArgumentParser, args: argparse.Namespace)
         if args.frame_count is not None and len(args.frame_shift_y) != args.frame_count:
             parser.error(f"--frame-shift-y の数（{len(args.frame_shift_y)}）は元のコマの数（--frame-count {args.frame_count}）と同じにしてください")
         if any(abs(v) > frames_mod.MAX_SHIFT_Y for v in args.frame_shift_y):
-            parser.error(f"--frame-shift-y は −{frames_mod.MAX_SHIFT_Y}〜{frames_mod.MAX_SHIFT_Y} ドットで指定してください")
+            parser.error(f"--frame-shift-y は −{frames_mod.MAX_SHIFT_Y}〜{frames_mod.MAX_SHIFT_Y} ドットで指定してください"
+                         "（シートが上げ下げの分だけ広がるので、大きすぎる絵にならないように）")
     if args.frame_duration is not None and len(args.frame_duration) != 1 and n is not None \
             and len(args.frame_duration) != n:
         parser.error(f"--frame-duration の数（{len(args.frame_duration)}）は並べるフレームの数（{n}）と同じか、"
