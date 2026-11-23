@@ -62,6 +62,8 @@ ALIGNS_Y = {
     "foot": "足元（いちばん下の不透明なドット）をそろえる（既定。歩きなど、足がいつも地面に着いている動き）",
     "match": "上の方（頭のあたり）の形がいちばん重なる高さ（走り・跳びなど、足が地面から離れるコマがある動き）",
     "none": "そろえない（元の絵の高さのまま）",
+    "keep": "元の絵の高さを保つ（ジャンプなど、宙に浮くコマがある動き。1 つのファイルの中ではコマごとに足元をそろえず、"
+            "元の絵での上下の位置のまま。ファイルが何枚かあるときは、ファイルどうしをいちばん低い足元でそろえる）",
 }
 DEFAULT_ALIGN_Y = "foot"
 DEFAULT_NAME = "frames"
@@ -77,6 +79,9 @@ DEFAULT_FLICKER_RATIO = 0.5    # ちらつきを数える範囲: キャンバス
 FLICKER_SHIFT_X = 1            # ちらつきを数えるとき、基準のコマに重ねるずれの範囲（体の上下・左右の 1 ドットの揺れは数えない）
 FLICKER_SHIFT_Y = 2
 MAX_FRAMES = 64
+MAX_SHIFT_Y = 256              # コマごとの上げ下げ（`FrameSettings.shift_y`）の大きさの上限（ドット）
+FLIP_WARNING = ("左右で違う物（リボン・持ち物など）は反対側に移ります。必要なら裏返したコマを「ドットを直す」で直してください"
+                "（裏返したコマだけの直しは、元のコマには入りません）")
 GRID_MODES = {
     "auto": "共通の線で、どのコマも境目の揃い方が大きく下がらないときだけ共通にする（既定）",
     "each": "コマごとに線を合わせる（PR #37 の動き）",
@@ -111,6 +116,7 @@ class FrameSettings:
     same_search: int = 3             # 範囲の位置を探す幅（same.DEFAULT_SEARCH）
     same_from: int = 1               # 元にするコマ（1 から）
     edits: object = None             # 手の直し（touchup.Touchup。None か空なら何もしない＝今までと同じ）
+    shift_y: tuple | None = None     # 元のコマごとの上げ下げ（ドット。− が上）。そろえた後に足す。None なら何もしない＝今までと同じ
 
     def validate(self) -> None:
         if self.align not in ALIGNS:
@@ -135,6 +141,13 @@ class FrameSettings:
             raise ValueError("1 コマ目と同じにする範囲は SameRange で指定してください")
         if isinstance(self.same_from, bool) or not isinstance(self.same_from, (int, np.integer)) or int(self.same_from) < 1:
             raise ValueError(f"元にするコマは 1 以上の整数で指定してください: {self.same_from}")
+        if self.shift_y is not None:
+            vals = list(self.shift_y)
+            if not vals or len(vals) > MAX_FRAMES or any(isinstance(v, bool) or not isinstance(v, (int, np.integer))
+                                                        for v in vals):
+                raise ValueError(f"コマごとの上げ下げは、コマの数だけの整数で指定してください: {self.shift_y}")
+            if any(abs(int(v)) > MAX_SHIFT_Y for v in vals):
+                raise ValueError(f"コマごとの上げ下げは −{MAX_SHIFT_Y}〜{MAX_SHIFT_Y} ドットで指定してください: {self.shift_y}")
         if self.edits is not None:
             from .touchup import Touchup
             if not isinstance(self.edits, Touchup):
@@ -189,6 +202,8 @@ class FramesResult:
     files: list | None = None        # ファイルごとの記録（join.JoinFile の並び。並べた順）
     sources: list | None = None      # コマごとの (ファイルの名前, そのファイルの何コマ目か。1 から)
     joins: list | None = None        # ファイルの境目の記録（join.join_report()。ファイルが 2 つ以上のときだけ）
+    shift_y: list | None = None      # 元のコマごとの上げ下げ（ドット。− が上。`FrameSettings.shift_y`。無ければ None）
+    flipped: dict | None = None      # 裏返したコマだけの直しを当てた、裏返したコマ（元のコマの番号 → 絵）。直しが無ければ None
 
     @property
     def joined(self) -> bool:
@@ -199,6 +214,29 @@ class FramesResult:
     def size(self) -> tuple[int, int]:
         h, w = self.frames[0].shape[:2]
         return int(w), int(h)
+
+    def flip_layout(self) -> tuple[int, int, int]:
+        """裏返したコマ（順番の r）を入れるときの (左に足す列, 右に足す列, 裏返したコマを置く横のずれ)。
+
+        裏返したコマは、コマの絵をそのまま左右に裏返したもの（大きさは同じ）を、そろえた基準（pivot の横の位置）が
+        同じ所に来るように横にずらして置く（キャラが横にずれない）。キャンバスを基準の左右で同じ幅にするため、
+        全部のフレームに透明の列を足す。ずれは「左に足す列」から数えた位置（足していないときの位置との差は 2 × 基準 − 幅）。
+        """
+        w = self.size[0]
+        d = int(round(2 * float(self.pivot[0]))) - w
+        a, b = max(0, -d), max(0, d)
+        return a, b, a + d
+
+    def flipped_frame(self, k: int) -> np.ndarray:
+        """元の k コマ目（1 から）を左右に裏返した絵（大きさは同じ。裏返したコマだけの直しがあれば当てたもの）。"""
+        if self.flipped and k in self.flipped:
+            return self.flipped[k]
+        return self.frames[k - 1][:, ::-1].copy()
+
+    def mirror_offsets(self) -> list[tuple[int, int]]:
+        """裏返したコマ（大きさは同じ）の中で、各コマの絵を置いた位置（`offsets` を左右に裏返したもの）。"""
+        w = self.size[0]
+        return [(w - int(o[0]) - int(r.shape[1]), int(o[1])) for o, r in zip(self.offsets, self.raw)]
 
 
 # ---------------------------------------------------------------- 1. 切り分け
@@ -477,19 +515,25 @@ def _match_score(ref: np.ndarray, frame: np.ndarray, x: int, y: int, rows: int) 
 
 
 def align_frames(raw: list[np.ndarray], align: str = DEFAULT_ALIGN, align_y: str = DEFAULT_ALIGN_Y,
-                 head_ratio: float = HEAD_RATIO, source_pos: list[tuple[float, float]] | None = None):
+                 head_ratio: float = HEAD_RATIO, source_pos: list[tuple[float, float]] | None = None,
+                 groups: list | None = None, shift_y: list | None = None):
     """切り詰めた各コマを同じ大きさのキャンバスに置く。戻り値は (コマ, 置いた位置, pivot, 各コマの横の基準)。
 
     横は `align`（`ALIGNS`）、縦は `align_y`（`ALIGNS_Y`）。none は `source_pos`（各コマの左上の、元の絵での位置を
     ドット単位にし、等間隔のコマ割りの分を引いたもの）のまま置く。match は 1 コマ目を基準に、上の方（上から head_ratio の行）の
     形がいちばん重なる位置を探す（同じ点数なら、もう一方のそろえ方の位置に近い方）。pivot は (基準の横の位置, キャンバスの下端)。
+    keep（元の絵の高さを保つ）は、`groups`（コマごとのファイルの番号。None は全部 1 つのファイル）の中では元の絵での上下の位置
+    （`source_pos` の縦。ドットの格子に乗せたあとの位置）のまま置き、ファイルどうしはそれぞれのいちばん低い足元をそろえる。
+    `shift_y`（コマごとの上げ下げ。ドット。− が上）は、そろえた後に足す（どのそろえ方でも）。
     """
     if align not in ALIGNS:
         raise ValueError(f"横のそろえ方は {' / '.join(ALIGNS)} のどれかです: {align}")
     if align_y not in ALIGNS_Y:
         raise ValueError(f"縦のそろえ方は {' / '.join(ALIGNS_Y)} のどれかです: {align_y}")
-    if "none" in (align, align_y) and source_pos is None:
-        raise ValueError("none には元の絵での位置が要ります")
+    if ("none" in (align, align_y) or align_y == "keep") and source_pos is None:
+        raise ValueError(f"{'none' if 'none' in (align, align_y) else 'keep'} には元の絵での位置が要ります")
+    if shift_y is not None and len(shift_y) != len(raw):
+        raise ValueError(f"コマごとの上げ下げの数（{len(shift_y)}）はコマの数（{len(raw)}）と同じにしてください")
     n = len(raw)
     hs = [f.shape[0] for f in raw]
     ws = [f.shape[1] for f in raw]
@@ -504,6 +548,15 @@ def align_frames(raw: list[np.ndarray], align: str = DEFAULT_ALIGN, align_y: str
     if align_y == "none":
         my = min(p[1] for p in source_pos)
         gy = [p[1] - my for p in source_pos]
+    elif align_y == "keep":
+        # 元の絵の上下の位置（格子に乗せたあと）を整数のドットにし、ファイルごとにいちばん低い足元を 0 にする
+        ty = [_round(p[1]) for p in source_pos]
+        gs = list(groups) if groups is not None else [0] * n
+        foot: dict = {}
+        for g, t, h in zip(gs, ty, hs):
+            foot[g] = max(foot.get(g, t + h), t + h)
+        gy = [t - foot[g] for g, t in zip(gs, ty)]
+        gy = [v - min(gy) for v in gy]
     else:
         gy = [max(hs) - h for h in hs]
     gx = [_round(v) for v in gx]
@@ -527,6 +580,8 @@ def align_frames(raw: list[np.ndarray], align: str = DEFAULT_ALIGN, align_y: str
                     if best is None or key > best[0]:
                         best = (key, x, y)
             xs[i], ys[i] = best[1], best[2]
+    if shift_y is not None:
+        ys = [y + int(d) for y, d in zip(ys, shift_y)]
     mx, my = min(xs), min(ys)
     offs = [(x - mx, y - my) for x, y in zip(xs, ys)]
     W = max(o[0] + w for o, w in zip(offs, ws))
@@ -705,10 +760,17 @@ def _finish_convert(raw, pos, boxes, grids, period, fs, steps, emit, notes, warn
     """そろえる → 範囲・ちらつき → 手の直し（`convert_frames()` と `convert_frame_files()` で共通）。"""
     import time
     t0 = time.perf_counter()
-    frames, offs, pivot, anchors = align_frames(raw, fs.align, fs.align_y, fs.head_ratio, pos)
+    groups = None
+    if files is not None and len(files) > 1:
+        groups = [g for g, f in enumerate(files) for _ in range(f.frame_count)]
+    shift_y = None if fs.shift_y is None else [int(v) for v in fs.shift_y]
+    if shift_y is not None and len(shift_y) != len(raw):
+        raise ValueError(f"コマごとの上げ下げの数（{len(shift_y)}）はコマの数（{len(raw)}）と同じにしてください")
+    frames, offs, pivot, anchors = align_frames(raw, fs.align, fs.align_y, fs.head_ratio, pos, groups, shift_y)
     aligned = frames
-    emit("align", f"そろえる（横 {fs.align}・縦 {fs.align_y}、{frames[0].shape[1]}×{frames[0].shape[0]} ドット）",
-         np.concatenate(frames, 1), t0)
+    emit("align", f"そろえる（横 {fs.align}・縦 {fs.align_y}"
+         + (f"・上げ下げ {','.join(str(v) for v in shift_y)}" if shift_y is not None else "")
+         + f"、{frames[0].shape[1]}×{frames[0].shape[0]} ドット）", np.concatenate(frames, 1), t0)
     if files is not None and len(files) > 1:
         from .join import join_report
         joins, jwarn, jskip = join_report(aligned, files, fs.head_ratio)
@@ -721,7 +783,7 @@ def _finish_convert(raw, pos, boxes, grids, period, fs, steps, emit, notes, warn
     res = FramesResult(frames=frames, raw=raw, boxes=boxes, grids=grids, dot_size=period, offsets=offs,
                        pivot=pivot, align=fs.align, align_y=fs.align_y, anchors=anchors, steps=steps, warnings=warnings,
                        skipped=skipped, notes=notes, steady=steady_rep, before_steady=before, same=same_rep,
-                       aligned=aligned, files=files, sources=sources, joins=joins)
+                       aligned=aligned, files=files, sources=sources, joins=joins, shift_y=shift_y)
     return _with_edits(res, fs, emit)
 
 
@@ -736,7 +798,7 @@ def _with_edits(res: FramesResult, fs: FrameSettings, emit=None) -> FramesResult
     res = touchup_result(res, fs.edits)
     if emit is not None:
         emit("touchup", f"手の直し（直したドット {res.touchup.dot_count}、"
-             + "・".join(f"{f.frame} コマ目 {len(f.dots)}" for f in res.touchup.frames) + "）",
+             + "・".join(f"{f.label} コマ目 {len(f.dots)}" for f in res.touchup.frames) + "）",
              np.concatenate(res.frames, 1), t0)
     return res
 
@@ -808,7 +870,7 @@ def refinish_frames(res: FramesResult, fs: FrameSettings) -> FramesResult:
         warnings.extend(same_rep.warnings)
         skipped.extend(same_entries(same_rep))
     res = dataclasses.replace(res, frames=frames, same=same_rep, steady=steady_rep, before_steady=before,
-                              warnings=warnings, skipped=skipped, touchup=None, before_touchup=None)
+                              warnings=warnings, skipped=skipped, touchup=None, before_touchup=None, flipped=None)
     return _with_edits(res, fs)
 
 
@@ -838,6 +900,63 @@ def parse_order(text: str | list, count: int) -> list[int]:
     return vals
 
 
+def parse_order_flips(text, count: int | None) -> tuple[list[int], list[bool]]:
+    """"1,2,3,2r" のような並び（1 から。r を付けたコマは左右に裏返して使う）を確かめて、(番号の並び, 裏返すか) にする。
+
+    リストのときは、数か "2r" のような文字列の並び。r は大文字でもよい。r が 1 つも無ければ `parse_order()` と同じ。
+    """
+    if isinstance(text, str):
+        items = [v for v in text.replace(" ", "").split(",") if v != ""]
+    elif text is None:
+        items = []
+    else:
+        items = list(text)
+    nums, flips = [], []
+    for v in items:
+        if isinstance(v, str):
+            t = v.strip()
+            flip = t[-1:] in ("r", "R")
+            body = t[:-1] if flip else t
+            if not body.isdigit():
+                raise ValueError(f"コマの順番は 1,2,3,2r のように、数（裏返すコマは数の後に r）をカンマで区切って書いてください: {v}")
+            nums.append(int(body))
+            flips.append(flip)
+        elif isinstance(v, bool) or not isinstance(v, (int, np.integer)):
+            raise ValueError(f"コマの順番は数か \"2r\" のような文字で書いてください: {v!r}")
+        else:
+            nums.append(int(v))
+            flips.append(False)
+    if count is None:   # 番号の範囲は確かめない（CLI の引数を読むとき。コマの数がまだ分からない）
+        if not nums:
+            raise ValueError("コマの順番が空です")
+        if min(nums) < 1:
+            raise ValueError(f"コマの番号は 1 から数えます: {order_text(nums, flips)}")
+        if len(nums) > MAX_FRAMES:
+            raise ValueError(f"コマの順番は {MAX_FRAMES} 個までです")
+        return nums, flips
+    return parse_order(nums, count), flips
+
+
+def order_text(nums: list[int], flips: list[bool] | None = None) -> str:
+    """番号の並びと裏返すかを "1,2,3,2r" の形にする（CLI の --frame-order と同じ書き方）。"""
+    flips = flips or [False] * len(nums)
+    return ",".join(f"{k}{'r' if f else ''}" for k, f in zip(nums, flips))
+
+
+def flip_warning(order) -> str | None:
+    """順番に r（裏返すコマ）があれば注意の文（`FLIP_WARNING`）。無ければ None。"""
+    if order is None or isinstance(order, (list, tuple)) and not order:
+        return None
+    try:
+        nums, flips = parse_order_flips(order, None)
+    except ValueError:
+        return None
+    if not any(flips):
+        return None
+    which = "・".join(dict.fromkeys(f"{k}r" for k, f in zip(nums, flips) if f))
+    return f"順番の {which} はコマを左右に裏返して使います。{FLIP_WARNING}"
+
+
 def assemble_frames(res: FramesResult, order: list[int] | None = None, durations=None, root_y=None,
                     name: str = DEFAULT_NAME, mirror: bool = False):
     """シート・GIF の材料（`MotionResult`）を作る。`order` は元のコマの番号（1 から）の並び（既定は 1, 2, …）。
@@ -845,10 +964,15 @@ def assemble_frames(res: FramesResult, order: list[int] | None = None, durations
     `durations` は 1 つ（全部同じ）か、並びと同じ数。`root_y` は並びの各フレームでの体全体の上下のずれ（ドット。− が上。
     動きの表の root_y と同じ向き）。はみ出す分は上下に透明の行を足し、JSON の padding と offset_y に書く。
     `mirror` なら左右を反転する（pivot の x も反転）。
+    順番に r の付いたコマ（"1,2,3,2r"。`parse_order_flips()`）は、左右に裏返したコマ（`FramesResult.flipped_frame()`）を、
+    そろえた基準（pivot の横の位置）が同じ所に来るように置く。そのため全部のフレームの左右に透明の列を足し（`flip_layout()`）、
+    JSON の padding に書く。`mirror`（シート全体の反転）は、それを全部のフレームについて反転したもの（r のコマは元の向きに戻る）。
     """
     from .motion.base import MotionResult
-    order = list(order) if order else list(range(1, len(res.frames) + 1))
-    order = parse_order(order, len(res.frames))
+    if isinstance(order, str) and not order.strip():
+        order = None
+    order = order if order else list(range(1, len(res.frames) + 1))
+    order, flips = parse_order_flips(order, len(res.frames))
     ds = [DEFAULT_DURATION] if durations is None else [int(d) for d in durations]
     if len(ds) == 1:
         ds = ds * len(order)
@@ -860,6 +984,20 @@ def assemble_frames(res: FramesResult, order: list[int] | None = None, durations
     w, h = res.size
     px = res.pivot[0]
     info: dict = {"source_frames": order, "align": res.align, "align_y": res.align_y}
+    if any(flips):
+        # 裏返したコマ（r）: 基準の左右で同じ幅になるように列を足し、裏返したコマは基準が同じ所に来るように置く
+        a, b, fx = res.flip_layout()
+        placed = []
+        for k, f in zip(order, flips):
+            c = np.zeros((h, w + a + b, 4), np.uint8)
+            x0 = fx if f else a
+            c[:, x0:x0 + w] = res.flipped_frame(k) if f else res.frames[k - 1]
+            placed.append(c)
+        frames = placed
+        px = px + a
+        w = w + a + b
+        info["flipped"] = list(flips)
+        info["padding_x"] = (a, b)
     if root_y is not None:
         ry = [int(v) for v in root_y]
         if len(ry) != len(order):
@@ -875,7 +1013,14 @@ def assemble_frames(res: FramesResult, order: list[int] | None = None, durations
     if mirror:
         frames = [f[:, ::-1].copy() for f in frames]
         px = w - px
+        if "padding_x" in info:
+            info["padding_x"] = info["padding_x"][::-1]
     info["pivot_x"] = px
+    if res.align_y == "keep" or getattr(res, "shift_y", None) is not None:
+        # 宙に浮くコマがあるとき: JSON に地面の線（ground_y）とフレームごとの足元の高さ（air）を書く
+        info["ground"] = True
+        if getattr(res, "shift_y", None) is not None:
+            info["shift_y"] = [int(v) for v in res.shift_y]
     if getattr(res, "same", None) is not None:
         info["same_as_first"] = res.same.info()
     if getattr(res, "steady", None) is not None:
@@ -911,6 +1056,29 @@ def frames_sheet_info(result, image_name: str, skipped: list | None = None, dot_
     info["pivot"]["x"] = float(result.info["pivot_x"])
     for f, k in zip(info["frames"], result.info["source_frames"]):
         f["source_frame"] = int(k)
+    if "flipped" in result.info:
+        # 裏返したコマ（順番の r）。r を使ったときだけ（使わない JSON は前と同じ）
+        for f, fl in zip(info["frames"], result.info["flipped"]):
+            if fl:
+                f["flipped"] = True
+    if "padding_x" in result.info:
+        # 裏返したコマを入れるために左右に足した透明の列（上下は体全体のずれの分）
+        a, b = (int(v) for v in result.info["padding_x"])
+        top, bottom = (int(v) for v in result.info.get("padding_y", (0, 0)))
+        info["padding"] = {"left": a, "right": b, "top": top, "bottom": bottom}
+    if result.info.get("ground"):
+        # 宙に浮くコマがあるとき（縦のそろえ方 keep・コマごとの上げ下げ）: 地面の線（足元の高さ。左上が原点の画素）と、
+        # フレームごとに足元（いちばん下の不透明なドット）が地面の線から何ドット上にあるか
+        gy = info["pivot"]["y"]
+        out = {}
+        for k, v in info.items():
+            out[k] = v
+            if k == "pivot":
+                out["ground_y"] = gy
+        info = out
+        for f, img in zip(info["frames"], result.frames):
+            rows = np.flatnonzero((np.asarray(img)[..., 3] > 0).any(1))
+            f["air"] = int(gy - (int(rows[-1]) + 1)) if len(rows) else 0
     if "source_files" in result.info:
         # つなげたとき: どのファイルの何コマ目か（並べた順を入れ替えても、元の絵が分かるように）
         for f, (fn, ff) in zip(info["frames"], result.info["source_files"]):
@@ -919,6 +1087,8 @@ def frames_sheet_info(result, image_name: str, skipped: list | None = None, dot_
            "align_y": result.info["align_y"], "mirrored": result.name.endswith("_mirror")}
     if dot_size is not None:
         src["dot_size"] = round(float(dot_size[0]), 3)
+    if "shift_y" in result.info:
+        src["shift_y"] = list(result.info["shift_y"])   # 元のコマごとの上げ下げ（− が上）
     if "files" in result.info:
         src["frame_count"] = int(sum(f["frame_count"] for f in result.info["files"]))
         src["files"] = result.info["files"]

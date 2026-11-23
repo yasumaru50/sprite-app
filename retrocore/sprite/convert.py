@@ -882,15 +882,18 @@ def _frame_settings(values: dict):
     from .frames import FrameSettings
     from .steady import DEFAULT_MODE as STEADY_MODE, DEFAULT_SIZE as STEADY_SIZE
     unknown = sorted(set(values) - {"frame_count", "align", "align_y", "steady", "steady_size",
-                                    "same_ranges", "same_search", "same_from"})
+                                    "same_ranges", "same_search", "same_from", "shift_y"})
     if unknown:
         raise ValueError(f"知らないコマの設定です: {', '.join(unknown)}")
     fc = values.get("frame_count")
     if fc is not None and (isinstance(fc, bool) or not isinstance(fc, int)):
         raise ValueError(f"コマの数は整数で指定してください: {fc}")
+    sy = values.get("shift_y")
+    if sy is not None and not isinstance(sy, list):
+        raise ValueError(f"コマごとの上げ下げは [0, -3, -6, 0] のような整数の並びで指定してください: {sy}")
     fs = FrameSettings(frame_count=fc, align=values.get("align", "match"), align_y=values.get("align_y", "foot"),
                        steady=values.get("steady", STEADY_MODE), steady_size=values.get("steady_size", STEADY_SIZE),
-                       **_same_values(values))
+                       shift_y=None if sy is None else tuple(sy), **_same_values(values))
     fs.validate()
     return fs
 
@@ -923,11 +926,19 @@ def _touchup_view(res) -> dict:
     from .touchup import palette_of
     base = res.before_touchup or res.frames
     rep = res.touchup
+    def changed(f):
+        e = {"source_frame": int(f.frame)}
+        if f.mirrored:
+            e["mirrored"] = True   # 裏返したコマ（順番の r）だけの直し。座標は裏返した絵の上
+        e["dots"] = [[int(x), int(y)] for x, y in f.changed_under]
+        return e
+    a, b, fx = res.flip_layout()
     return {"touchup_base_png": encode_png(np.concatenate(base, 1)), "touchup_palette": palette_of(base),
             "touchup": rep.info() if rep is not None else None,
             "touchup_warnings": list(rep.warnings) if rep is not None else [],
-            "touchup_changed": [{"source_frame": int(f.frame), "dots": [[int(x), int(y)] for x, y in f.changed_under]}
-                                for f in rep.frames if f.changed_under] if rep is not None else []}
+            "touchup_changed": [changed(f) for f in rep.frames if f.changed_under] if rep is not None else [],
+            # 裏返したコマ（r）の置き方（左に足す列・右に足す列・裏返したコマの横の位置）。再生の見本で使う
+            "flip_layout": [int(a), int(b), int(fx)]}
 
 
 def _touchup_apply(finished, edits) -> tuple:
@@ -1009,6 +1020,9 @@ def frames_convert_bytes(data, request: dict) -> dict:
            "files": [dict(f.info(), boxes=[[b.x0, b.y0, b.x1, b.y1] for b in f.boxes]) for f in res.files],
            "sources": [[n, int(k)] for n, k in res.sources], "joins": list(res.joins or []),
            "offsets": [[int(x), int(y)] for x, y in res.offsets],
+           # 裏返したコマ（順番の r）の中で、各コマの絵を置いた位置（裏返したコマの直しの origin）
+           "mirror_offsets": [[int(x), int(y)] for x, y in res.mirror_offsets()],
+           "shift_y": None if res.shift_y is None else [int(v) for v in res.shift_y],
            "file_starts": [f.first for f in res.files[1:]]}
     out.update(_frames_view(res))
     return out
@@ -1049,8 +1063,8 @@ def frames_same(request: dict) -> dict:
     if edits is not None and err is None:
         from .touchup import palette_of, touchup_dict, touchup_json
         pal = palette_of(finished.frames)
-        out["edits"] = touchup_dict(edits, pal, finished.sources, finished.offsets)
-        out["edits_json"] = touchup_json(edits, pal, finished.sources, finished.offsets)
+        out["edits"] = touchup_dict(edits, pal, finished.sources, finished.offsets, finished.mirror_offsets())
+        out["edits_json"] = touchup_json(edits, pal, finished.sources, finished.offsets, finished.mirror_offsets())
     out.update(_frames_view(res))
     return out
 
@@ -1112,7 +1126,8 @@ def frames_edits(request: dict) -> dict:
     finished = _FRAMES_CACHE.get("finished") or _FRAMES_CACHE["result"]
     try:
         # つなげたときは、直しのファイルの記録で今のコマの番号に付け直す（並び順を入れ替えても同じ絵のコマに付く）
-        edits = remap_touchup(edits, finished.sources, finished.offsets, finished.size) if edits is not None else None
+        edits = remap_touchup(edits, finished.sources, finished.offsets, finished.size,
+                              finished.mirror_offsets()) if edits is not None else None
         res = touchup_result(finished, edits)
     except TouchupError as e:
         return {"ok": True, "applied": False, "code": e.code, "error": str(e)}
@@ -1123,8 +1138,8 @@ def frames_edits(request: dict) -> dict:
     out = {"ok": True, "applied": True, "token": _FRAMES_CACHE["token"], "edits": None, "edits_json": None}
     if _FRAMES_CACHE["edits"] is not None:
         pal = palette_of(finished.frames)
-        out["edits"] = touchup_dict(edits, pal, finished.sources, finished.offsets)
-        out["edits_json"] = touchup_json(edits, pal, finished.sources, finished.offsets)
+        out["edits"] = touchup_dict(edits, pal, finished.sources, finished.offsets, finished.mirror_offsets())
+        out["edits_json"] = touchup_json(edits, pal, finished.sources, finished.offsets, finished.mirror_offsets())
     out.update(_frames_view(res))
     return out
 
@@ -1190,7 +1205,8 @@ def frames_convert_files_for_web(datas: list, names: list, request_json: str = "
 
 def frames_sheets(request: dict, result=None) -> dict:
     """そろえたコマ（`result`。省くと最後に変換したもの）からシートを作る（例外は投げない）。`request` は
-    {"token": 変換の番号, "base": 出力名（<出力名>.png の名前の部分）, "name": 名前, "order": [1, 2, 3, 2] か None,
+    {"token": 変換の番号, "base": 出力名（<出力名>.png の名前の部分）, "name": 名前,
+    "order": [1, 2, 3, 2] か [1, 2, 3, "2r"]（r は左右に裏返したコマ）か "1,2,3,2r" か None,
     "durations": [150] か フレームごとの並び, "root_y": [0, -1, 0, -1] か None, "mirror": 左右反転のシートも作るか}。
 
     作れた: {"ok": True, "sheets": [{"name": シートの PNG の名前, "png": PNG, "json": JSON の文字列, "frame_width",
@@ -1225,6 +1241,9 @@ def frames_sheets(request: dict, result=None) -> dict:
         return {"ok": False, "error": friendly_error(e), "detail": error_detail(e)}
     from .piskel import fps_for_durations, piskel_text
     out: dict = {"ok": True}
+    fw = F.flip_warning(order)
+    if fw:
+        out["flip_warning"] = fw   # 順番に r があるとき: 左右で違う物は反対側に移る、の注意
     talks = []
     if swaps is not None:
         from .swap import mirror_swapped, swaps_json

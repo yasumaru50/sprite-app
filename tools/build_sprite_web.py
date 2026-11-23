@@ -51,15 +51,16 @@ def settings_spec() -> dict:
         "motion": motion_spec(),   # 動き（呼吸）の欄。既定は CLI の --motion-frames などと同じ
         "fx": fx_spec(),   # 重ね（--fx）の選択肢
         "gif": {"default": gif_mod.DEFAULT_SCALE, "min": gif_mod.MIN_SCALE, "max": gif_mod.MAX_SCALE},   # GIF の拡大（--gif-scale）
-        # コマが並んだ絵（--frames）。画面に出すそろえ方は初心者向けに 2 つずつ（CLI の center・none は出さない）
+        # コマが並んだ絵（--frames）。画面に出すそろえ方は初心者向け（CLI の center・none は出さない）
         "frames": {"align": {"default": frames_mod.DEFAULT_ALIGN, "choices": [
                        ["match", "頭の形を重ねる（おすすめ）"], ["head", "頭の真ん中に合わせる"]]},
                    "align_y": {"default": frames_mod.DEFAULT_ALIGN_Y, "choices": [
-                       ["foot", "足元（歩きなど。おすすめ）"], ["match", "頭の高さ（走り・跳びなど）"]]},
+                       ["foot", "足元（歩きなど。おすすめ）"], ["match", "頭の高さ（走り・跳びなど）"],
+                       ["keep", "元の絵の高さを保つ（ジャンプなど、宙に浮くコマ）"]]},
                    "steady": {"default": steady_mod.DEFAULT_MODE, "size": steady_mod.DEFAULT_SIZE, "choices": [
                        ["off", "なし（今までと同じ）"], ["on", "あり（小さな違いを 1 コマ目に戻す）"]]},
                    "duration": frames_mod.DEFAULT_DURATION, "name": frames_mod.DEFAULT_NAME,
-                   "max_frames": frames_mod.MAX_FRAMES},
+                   "max_frames": frames_mod.MAX_FRAMES, "max_shift_y": frames_mod.MAX_SHIFT_Y},
     }
 
 

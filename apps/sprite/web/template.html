@@ -318,7 +318,13 @@
         <div class="field">
           <label for="frame-align-y">縦のそろえ方</label>
           <select id="frame-align-y"></select>
-          <small class="help" id="frame-align-y-help">歩きは「足元」、足が地面から離れる走り・跳びは「頭の高さ」</small>
+          <small class="help" id="frame-align-y-help">歩きは「足元」、足が地面から離れる走り・跳びは「頭の高さ」、ジャンプで宙に浮くコマがあるときは「元の絵の高さを保つ」</small>
+        </div>
+        <div class="field">
+          <label for="frame-shift-y">コマごとの上げ下げ</label>
+          <input type="text" id="frame-shift-y" inputmode="numeric" spellcheck="false" placeholder="なし（例 0,-3,-6,0）">
+          <small class="help" id="frame-shift-y-help">元のコマごとに、そろえた位置から何ドット上げる・下げるか（− が上）。数は元のコマの数と同じ。空ならなし。
+            ジャンプの高さが自動でうまく出ないときに使います（CLI の --frame-shift-y）</small>
         </div>
         <div class="field">
           <label for="frame-steady">ちらつきを減らす</label>
@@ -331,9 +337,10 @@
       <div class="controls">
         <div class="field">
           <label for="frame-order">順番</label>
-          <div class="inline"><input type="text" id="frame-order" inputmode="numeric" spellcheck="false" placeholder="1,2,3,4">
+          <div class="inline"><input type="text" id="frame-order" spellcheck="false" placeholder="1,2,3,4">
             <button type="button" class="secondary" id="order-pingpong" style="padding:4px 10px;font-size:0.85em">行って戻る</button></div>
-          <small id="frame-order-help" class="help">左のコマから 1, 2, … 。空なら左から順。同じコマを何度使っても OK（例 1,2,3,2）</small>
+          <small id="frame-order-help" class="help">左のコマから 1, 2, … 。空なら左から順。同じコマを何度使っても OK（例 1,2,3,2）。
+            番号の後に r を付けると、そのコマを左右に裏返して使います（例 1,2,3,2r。回る動きなど。キャラは横にずれません）</small>
         </div>
         <div class="field">
           <label for="frame-duration">1 コマの時間</label>
@@ -658,6 +665,8 @@
         <div class="note help edits-only" data-help-at="touch-title">ちらつき・ゴミ・輪郭を数ドット直す所です（大きな描き直しは Piskel で）。
           コマごとにドットを塗る・消すと、そのまま再生と保存（シート・JSON・GIF・左右反転・.piskel）に入ります。
           直しは<b>元のコマ</b>に入るので、順番 1,2,3,2 の 2 番目と 4 番目は 1 回直せば両方変わります。使える色はシートのパレットだけです（新しい色は作れません）。
+          順番に r（裏返したコマ。例 2r）があると、「次のコマ」で裏返したコマも開けます。元のコマの直しは裏返したコマにも裏返して付き、
+          裏返したコマで直したドットは裏返したコマだけに入ります（リボンなど、左右で違う物が反対側に移るのを直すとき）。
           上の「1 コマ目と同じにする範囲」や変換の設定を変えても、直しはその上に重ね直します（下の色が変わったドットは数を知らせます）。</div>
         <div class="actions touch-tools" style="margin-top:6px">
           <button type="button" id="touch-pen" class="secondary on" aria-pressed="true">ペン（B）</button>
@@ -3687,6 +3696,7 @@ function resetFrameSettings() {
   $("frame-count").value = "";
   $("frame-align").value = FSPEC.align.default;
   $("frame-align-y").value = FSPEC.align_y.default;
+  $("frame-shift-y").value = "";
   $("frame-steady").value = FSPEC.steady.default;
   $("frame-order").value = "";
   $("frame-duration").value = String(FSPEC.duration);
@@ -3805,9 +3815,19 @@ function frameConvertRequest() {
       throw new Error(`コマの数は 1〜${FSPEC.max_frames} の整数で入れてください（空なら自動）。いまは「${text}」。`);
     }
   }
-  return { settings: currentSettings(), frames: { frame_count: count, align: $("frame-align").value, align_y: $("frame-align-y").value,
-                                                    steady: $("frame-steady").value },
-           name: frameName() };
+  const fr = { frame_count: count, align: $("frame-align").value, align_y: $("frame-align-y").value, steady: $("frame-steady").value };
+  const sy = frameShiftY(count);
+  if (sy) fr.shift_y = sy;   // コマごとの上げ下げ（CLI の --frame-shift-y）。空なら送らない（今までと同じ）
+  return { settings: currentSettings(), frames: fr, name: frameName() };
+}
+// コマごとの上げ下げ（元のコマごと。− が上）。空なら null
+function frameShiftY(count) {
+  const t = $("frame-shift-y").value.trim();
+  if (t === "") return null;
+  const list = intList(t, "コマごとの上げ下げ", true);
+  if (count && list.length !== count) throw new Error(`コマごとの上げ下げの数（${list.length}）は、コマの数（${count}）と同じにしてください。`);
+  if (list.some((v) => Math.abs(v) > FSPEC.max_shift_y)) throw new Error(`コマごとの上げ下げは −${FSPEC.max_shift_y}〜${FSPEC.max_shift_y} ドットで入れてください。`);
+  return list;
 }
 function intList(text, what, signed) {
   const t = text.trim();
@@ -3815,15 +3835,19 @@ function intList(text, what, signed) {
   if (!re.test(t)) throw new Error(`${what}は ${signed ? "0,-1,0,-1" : "1,2,3,2"} のように、整数をカンマで区切って入れてください（いまは「${text}」）。`);
   return t.split(",").map((v) => Number(v.trim()));
 }
+// 順番（元のコマの番号の並び。r を付けた裏返すコマは −番号 にする。例 "1,2,3,2r" → [1, 2, 3, -2]）
 function frameOrder() {
   const n = frames.result ? frames.result.frame_count : null;
   const t = $("frame-order").value.trim();
   if (t === "") return null;
-  const order = intList(t, "順番", false);
-  const bad = order.filter((k) => k < 1 || (n && k > n));
+  if (!/^\d+[rR]?(\s*,\s*\d+[rR]?)*$/.test(t)) throw new Error(`順番は 1,2,3,2 のように、整数をカンマで区切って入れてください（裏返すコマは 2r のように r を付けます。いまは「${t}」）。`);
+  const order = t.split(",").map((v) => { v = v.trim(); return /[rR]$/.test(v) ? -Number(v.slice(0, -1)) : Number(v); });
+  const bad = order.filter((k) => Math.abs(k) < 1 || (n && Math.abs(k) > n)).map(orderToken);
   if (bad.length) throw new Error(`順番の数は 1〜${n} にしてください（コマは ${n} 個）: ${bad.join(", ")}`);
   return order;
 }
+// 順番の 1 つ（−番号 は裏返したコマ）を "2" / "2r" にする（Python・CLI の書き方）
+function orderToken(k) { return k < 0 ? `${-k}r` : k; }
 function rootY(len) {
   const v = $("frame-root").value;
   if (v === "none") return null;
@@ -3841,7 +3865,7 @@ function sheetRequest() {
   if (durations.length !== 1 && durations.length !== len) {
     throw new Error(`1 コマの時間の数（${durations.length}）は、1 つか、順番の数（${len}）と同じにしてください。`);
   }
-  const req = { token: frames.token, base: outBase, name: frameName(), order, durations, root_y: rootY(len), mirror: true };
+  const req = { token: frames.token, base: outBase, name: frameName(), order: order ? order.map(orderToken) : null, durations, root_y: rootY(len), mirror: true };
   const swaps = swapRequest();
   if (swaps) req.swaps = swaps;   // 差し替え（まばたき）。無ければ今までと同じ
   return req;
@@ -3857,6 +3881,7 @@ function framesCli(req) {
   if (c) parts.push(`--frame-count ${c}`);
   if ($("frame-align").value !== FSPEC.align.default) parts.push(`--align ${$("frame-align").value}`);
   if ($("frame-align-y").value !== FSPEC.align_y.default) parts.push(`--align-y ${$("frame-align-y").value}`);
+  if (frames.result && frames.result.shift_y) parts.push(`--frame-shift-y=${frames.result.shift_y.join(",")}`);
   if (frames.result && frames.result.steady) parts.push(`--steady ${frames.result.steady.mode}`);
   if (req.order) parts.push(`--frame-order ${req.order.join(",")}`);
   if (!(req.durations.length === 1 && req.durations[0] === FSPEC.duration)) parts.push(`--frame-duration ${req.durations.join(",")}`);
@@ -3974,7 +3999,7 @@ async function framesShowConverted(result) {
     for (const id of ["dl-flicker", "dl-flicker-json"]) $(id).setAttribute("aria-disabled", "false");
 }
 // 変換の設定の入力欄（変換し直しをやめたときに、前の値に戻す）
-const FRAMES_CONVERT_INPUTS = ["colors", "cleanup", "outline", "frame-count", "frame-align", "frame-align-y", "frame-steady"];
+const FRAMES_CONVERT_INPUTS = ["colors", "cleanup", "outline", "frame-count", "frame-align", "frame-align-y", "frame-shift-y", "frame-steady"];
 function framesSnapshot() {
   // 入力欄の値は「前の変換に使った値」（変換を押す前に変えた値ではなく）
   return { result: frames.result, outBase, inputs: { ...frames.lastInputs },
@@ -4086,11 +4111,13 @@ async function showSheets(result, req) {
   motion.frame = keepFrame < motion.info.frame_count ? keepFrame : 0;
   $("motion-empty").hidden = true;
   $("motion-wrap").hidden = false;
-  const order = motion.info.frames.map((f) => f.source_frame).join(",");
+  const order = motion.info.frames.map((f) => f.source_frame + (f.flipped ? "r" : "")).join(",");
+  const air = motion.info.ground_y !== undefined ? ` ／ 足元の高さ（地面の線から）${motion.info.frames.map((f) => f.air).join("/")} ドット` : "";
+  if (result.flip_warning) showMotionWarnings([result.flip_warning]);
   const counts = frames.result.flicker_counts.slice(1).map((c, i) => `${i + 2} コマ目 ${c}`).join("、");
   const offs = main.offset_y.length ? ` ／ 体の上下 ${main.offset_y.map((d) => (d > 0 ? "+" + d : d)).join(", ")}（− が上）` : "";
   $("motion-meta").textContent = `${main.frame_width}×${main.frame_height} ドット × ${main.frame_count} フレーム`
-    + `（コマ ${order}、合計 ${motion.info.total_duration_ms} ミリ秒で 1 回）${offs}`
+    + `（コマ ${order}、合計 ${motion.info.total_duration_ms} ミリ秒で 1 回）${offs}${air}`
     + (counts ? ` ／ ちらつき（上から ${frames.result.flicker_rows} 行で 1 コマ目と違うドット）: ${counts}` : "")
     + steadyText(frames.result) + sameText(frames.result) + swapShow(result);
   $("cli-equiv").textContent = framesCli(req);
@@ -4547,10 +4574,15 @@ function sameText(result) {
 // 画面の絵と再生の見本はブラウザの中ですぐ描き直し、ドラッグを離したときに frames_edits_for_web（Python。CLI と同じ関数）で
 // 当て直して、シート・JSON・GIF・反転・.piskel を作り直す。直しの下の絵（touch.base）は「変換 → 範囲 → ちらつきを減らす」の後のコマ。
 const TOUCH_UNDO_MAX = 50;
+// k が −番号 のときは、裏返したコマ（順番の r）: 元のコマ（直しを当てたもの）を左右に裏返した絵の上に、裏返したコマだけの直しを当てたもの
 function touchColorAt(k, x, y, withEdits) {
   if (typeof k === "string") {   // 差し替えの絵（直しを当てた 1 コマ目の上に描く）
     const m = withEdits && touch.swaps.get(k), e = m && m.get(y * touch.fw + x);
     return e ? e.c : touchColorAt(1, x, y, true);
+  }
+  if (k < 0) {
+    const m = withEdits && touch.edits.get(k), e = m && m.get(y * touch.fw + x);
+    return e ? e.c : touchColorAt(-k, touch.fw - 1 - x, y, true);
   }
   if (withEdits) {
     const m = touch.edits.get(k), e = m && m.get(y * touch.fw + x);
@@ -4574,6 +4606,7 @@ function touchDrop(keep, saveFile) {
 function touchBind(r = frames.result) {
   touch.editSources = r && r.sources ? r.sources.map((v) => v.slice()) : null;
   touch.editOffsets = r && r.offsets ? r.offsets.map((v) => v.slice()) : null;
+  touch.editMirrorOffsets = r && r.mirror_offsets ? r.mirror_offsets.map((v) => v.slice()) : null;
   touch.editFw = touch.fw; touch.editFh = touch.fh;   // 直しの一覧のキー（y*幅+x）を作ったときのコマの幅（並び順を変えて幅が変わっても読み違えないように）
 }
 // つなげた結果か（ファイルが 2 つ以上）
@@ -4583,6 +4616,13 @@ function touchOrder() {
   try { order = frameOrder(); } catch (e) { order = null; }
   return order && order.length ? order : Array.from({ length: touch.n }, (_, i) => i + 1);
 }
+// 「前のコマ・次のコマ」で回るコマ: 元のコマ 1〜n と、順番の r（裏返したコマ。−番号）と、直しが残っている裏返したコマ
+function touchFrames() {
+  const neg = new Set(touchOrder().filter((k) => k < 0 && -k <= touch.n));
+  for (const [k, m] of touch.edits) if (k < 0 && -k <= touch.n && m.size) neg.add(k);
+  return [...Array.from({ length: touch.n }, (_, i) => i + 1), ...[...neg].sort((a, b) => b - a)];
+}
+function touchFrameName(k) { return k < 0 ? `${-k}r` : `${k}`; }
 function touchPrevFrame(k) {
   // 再生の順番で 1 つ前のコマ（1 コマ目のときは最後のコマ）
   const order = touchOrder(), p = order.indexOf(k);
@@ -4591,6 +4631,14 @@ function touchPrevFrame(k) {
 }
 function touchFrameImage(k) {
   if (typeof k === "string") return touchApply(touchFrameImage(1), touch.swaps.get(k));
+  if (k < 0) {   // 裏返したコマ: 元のコマ（直しを当てたもの）を左右に裏返し、裏返したコマだけの直しを当てる
+    const src = touchFrameImage(-k), img = new ImageData(touch.fw, touch.fh), a = src.data, d = img.data, fw = touch.fw;
+    for (let y = 0; y < touch.fh; y++) for (let x = 0; x < fw; x++) {
+      const i = (y * fw + x) * 4, j = (y * fw + (fw - 1 - x)) * 4;
+      d[i] = a[j]; d[i + 1] = a[j + 1]; d[i + 2] = a[j + 2]; d[i + 3] = a[j + 3];
+    }
+    return touchApply(img, touch.edits.get(k));
+  }
   const img = new ImageData(touch.fw, touch.fh);
   const d = img.data, b = touch.base, W = touch.W, fw = touch.fw;
   for (let y = 0; y < touch.fh; y++) {
@@ -4668,7 +4716,8 @@ function touchLabel() {
     $("touch-frame-label").textContent = `差し替え「${SWAP_SHAPE_TEXT[touchKey()]}」（${base}の上に描く）`
       + `・${base}と違うドット ${sm ? sm.size : 0}`;
   } else {
-    $("touch-frame-label").textContent = `${touch.frame} / ${touch.n} コマ目` + (pos.length ? `（再生の ${pos.join("・")} 番目）` : "（再生に使っていない）")
+    $("touch-frame-label").textContent = (touch.frame < 0 ? `${-touch.frame}r（${-touch.frame} コマ目を左右に裏返したもの）` : `${touch.frame} / ${touch.n} コマ目`)
+      + (pos.length ? `（再生の ${pos.join("・")} 番目）` : "（再生に使っていない）")
       + `・直したドット ${m ? m.size : 0}`;
   }
   $("touch-prev").disabled = $("touch-next").disabled = touch.mode === "swap";
@@ -4711,12 +4760,14 @@ function touchPreviewTick() {
   if (touch.mode === "swap") { swapPreviewTick(); return; }
   const i = touch.previewPos % order.length, k = order[i];
   const s = touch.zoom >= 12 ? 3 : 2;
-  c.width = touch.fw * s; c.height = touch.fh * s;
+  // 裏返したコマ（r）があるときは、シートと同じく基準の左右に列を足して、裏返したコマを基準が同じ所に来るように置く
+  const [fa, fb, fx] = order.some((v) => v < 0) && touch.flip ? touch.flip : [0, 0, 0];
+  c.width = (touch.fw + fa + fb) * s; c.height = touch.fh * s;
   const g = c.getContext("2d");
   g.imageSmoothingEnabled = false;
   g.clearRect(0, 0, c.width, c.height);
-  g.drawImage(touchFrameCanvas(k), 0, 0, c.width, c.height);
-  $("touch-preview-label").textContent = `${i + 1} 番目（${k} コマ目）`;
+  g.drawImage(touchFrameCanvas(k), (k < 0 ? fx : fa) * s, 0, touch.fw * s, c.height);
+  $("touch-preview-label").textContent = `${i + 1} 番目（${touchFrameName(k)} コマ目）`;
   touch.previewPos = (i + 1) % order.length;
   touch.previewTimer = setTimeout(touchPreviewTick, Math.max(30, durs.length === 1 ? durs[0] : durs[i] || FSPEC.duration));
 }
@@ -4863,7 +4914,12 @@ document.addEventListener("keydown", (ev) => {
   ev.preventDefault();
   touchRefresh();
 });
-function touchGo(d) { if (touch.mode === "swap") return; touch.frame = ((touch.frame - 1 + d + touch.n) % touch.n) + 1; touchCursor(touch.hover); touchRefresh(); }
+function touchGo(d) {
+  if (touch.mode === "swap") return;
+  const list = touchFrames(), p = Math.max(0, list.indexOf(touch.frame));
+  touch.frame = list[(p + d + list.length) % list.length];
+  touchCursor(touch.hover); touchRefresh();
+}
 $("touch-pen").addEventListener("click", () => { touch.tool = "pen"; touchLabel(); });
 $("touch-eraser").addEventListener("click", () => { touch.tool = "eraser"; touchLabel(); });
 $("touch-picker").addEventListener("click", () => { touch.tool = "picker"; touchLabel(); });
@@ -4928,10 +4984,10 @@ function touchFromDict(d) {
     const m = new Map();
     for (const v of f.dots) {
       const c = v[2] === null ? null : d.palette[v[2]];
-      const was = v.length > 3 ? (v[3] === null ? null : d.palette[v[3]]) : touchColorAt(f.source_frame, v[0], v[1], false);
+      const was = v.length > 3 ? (v[3] === null ? null : d.palette[v[3]]) : touchColorAt(f.mirrored ? -f.source_frame : f.source_frame, v[0], v[1], false);
       m.set(v[1] * touch.fw + v[0], { c, was });
     }
-    out.set(f.source_frame, m);
+    out.set(f.mirrored ? -f.source_frame : f.source_frame, m);   // 裏返したコマ（r）だけの直しは −番号
   }
   return out;
 }
@@ -4943,16 +4999,20 @@ function touchDict(opts = {}) {
   const pal = touch.palette.slice();
   const idx = (c) => { if (c === null) return null; let i = pal.indexOf(c); if (i < 0) { pal.push(c); i = pal.length - 1; } return i; };
   const fr = [];
-  for (const k of [...touch.edits.keys()].sort((a, b) => a - b)) {
+  let mirrored = false;
+  // 元のコマの番号の順、同じコマでは元のコマの直し → 裏返したコマ（−番号）の直し
+  for (const k of [...touch.edits.keys()].sort((a, b) => Math.abs(a) - Math.abs(b) || b - a)) {
     const m = touch.edits.get(k);
     if (!m.size) continue;
-    const fw = touch.editFw || touch.fw;
+    const fw = touch.editFw || touch.fw, sf = Math.abs(k);
     const dots = [...m.keys()].sort((a, b) => a - b).map((key) => { const e = m.get(key); return [key % fw, Math.floor(key / fw), idx(e.c), idx(e.was)]; });
-    const where = withFiles && src[k - 1] ? { file: src[k - 1][0], file_frame: src[k - 1][1] } : {};
-    if (where.file && touch.editOffsets && touch.editOffsets[k - 1]) where.origin = touch.editOffsets[k - 1].slice();
-    fr.push({ source_frame: k, ...where, dots });
+    const where = withFiles && src[sf - 1] ? { file: src[sf - 1][0], file_frame: src[sf - 1][1] } : {};
+    const offs = k < 0 ? touch.editMirrorOffsets : touch.editOffsets;
+    if (where.file && offs && offs[sf - 1]) where.origin = offs[sf - 1].slice();
+    if (k < 0) mirrored = true;
+    fr.push(k < 0 ? { source_frame: sf, mirrored: true, ...where, dots } : { source_frame: sf, ...where, dots });
   }
-  const head = { version: withFiles ? 2 : 1, kind: "sprite_edits", name: frameNameSafe(),
+  const head = { version: mirrored ? 3 : withFiles ? 2 : 1, kind: "sprite_edits", name: frameNameSafe(),
                  frame_width: touch.editFw || touch.fw, frame_height: touch.editFh || touch.fh,
                  frame_count: touch.n };
   if (withFiles) head.files = [...new Set(src.map((v) => v[0]))];
@@ -5336,7 +5396,7 @@ async function touchView(result) {
   touch.W = im.width;
   touch.fw = fw; touch.fh = fh; touch.n = n;
   touch.dims = [fw, fh, n];
-  if (touch.frame > n) touch.frame = 1;
+  if (Math.abs(touch.frame) > n) touch.frame = 1;
   touch.palette = result.touchup_palette || [];
   touchPalette();
   touchShow(result);
@@ -5351,7 +5411,8 @@ async function touchView(result) {
   }
 }
 function touchShow(result) {
-  touch.changed = new Map((result.touchup_changed || []).map((f) => [f.source_frame, f.dots]));
+  touch.changed = new Map((result.touchup_changed || []).map((f) => [f.mirrored ? -f.source_frame : f.source_frame, f.dots]));
+  if (result.flip_layout) touch.flip = result.flip_layout;
   const warns = result.touchup_warnings || [];
   $("touch-warn").hidden = !warns.length;
   $("touch-warn-text").textContent = warns.join("\n");
@@ -5367,7 +5428,8 @@ function touchShow(result) {
     $("touch-save").href = "#";
     $("touch-save").setAttribute("aria-disabled", "true");
   }
-  const per = [...touch.edits].filter(([, m]) => m.size).map(([k, m]) => `${k} コマ目 ${m.size}`).join("、");
+  const per = [...touch.edits].filter(([, m]) => m.size).sort((a, b) => Math.abs(a[0]) - Math.abs(b[0]) || b[0] - a[0])
+    .map(([k, m]) => `${touchFrameName(k)} コマ目 ${m.size}`).join("、");
   $("touch-status").textContent = n ? `直したドット: ${n}（${per}）。保存のファイルに入っています。` : "直しはありません（今までと同じ出力です）。";
 }
 // 直しを当てられないときの確認（ボタンの文字で中身が分かるように 3 つ。Esc は「やめる」と同じ）。
@@ -5514,7 +5576,7 @@ async function touchAfterConvert(snap) {
 function touchAdopt(d) {
   if (!d) return;
   const next = touchFromDict(d);
-  const key = (m) => JSON.stringify([...m].filter(([, v]) => v.size).map(([k, v]) => [k, [...v.keys()].sort((a, b) => a - b)]).sort((a, b) => a[0] - b[0]));
+  const key = (m) => JSON.stringify([...m].filter(([, v]) => v.size).map(([k, v]) => [k, [...v.keys()].sort((a, b) => a - b)]).sort((a, b) => a[0] - b[0]));   // 裏返したコマ（−番号）も同じ
   if (key(next) === key(touch.edits)) return;
   touch.edits = next;
   touch.undo = touch.undo.filter((u) => u.every((ch) => typeof ch.k === "string"));
@@ -5566,7 +5628,7 @@ async function touchCarryBack(carry) {
   redraw();
   setStatus(`画像を選び直すのをやめて、前の画像（${carry.name}）と、その結果・範囲・直しに戻しました（変換の設定の入力欄も前の値に戻しました）。`, false);
 }
-function touchMaxFrame() { let m = 0; for (const [k, v] of touch.edits) if (v.size) m = Math.max(m, k); return m; }
+function touchMaxFrame() { let m = 0; for (const [k, v] of touch.edits) if (v.size) m = Math.max(m, Math.abs(k)); return m; }
 // Piskel（ブラウザのドット絵エディタ）で読み込むときに入れる数。シートは横 1 列・すき間なし・拡大なしなので、そのまま切れる
 function showPiskelHint(sheet, flash) {
   const h = $("piskel-hint");
@@ -5625,7 +5687,7 @@ $("frame-root").addEventListener("change", () => {
   requestSheets(0);
 });
 function frameOrderSafe() { try { return frameOrder(); } catch (e) { return null; } }
-for (const id of ["frame-count", "frame-align", "frame-align-y", "frame-steady"]) {
+for (const id of ["frame-count", "frame-align", "frame-align-y", "frame-shift-y", "frame-steady"]) {
   $(id).addEventListener("change", () => {
     if (frames.token && !busy) setStatus("コマの数・そろえ方・ちらつきの設定を変えました。「② 変換する」をもう一度押してください。", false);
   });

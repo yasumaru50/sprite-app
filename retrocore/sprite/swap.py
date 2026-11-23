@@ -541,12 +541,15 @@ class Placement:
     images: dict = field(default_factory=dict)   # 形の名前 → 当てたフレームの絵
     patches: dict = field(default_factory=dict)  # 形の名前 → [(左, 上, 置いた絵), ...]（目と口を重ねるときに使う）
     rects: list = field(default_factory=list)    # 置いた四角 (左, 上, 幅, 高さ)（フレームの座標）
+    flipped: bool = False                        # 裏返したコマ（順番の r）。位置は裏返し直したフレームの上で探した
 
     def info(self) -> dict:
         out = {"frame": int(self.frame), "shift": {"x": int(self.shift[0]), "y": int(self.shift[1])},
                "match": round(float(self.match), 3), "used": bool(self.ok)}
         if self.code is not None:
             out["code"] = self.code
+        if self.flipped:
+            out["flipped"] = True
         return out
 
 
@@ -660,9 +663,30 @@ def _place(frame: np.ndarray, index: int, ref: np.ndarray, sw: Swap, origin: tup
     return p
 
 
+def _place_frame(frame: np.ndarray, index: int, ref: np.ndarray, sw: Swap, origin: tuple[int, int], search: int,
+                 line_colors: np.ndarray, flipped: bool = False, margin: int = MARGIN) -> Placement:
+    """`_place()` に、裏返したコマ（順番の r）を足したもの。裏返したコマは、フレームを左右に裏返して（基準の左右で同じ幅の
+    キャンバスなので、元の向きのコマに戻る）位置を探して当て、できた絵と四角を裏返し直す（差し替えも裏返して入る）。"""
+    if not flipped:
+        return _place(frame, index, ref, sw, origin, search, line_colors, margin)
+    p = _place(frame[:, ::-1], index, ref, sw, origin, search, line_colors, margin)
+    W = frame.shape[1]
+    p.flipped = True
+    p.images = {k: v[:, ::-1].copy() for k, v in p.images.items()}
+    p.patches = {k: [(W - tx - pt.shape[1], ty, pt[:, ::-1].copy()) for tx, ty, pt in v] for k, v in p.patches.items()}
+    p.rects = [(W - x - w, y, w, h) for x, y, w, h in p.rects]
+    return p
+
+
+def _flips(info: dict, n: int) -> list[bool]:
+    v = info.get("flipped")
+    return [bool(x) for x in v] if isinstance(v, (list, tuple)) and len(v) == n else [False] * n
+
+
 def _origins(info: dict, n: int) -> list[tuple[int, int]]:
-    """フレームごとの、1 コマ目の左上が置かれている位置（足した余白と体全体のずれ）。"""
-    left = int(info.get("padding", 0) or 0)
+    """フレームごとの、1 コマ目の左上が置かれている位置（足した余白と体全体のずれ）。
+    裏返したコマは、裏返し直したフレームの中の位置（基準の左右で同じ幅なので、ほかのフレームと同じ）。"""
+    left = int(info["padding_x"][0]) if "padding_x" in info else int(info.get("padding", 0) or 0)
     top = int(info.get("padding_y", (0, 0))[0]) if "padding_y" in info else 0
     offs = info.get("offset_y")
     if offs is None:
@@ -766,7 +790,8 @@ def apply_swaps(anim, ref: np.ndarray, s: SwapSet, palette: list[str] | None = N
     length = sum(ms for _, ms in seq)
     from .steady import outline_keys
     line_colors = outline_keys(ref)
-    places = [_place(frames[i], i, ref, sw, origins[i], s.search, line_colors) for i in range(n)]
+    flips = _flips(anim.info, n)
+    places = [_place_frame(frames[i], i, ref, sw, origins[i], s.search, line_colors, flips[i]) for i in range(n)]
     item: dict = {"type": sw.type, "rects": [{"x": r[0], "y": r[1], "w": r[2], "h": r[3]} for r in sw.rects()],
                   "shapes": [sn for sn in TYPES[sw.type] if sw.shapes.get(sn)]}
     not_used = [p for p in places if not p.ok]
@@ -823,7 +848,7 @@ def apply_swaps(anim, ref: np.ndarray, s: SwapSet, palette: list[str] | None = N
                  for p in not_used]
         rep.warnings.append(f"{name}を入れなかったフレームがあります（迷ったら入れません）。" + "／".join(parts))
     info = dict(anim.info)
-    for key in ("source_frames", "offset_y", "offsets"):
+    for key in ("source_frames", "offset_y", "offsets", "flipped"):
         v = info.get(key)
         if isinstance(v, (list, tuple)) and len(v) == n:
             info[key] = [v[i] for i in new_src]
@@ -951,7 +976,9 @@ def apply_talk(anim, ref: np.ndarray, s: SwapSet, palette: list[str] | None = No
 
     step = s.talk_step()
     pattern = talk.talk_pattern()
-    mouth = [_place(frames[i], i, ref, talk, origins[i], s.search, line_colors, TALK_MARGIN) for i in range(n)]
+    flips = _flips(anim.info, n)
+    mouth = [_place_frame(frames[i], i, ref, talk, origins[i], s.search, line_colors, flips[i], TALK_MARGIN)
+             for i in range(n)]
     item: dict = {"type": talk.type, "rects": [{"x": r[0], "y": r[1], "w": r[2], "h": r[3]} for r in talk.rects()],
                   "shapes": [sn for sn in TYPES[talk.type] if talk.shapes.get(sn)], "step_ms": int(step),
                   "pattern": list(pattern)}
@@ -970,7 +997,8 @@ def apply_talk(anim, ref: np.ndarray, s: SwapSet, palette: list[str] | None = No
         rep.warnings.append("口を入れなかったフレームがあります（そのフレームは閉じた口のままです。迷ったら入れません）。"
                             + "／".join(where(p) for p in bad))
     blink = s.find("blink")
-    eyes = [_place(frames[i], i, ref, blink, origins[i], s.search, line_colors) for i in range(n)] if blink else None
+    eyes = [_place_frame(frames[i], i, ref, blink, origins[i], s.search, line_colors, flips[i])
+            for i in range(n)] if blink else None
     plen = len(pattern)
     period = step * plen
     target = _repeats(cycle, n, s.interval_ms) if blink else 1
@@ -992,7 +1020,7 @@ def apply_talk(anim, ref: np.ndarray, s: SwapSet, palette: list[str] | None = No
         overlap = [bool(eyes[i].ok and mouth[i].ok and _overlaps(eyes[i].rects, mouth[i].rects)) for i in range(n)]
         for i in range(n):
             if overlap[i]:
-                eyes[i] = Placement(i, eyes[i].shift, eyes[i].match, False, SKIP_OVERLAP)
+                eyes[i] = Placement(i, eyes[i].shift, eyes[i].match, False, SKIP_OVERLAP, flipped=eyes[i].flipped)
         blink_item = {"type": blink.type, "rects": [{"x": r[0], "y": r[1], "w": r[2], "h": r[3]} for r in blink.rects()],
                       "shapes": [sn for sn in TYPES[blink.type] if blink.shapes.get(sn)]}
         not_used = [p for p in eyes if not p.ok]
@@ -1062,7 +1090,7 @@ def apply_talk(anim, ref: np.ndarray, s: SwapSet, palette: list[str] | None = No
         rep.warnings.append(f"動きの 1 周（{cycle} ミリ秒）が口の 1 回り（{period} ミリ秒）で割り切れないので、"
                             f"口の切り替えを {min(steps)}〜{max(steps)} ミリ秒にしました（シートの終わりと始まりで口がつながるように）")
     info = dict(anim.info)
-    for key in ("source_frames", "offset_y", "offsets"):
+    for key in ("source_frames", "offset_y", "offsets", "flipped"):
         v = info.get(key)
         if isinstance(v, (list, tuple)) and len(v) == n:
             info[key] = [v[i] for i in new_src]
@@ -1096,14 +1124,19 @@ def mirror_swapped(swapped, mirror_anim):
     import dataclasses
     info = dict(swapped.info)
     info["pivot_x"] = mirror_anim.info.get("pivot_x", info.get("pivot_x"))
+    if "padding_x" in mirror_anim.info:
+        info["padding_x"] = mirror_anim.info["padding_x"]
     if "swaps" in info:
         sw = copy.deepcopy(info["swaps"])
         for it in sw["items"]:
             for p in it.get("placements", []):
                 p["shift"]["x"] = -p["shift"]["x"] if p["shift"]["x"] else 0
             w = swapped.frames[0].shape[1]
-            pl = int(info.get("padding", 0) or 0)
-            ref_w = w - 2 * pl
+            if "padding_x" in info:   # 裏返したコマ（r）のために左右に足した列（左右で違う数）
+                ref_w = w - sum(int(v) for v in info["padding_x"])
+            else:
+                pl = int(info.get("padding", 0) or 0)
+                ref_w = w - 2 * pl
             it["rects"] = [dict(r, x=ref_w - r["x"] - r["w"]) for r in it.get("rects", [])]
         info["swaps"] = sw
     frames = [f[:, ::-1].copy() for f in swapped.frames]
