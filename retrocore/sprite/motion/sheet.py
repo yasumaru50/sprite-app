@@ -90,9 +90,17 @@ def sheet_info(result: MotionResult, image_name: str, skipped: list | None = Non
             offsets = result.info.get("offsets")
         for f, dy in zip(info["frames"], offsets or []):
             f["offset_y"] = int(dy)   # このフレームで絵が元の絵から縦にずれた量（下向きが +）
+    marks = result.info.get("swap_frames")
+    if marks:   # 差し替え（まばたきなど。swap.py）を入れたフレーム。差し替えが無い JSON は前と同じ
+        for f, m in zip(info["frames"], marks):
+            if m:
+                f["swap"] = dict(m)
     if "regions_used" in result.info:
         # 表（--motion-spec）の "auto"・割合の範囲で、実際に使った高さと線（同じ結果を作り直せるように）
         info["regions_used"] = result.info["regions_used"]
+    if "swaps" in result.info:
+        # 差し替えの記録（間隔・1 周の時間・周の数・入れた時刻とフレーム。差し替えたときだけ）
+        info["swaps"] = result.info["swaps"]
     # 作らなかった理由の記録（版 2 から。何もなければ空の一覧）。シートを作れたときは、変換の工程の分だけが入る
     info["skipped"] = list(skipped or []) + list(result.skips)
     return info

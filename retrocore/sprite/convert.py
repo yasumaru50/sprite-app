@@ -561,10 +561,11 @@ def motion_image_bytes(sprite_png: bytes, options: dict | None = None) -> dict:
     values = dict(options or {})
     try:   # 変換の工程の記録（画面は変換の結果の "skipped" をそのまま渡す。CLI は変換の結果から渡す）
         conv = check_entries(values.pop("convert_skipped", None))
+        swaps = _swap_values(values)
     except ValueError as e:
         return {"ok": False, "error": f"動きの設定に問題があり、作れませんでした: {e}", "detail": error_detail(e)}
     if "spec" in values:
-        return _table_motion(sprite_png, values, conv)
+        return _table_motion(sprite_png, values, conv, swaps)
     try:
         image_name = values.pop("image_name", None) or f"sprite_{values.get('motion', 'breathe')}_sheet.png"
         if not isinstance(image_name, str):
@@ -596,15 +597,52 @@ def motion_image_bytes(sprite_png: bytes, options: dict | None = None) -> dict:
         out["split_used"] = None if res.spec is None else res.spec["regions"]["upper"]["at"]
     elif res.name == "stretch":   # 伸び: 上に足した透明の行の数（上, 下）
         out["padding_y"] = [int(v) for v in res.info.get("padding_y", [0, 0])]
-    _add_sheet(out, res, image_name, conv)
+    _add_sheet(out, res, image_name, conv, swaps, sprite)
     return out
 
 
-def _add_sheet(out: dict, res, image_name: str, conv: list) -> None:
-    """作れたらシートの PNG と JSON、作れなかったら作らなかった理由の JSON（CLI の `_skipped.json` と同じ）を足す。"""
+def _swap_values(values: dict):
+    """動き・シートの設定から "swaps"（差し替えの一覧。`swap.py` のファイルと同じ形）を取り出して読む。無ければ None。"""
+    from .swap import swaps_from_dict
+    raw = values.pop("swaps", None)
+    if raw is None:
+        return None
+    s = swaps_from_dict(raw)
+    return None if s.empty() else s
+
+
+def _apply_swaps_view(out: dict, res, swaps, ref, palette=None):
+    """差し替えを入れた結果を返し、画面に出す記録を `out` に足す（"swaps"・"swaps_warnings"・"swaps_error"・
+    "sheet_durations"・"swap_frames"）。当てられない（大きさ・パレットが違う）ときは元の結果のまま返し、"swaps_error" に理由。"""
+    from .swap import SwapError, apply_swaps
+    out["swaps"] = None
+    out["swaps_error"] = None
+    out["swaps_warnings"] = []
+    if swaps is None:
+        return res
+    try:
+        got, rep = apply_swaps(res, ref, swaps, palette)
+    except SwapError as e:
+        out["swaps_error"] = {"code": e.code, "message": str(e)}
+        return res
+    out["swaps"] = rep.info()
+    out["swaps_warnings"] = list(rep.warnings)
+    out["sheet_durations"] = [int(d) for d in got.durations]
+    out["swap_frames"] = got.info.get("swap_frames")
+    return got
+
+
+def _add_sheet(out: dict, res, image_name: str, conv: list, swaps=None, ref=None) -> None:
+    """作れたらシートの PNG と JSON、作れなかったら作らなかった理由の JSON（CLI の `_skipped.json` と同じ）を足す。
+    `swaps` があれば、シートに差し替え（まばたきなど）を入れる（`ref` は差し替えを描いた絵。変換したスプライト）。"""
     from .motion import make_sheet, sheet_json
     from .motion.report import skipped_json
     out["skipped_records"] = list(conv) + list(res.skips)
+    if swaps is not None and not res.skipped:
+        from .swap import swaps_json
+        from .touchup import palette_of
+        res = _apply_swaps_view(out, res, swaps, ref)
+        out["swaps_json"] = swaps_json(swaps, palette_of([ref]))   # 保存する <出力名>_<動き>_swaps.json の中身
     if not res.skipped:
         out["sheet_png"] = encode_png(make_sheet(res.frames))
         out["sheet_json"] = sheet_json(res, image_name, conv)
@@ -655,7 +693,7 @@ def _spec_error_result(e) -> dict:
             "spec_errors": spec_error_items(e.problems), "detail": ""}
 
 
-def _table_motion(sprite_png: bytes, values: dict, conv: list | None = None) -> dict:
+def _table_motion(sprite_png: bytes, values: dict, conv: list | None = None, swaps=None) -> dict:
     """表（{"spec": 表の辞書か JSON の文字列, "image_name": シートの名前}）から動きを作る（`motion_image_bytes()` の表の経路）。
 
     作れた・作れなかったの返し方はプリセットと同じで、ほかに "problems"（作れない行。row は 1 から。画面でマスを赤くする）、
@@ -690,7 +728,7 @@ def _table_motion(sprite_png: bytes, values: dict, conv: list | None = None) -> 
            "offset_y": [int(v) for v in res.info.get("offset_y", [])], "poses": res.info.get("poses"),
            "spec": res.spec,
            "spec_files": {style: spec_json(with_height_style(res.spec, sprite, style)) for style in ("number", "percent")}}
-    _add_sheet(out, res, image_name, conv or [])
+    _add_sheet(out, res, image_name, conv or [], swaps, sprite)
     return out
 
 
@@ -1084,7 +1122,7 @@ def frames_sheets(request: dict, result=None) -> dict:
     from . import frames as F
     from .motion import make_sheet
     try:
-        unknown = sorted(set(request) - {"token", "base", "name", "order", "durations", "root_y", "mirror"})
+        unknown = sorted(set(request) - {"token", "base", "name", "order", "durations", "root_y", "mirror", "swaps"})
         if unknown:
             raise ValueError(f"知らない設定です: {', '.join(unknown)}")
         if result is None:
@@ -1099,6 +1137,7 @@ def frames_sheets(request: dict, result=None) -> dict:
         order = request.get("order")
         durations = request.get("durations")
         root_y = request.get("root_y")
+        swaps = _swap_values(dict(request))
         anims = [F.assemble_frames(result, order, durations, root_y, name)]
         if request.get("mirror"):
             anims.append(F.assemble_frames(result, order, durations, root_y, name, mirror=True))
@@ -1107,6 +1146,15 @@ def frames_sheets(request: dict, result=None) -> dict:
     except Exception as e:
         return {"ok": False, "error": friendly_error(e), "detail": error_detail(e)}
     from .piskel import fps_for_durations, piskel_text
+    out: dict = {"ok": True}
+    if swaps is not None:
+        from .swap import mirror_swapped, swaps_json
+        from .touchup import palette_of
+        pal = palette_of(result.frames)
+        got = _apply_swaps_view(out, anims[0], swaps, result.frames[0], pal)
+        if got is not anims[0]:
+            anims = [got] + [mirror_swapped(got, a) for a in anims[1:]]
+        out["swaps_json"] = swaps_json(swaps, pal)   # 保存する <出力名>_<名前>_swaps.json の中身
     sheets = []
     for anim in anims:
         png_name = F.sheet_file_name(base, anim)
@@ -1120,7 +1168,8 @@ def frames_sheets(request: dict, result=None) -> dict:
                        "durations": [int(d) for d in anim.durations], "mirror": anim.name.endswith("_mirror"),
                        "offset_y": [int(v) for v in anim.info.get("offset_y", [])],
                        "padding_y": [int(v) for v in anim.info.get("padding_y", (0, 0))]})
-    return {"ok": True, "sheets": sheets}
+    out["sheets"] = sheets
+    return out
 
 
 def frames_sheets_for_web(request_json: str = "{}") -> str:

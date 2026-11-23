@@ -847,6 +847,7 @@ def frames_sheet_info(result, image_name: str, skipped: list | None = None, dot_
     if dot_size is not None:
         src["dot_size"] = round(float(dot_size[0]), 3)
     skipped_list = info.pop("skipped")
+    swaps = info.pop("swaps", None)
     info["source"] = src
     if "same_as_first" in result.info:
         # 1 コマ目と同じにした記録（範囲を指定したときだけ。指定しない JSON は前と同じ）
@@ -857,6 +858,9 @@ def frames_sheet_info(result, image_name: str, skipped: list | None = None, dot_
     if "edits" in result.info:
         # 手の直し（直しがあるときだけ。無い JSON は前と同じ）。元のコマごとの差し替えの一覧と、直したドットの数
         info["edits"] = result.info["edits"]
+    if swaps is not None:
+        # 差し替え（まばたきなど。差し替えたときだけ）
+        info["swaps"] = swaps
     # 使った色（"#rrggbb"。手直ししたシートを読み戻すとき、元のパレットに無い色を見つけるのに使う。edit.py）
     from .edit import palette_hex
     info["palette"] = palette_hex(result.frames)

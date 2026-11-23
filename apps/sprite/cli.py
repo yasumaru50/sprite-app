@@ -590,6 +590,12 @@ def build_parser() -> argparse.ArgumentParser:
                     help="使った動きの表を書き出す（--motion ならプリセットが埋めた表。--motion-spec なら読んだ表）。"
                          "作れたときは、範囲ごとに実際に使った高さと線を \"used\" に書く。--motion-spec で読み直せる。"
                          "入力が複数のときは <名前>_<入力の名前>.json")
+    mo.add_argument("--swaps", type=Path, default=None, metavar="JSON",
+                    help="差し替えの一覧（ブラウザ版の「ドットを直す」の「差し替えを描く」で保存した <出力名>_<名前>_swaps.json）で、"
+                         "シートの中にまばたきを入れる。--motion・--motion-spec・--frames と一緒に使う。動き 1 周がまばたきの間隔"
+                         "（ファイルの interval_ms。既定 3000 ミリ秒）より短いときは、何周か繰り返したシートにして 1 回だけ入れる。"
+                         "まばたきがかかるフレームは時間で分ける（全体の時間は同じ）。1 コマ目と合わないフレームには入れずに警告する。"
+                         "シート・JSON（swaps）・GIF・左右反転・.piskel に入る。大きさ・パレットが合わないときは作らずに理由を表示する")
     mo.add_argument("--gif", action="store_true",
                     help="シートと一緒に、そのまま見られる GIF アニメ <出力名>_<動き>.gif も書く（サイトに載せる・人に見せる用。"
                          "--motion でも --motion-spec でも使える）。各フレームはシートのフレームと同じ絵（色を変えない・ずらさない）、"
@@ -807,6 +813,8 @@ def check_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> Non
     if given:
         parser.error(f"{' / '.join(given)} は手直しの読み戻しのオプションです。--readback と一緒に指定してください")
     check_frames_args(parser, args)
+    if args.swaps is not None and args.motion is None and args.motion_spec is None and not args.frames:
+        parser.error("--swaps は --motion breathe などか --motion-spec か --frames と一緒に指定してください（動きのシートに入れます）")
     if args.motion_spec is not None:
         if args.motion is not None:
             parser.error("--motion-spec と --motion は一緒に使えません（表で作るか、プリセットで作るかのどちらかにしてください）")
@@ -1007,6 +1015,10 @@ def write_motion(args: argparse.Namespace, sprite, dst: Path, src: Path, many: b
         if getattr(args, "gif", False):
             print(f"警告（{src.name}）: 動きを作らなかったので、GIF も書きませんでした", file=sys.stderr)
         return 1
+    if getattr(args, "swaps", None) is not None:
+        res = apply_swaps_cli(args, res, sprite, src)
+        if res is None:
+            return 1
     png, js = motion_mod.save_sheet(res, motion_path(dst, res.name), skipped)
     if not args.quiet:
         w, h = res.size
@@ -1038,10 +1050,50 @@ def write_motion(args: argparse.Namespace, sprite, dst: Path, src: Path, many: b
             parts.append(f"、{found}{found_at}で分けた（継ぎ目は下から {seams} ドット目）")
         print(f"  → {png}（{label}: {len(res.frames)} フレーム、{w}×{h}、"
               f"{'/'.join(str(d) for d in res.durations)} ミリ秒{''.join(parts)}）")
+        print_swaps(res)
         print(f"  → {js}")
     if getattr(args, "gif", False):
         return write_gif(args, res, png, src)
     return 0
+
+
+def load_swaps_cli(args: argparse.Namespace):
+    """--swaps のファイルを読む（1 回だけ）。読めなければエラーを表示して None。"""
+    if getattr(args, "_swaps", None) is None:
+        from retrocore.sprite.swap import load_swaps
+        try:
+            args._swaps = load_swaps(args.swaps.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as e:
+            print(f"エラー（{args.swaps.name}）: 差し替えの一覧を読めません: {e}", file=sys.stderr)
+            return None
+    return args._swaps
+
+
+def apply_swaps_cli(args: argparse.Namespace, anim, ref, src: Path, mirror_anim=None, palette=None):
+    """--swaps: シートの材料に差し替えを入れる。当てられなければエラーを表示して None（シートは書かない）。
+    `mirror_anim` があれば (反転していない方, 反転した方) を返す。"""
+    from retrocore.sprite.swap import SwapError, apply_swaps, mirror_swapped
+    swaps = load_swaps_cli(args)
+    if swaps is None:
+        return None
+    try:
+        out, rep = apply_swaps(anim, ref, swaps, palette)
+    except SwapError as e:
+        print(f"エラー（{src.name}）: 差し替え（{args.swaps.name}）を当てられません: {e}。"
+              "変換の設定を描いたときと同じにするか、差し替えを描き直してください", file=sys.stderr)
+        return None
+    print_warnings(rep.warnings, src)
+    if mirror_anim is not None:
+        return out, mirror_swapped(out, mirror_anim)
+    return out
+
+
+def print_swaps(res) -> None:
+    """差し替えを入れたときの 1 行（周の数・入れた時刻とフレーム）。"""
+    if "swaps" in res.info:
+        from retrocore.sprite.swap import SwapReport, swap_summary
+        sw = res.info["swaps"]
+        print("    差し替え: " + swap_summary(SwapReport(sw["interval_ms"], sw["cycle_ms"], sw["repeats"], sw["items"])))
 
 
 def write_gif(args: argparse.Namespace, res, sheet_png: Path, src: Path) -> int:
@@ -1187,6 +1239,13 @@ def write_frames(args: argparse.Namespace, rgba, settings: SpriteSettings, dst: 
     except ValueError as e:
         print(f"エラー（{src.name}）: {e}", file=sys.stderr)
         return 1
+    if args.swaps is not None:
+        from retrocore.sprite.touchup import palette_of
+        got = apply_swaps_cli(args, anims[0], res.frames[0], src, anims[1] if len(anims) > 1 else None,
+                              palette_of(res.frames))
+        if got is None:
+            return 1
+        anims = list(got) if isinstance(got, tuple) else [got]
     failed = 0
     for anim in anims:
         png, js = frames_mod.save_frames_sheet(anim, dst.with_name(frames_mod.sheet_file_name(dst.stem, anim)),
@@ -1202,6 +1261,7 @@ def write_frames(args: argparse.Namespace, rgba, settings: SpriteSettings, dst: 
             print(f"  → {png}（{'左右反転、' if anim.name.endswith('_mirror') else ''}{len(anim.frames)} フレーム、"
                   f"コマ {order}、{w}×{h}、{'/'.join(str(d) for d in anim.durations)} ミリ秒{extra}）")
             print(f"  → {js}")
+            print_swaps(anim)
             print(f"    （Piskel で直すときは: Import → Import as spritesheet → 幅 {w}・高さ {h}。{len(anim.frames)} コマ）")
         if args.piskel:
             from retrocore.sprite.piskel import fps_for_durations, piskel_text
