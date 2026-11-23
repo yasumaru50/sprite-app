@@ -595,7 +595,11 @@ def build_parser() -> argparse.ArgumentParser:
                          "シートの中にまばたきを入れる。--motion・--motion-spec・--frames と一緒に使う。動き 1 周がまばたきの間隔"
                          "（ファイルの interval_ms。既定 3000 ミリ秒）より短いときは、何周か繰り返したシートにして 1 回だけ入れる。"
                          "まばたきがかかるフレームは時間で分ける（全体の時間は同じ）。1 コマ目と合わないフレームには入れずに警告する。"
-                         "シート・JSON（swaps）・GIF・左右反転・.piskel に入る。大きさ・パレットが合わないときは作らずに理由を表示する")
+                         "シート・JSON（swaps）・GIF・左右反転・.piskel に入る。大きさ・パレットが合わないときは作らずに理由を表示する。"
+                         "一覧に口パク（talk）があれば、ふつうのシートとは別に、動きの上で口が動く「しゃべりのシート」"
+                         "<出力名>_<動き>_talk_sheet.png / .json（--frames は <出力名>_<名前>_talk_<幅>x<高さ>_<N>f.png）も書く"
+                         "（まばたきも入る。GIF・左右反転・.piskel も同じ）。口パクだけの一覧なら --motion なしでも使え、"
+                         "そのときは口だけ動く <出力名>_talk_sheet.png を書く")
     mo.add_argument("--gif", action="store_true",
                     help="シートと一緒に、そのまま見られる GIF アニメ <出力名>_<動き>.gif も書く（サイトに載せる・人に見せる用。"
                          "--motion でも --motion-spec でも使える）。各フレームはシートのフレームと同じ絵（色を変えない・ずらさない）、"
@@ -813,8 +817,12 @@ def check_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> Non
     if given:
         parser.error(f"{' / '.join(given)} は手直しの読み戻しのオプションです。--readback と一緒に指定してください")
     check_frames_args(parser, args)
+    args.talk_only = False
     if args.swaps is not None and args.motion is None and args.motion_spec is None and not args.frames:
-        parser.error("--swaps は --motion breathe などか --motion-spec か --frames と一緒に指定してください（動きのシートに入れます）")
+        if load_swaps_cli(args, quiet=True) is None or args._swaps.find("talk") is None:
+            parser.error("--swaps は --motion breathe などか --motion-spec か --frames と一緒に指定してください（動きのシートに入れます。"
+                         "口パク（talk）のある一覧なら、動きなしで口だけ動くしゃべりのシートを書きます）")
+        args.talk_only = True
     if args.motion_spec is not None:
         if args.motion is not None:
             parser.error("--motion-spec と --motion は一緒に使えません（表で作るか、プリセットで作るかのどちらかにしてください）")
@@ -863,7 +871,7 @@ def check_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> Non
         if args.motion_duration is not None and len(args.motion_duration) not in (1, frames):
             parser.error(f"--motion-duration の数（{len(args.motion_duration)}）はフレーム数（{frames}）と同じか、"
                          "1 つ（全フレーム共通）にしてください")
-    if args.gif and args.motion is None and args.motion_spec is None and not args.frames:
+    if args.gif and args.motion is None and args.motion_spec is None and not args.frames and not args.talk_only:
         parser.error("--gif は --motion breathe などか --motion-spec か --frames と一緒に指定してください（動きの GIF を書きます）")
     if not args.gif:
         given = _option_names(args, ("gif_scale", "gif_background"))
@@ -1015,6 +1023,7 @@ def write_motion(args: argparse.Namespace, sprite, dst: Path, src: Path, many: b
         if getattr(args, "gif", False):
             print(f"警告（{src.name}）: 動きを作らなかったので、GIF も書きませんでした", file=sys.stderr)
         return 1
+    base_res = res
     if getattr(args, "swaps", None) is not None:
         res = apply_swaps_cli(args, res, sprite, src)
         if res is None:
@@ -1052,19 +1061,50 @@ def write_motion(args: argparse.Namespace, sprite, dst: Path, src: Path, many: b
               f"{'/'.join(str(d) for d in res.durations)} ミリ秒{''.join(parts)}）")
         print_swaps(res)
         print(f"  → {js}")
+    failed = 0
     if getattr(args, "gif", False):
-        return write_gif(args, res, png, src)
+        failed |= write_gif(args, res, png, src)
+    if getattr(args, "swaps", None) is not None:
+        failed |= write_talk(args, base_res, sprite, dst, src, skipped)
+    return failed
+
+
+def write_talk(args: argparse.Namespace, anim, sprite, dst: Path, src: Path, skipped: list | None = None) -> int:
+    """--swaps に口パク（talk）があれば、しゃべりのシート <出力名>_<動き>_talk_sheet.png / .json（--gif なら GIF も）を書く。
+    `anim` はまばたきを入れる前の動きの結果。口パクが無ければ何もしない。作れなければ警告を出して 1 を返す。"""
+    from retrocore.sprite.swap import SwapError, apply_talk, talk_summary
+    swaps = load_swaps_cli(args)
+    if swaps is None or swaps.find("talk") is None:
+        return 0
+    try:
+        talk, rep = apply_talk(anim, sprite, swaps)
+    except SwapError as e:
+        print(f"エラー（{src.name}）: 口パク（{args.swaps.name}）を当てられません: {e}。"
+              "変換の設定を描いたときと同じにするか、差し替えを描き直してください", file=sys.stderr)
+        return 1
+    print_warnings(rep.warnings, src)
+    if talk is None:
+        return 1
+    png, js = motion_mod.save_sheet(talk, motion_path(dst, talk.name), skipped)
+    if not args.quiet:
+        w, h = talk.size
+        print(f"  → {png}（しゃべりのシート: {len(talk.frames)} フレーム、{w}×{h}、合計 {sum(talk.durations)} ミリ秒）")
+        print("    " + talk_summary(rep))
+        print(f"  → {js}")
+    if getattr(args, "gif", False):
+        return write_gif(args, talk, png, src)
     return 0
 
 
-def load_swaps_cli(args: argparse.Namespace):
-    """--swaps のファイルを読む（1 回だけ）。読めなければエラーを表示して None。"""
+def load_swaps_cli(args: argparse.Namespace, quiet: bool = False):
+    """--swaps のファイルを読む（1 回だけ）。読めなければエラーを表示して None（`quiet` なら表示しない）。"""
     if getattr(args, "_swaps", None) is None:
         from retrocore.sprite.swap import load_swaps
         try:
             args._swaps = load_swaps(args.swaps.read_text(encoding="utf-8"))
         except (OSError, ValueError) as e:
-            print(f"エラー（{args.swaps.name}）: 差し替えの一覧を読めません: {e}", file=sys.stderr)
+            if not quiet:
+                print(f"エラー（{args.swaps.name}）: 差し替えの一覧を読めません: {e}", file=sys.stderr)
             return None
     return args._swaps
 
@@ -1082,10 +1122,43 @@ def apply_swaps_cli(args: argparse.Namespace, anim, ref, src: Path, mirror_anim=
         print(f"エラー（{src.name}）: 差し替え（{args.swaps.name}）を当てられません: {e}。"
               "変換の設定を描いたときと同じにするか、差し替えを描き直してください", file=sys.stderr)
         return None
+    if rep is None:   # まばたきが無い（口パクだけ）: ふつうのシートは今までと同じ
+        return (out, mirror_anim) if mirror_anim is not None else out
     print_warnings(rep.warnings, src)
     if mirror_anim is not None:
         return out, mirror_swapped(out, mirror_anim)
     return out
+
+
+def frames_talk(args: argparse.Namespace, anims: list, res, src: Path):
+    """--frames --swaps: 口パクがあれば、しゃべりのシートの結果（反転も）を返す。無ければ []、作れなければ None（警告を出す）。"""
+    import dataclasses
+
+    from retrocore.sprite.swap import SwapError, apply_talk, mirror_swapped
+    from retrocore.sprite.touchup import palette_of
+    swaps = load_swaps_cli(args)
+    if swaps is None or swaps.find("talk") is None:
+        return []
+    try:
+        talk, rep = apply_talk(anims[0], res.frames[0], swaps, palette_of(res.frames))
+    except SwapError as e:
+        print(f"エラー（{src.name}）: 口パク（{args.swaps.name}）を当てられません: {e}。"
+              "変換の設定を描いたときと同じにするか、差し替えを描き直してください", file=sys.stderr)
+        return None
+    print_warnings(rep.warnings, src)
+    if talk is None:
+        return None
+    out = [talk]
+    if len(anims) > 1:
+        out.append(mirror_swapped(talk, dataclasses.replace(anims[1], name=talk.name + "_mirror")))
+    return out
+
+
+def print_talk(res) -> None:
+    """しゃべりのシートの 1 行（周の数・口の切り替え・まばたき）。"""
+    from retrocore.sprite.swap import SwapReport, talk_summary
+    sw = res.info["swaps"]
+    print("    しゃべり: " + talk_summary(SwapReport(sw["interval_ms"], sw["cycle_ms"], sw["repeats"], sw["items"])))
 
 
 def print_swaps(res) -> None:
@@ -1239,15 +1312,19 @@ def write_frames(args: argparse.Namespace, rgba, settings: SpriteSettings, dst: 
     except ValueError as e:
         print(f"エラー（{src.name}）: {e}", file=sys.stderr)
         return 1
+    failed = 0
+    talks = []
     if args.swaps is not None:
         from retrocore.sprite.touchup import palette_of
+        talks = frames_talk(args, anims, res, src)
+        if talks is None:
+            failed, talks = 1, []
         got = apply_swaps_cli(args, anims[0], res.frames[0], src, anims[1] if len(anims) > 1 else None,
                               palette_of(res.frames))
         if got is None:
             return 1
         anims = list(got) if isinstance(got, tuple) else [got]
-    failed = 0
-    for anim in anims:
+    for anim in anims + talks:
         png, js = frames_mod.save_frames_sheet(anim, dst.with_name(frames_mod.sheet_file_name(dst.stem, anim)),
                                                res.skipped, res.dot_size)
         if not args.quiet:
@@ -1261,7 +1338,7 @@ def write_frames(args: argparse.Namespace, rgba, settings: SpriteSettings, dst: 
             print(f"  → {png}（{'左右反転、' if anim.name.endswith('_mirror') else ''}{len(anim.frames)} フレーム、"
                   f"コマ {order}、{w}×{h}、{'/'.join(str(d) for d in anim.durations)} ミリ秒{extra}）")
             print(f"  → {js}")
-            print_swaps(anim)
+            print_talk(anim) if any(anim is t for t in talks) else print_swaps(anim)
             print(f"    （Piskel で直すときは: Import → Import as spritesheet → 幅 {w}・高さ {h}。{len(anim.frames)} コマ）")
         if args.piskel:
             from retrocore.sprite.piskel import fps_for_durations, piskel_text
@@ -1432,6 +1509,9 @@ def main(argv: list[str] | None = None) -> int:
         if (args.motion is not None or args.motion_spec is not None) and \
                 write_motion(args, out, dst, src, many=len(inputs) > 1, skipped=result.skipped) == 2:
             failed += 1
+        if getattr(args, "talk_only", False):   # 口パクだけの --swaps（動きなし）: 口だけ動くしゃべりのシート
+            from retrocore.sprite.swap import still_motion
+            write_talk(args, still_motion(out, args._swaps), out, dst, src, result.skipped)
     return 1 if failed else 0
 
 
