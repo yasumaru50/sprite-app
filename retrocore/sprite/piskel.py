@@ -117,6 +117,28 @@ def piskel_text(frames: list[np.ndarray], name: str, fps: int = DEFAULT_FPS, des
     return json.dumps(doc, ensure_ascii=True, separators=(",", ":"))
 
 
+def piskel_layers_text(layers: list, name: str, fps: int = DEFAULT_FPS, description: str = "") -> str:
+    """いくつかのレイヤー（`[(レイヤーの名前, コマの一覧), ...]`。先頭がいちばん下）の .piskel の中身。
+    どのレイヤーもコマの数・大きさは同じにする（Piskel の決まり）。重ね（fx）の「キャラ」「エフェクト」に使う。"""
+    if not layers:
+        raise ValueError("レイヤーがありません")
+    shape = np.asarray(layers[0][1][0]).shape
+    count = len(layers[0][1])
+    out = []
+    for lname, frames in layers:
+        if len(frames) != count or any(np.asarray(f).shape != shape for f in frames):
+            raise ValueError("レイヤーのコマの数・大きさがそろっていません")
+        strip = np.concatenate([np.asarray(f, np.uint8) for f in frames], axis=1)
+        layer = {"name": str(lname), "opacity": 1, "frameCount": count,
+                 "chunks": [{"layout": [[i] for i in range(count)], "base64PNG": _png_data_url(strip)}]}
+        out.append(json.dumps(layer, ensure_ascii=True, separators=(",", ":")))
+    h, w = int(shape[0]), int(shape[1])
+    doc = {"modelVersion": MODEL_VERSION,
+           "piskel": {"name": str(name), "description": str(description), "fps": int(fps), "height": h, "width": w,
+                      "layers": out, "hiddenFrames": []}}
+    return json.dumps(doc, ensure_ascii=True, separators=(",", ":"))
+
+
 def piskel_name(file_name: str) -> str:
     """.piskel の `name`（Piskel の画面に出る名前）。ファイル名から拡張子を除いたもの。"""
     stem = str(file_name).rsplit("/", 1)[-1]

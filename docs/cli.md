@@ -326,6 +326,55 @@ python -m apps.sprite chara.png --gif --swaps chara_sprite_talk_swaps.json      
 - JSON の `swaps` は `talk_ms` と、`items[]` に口パク（`type: "talk"`・`step_ms`・`pattern`・`steps`・`step_ms_used`・`frames`・`placements`）とまばたきの記録。
   `frames[].swap` は、そのフレームに入れた形（`{"talk": "open", "blink": "closed"}`。どちらかだけのこともある）
 
+## 重ね（漫画的エフェクト。`--fx`）
+
+！・汗・ハート・Zzz などを、キャラの頭の上か横に重ねる。**キャラのシートは今までと同じ**で、エフェクトは別の小さなシート（PNG と JSON）にする。
+`--motion`・`--motion-spec`・`--frames` と一緒に使う。一度に選べるのは 1 つ。`--fx` を付けないときの出力は今までとバイト単位で同じ。
+
+```bash
+python -m apps.sprite chara.png --motion breathe --fx surprise --gif          # ！（驚き）。重ねた GIF も
+python -m apps.sprite chara.png --motion breathe --fx sweat --fx-offset=1,-2 --fx-end hide
+python -m apps.sprite walk.png --frames --mirror --piskel --fx sleep         # 左右反転用と、2 レイヤーの .piskel も
+```
+
+| オプション | 内容 |
+| --- | --- |
+| `--fx NAME` | `surprise` ！（驚き。頭の上・1 回）、`sweat` 汗（頭の横・1 回）、`heart` ハート（頭の上・くり返し）、`sleep` Zzz（頭の横・くり返し） |
+| `--fx-offset X,Y` | 自動の置く場所からずらす量（ドット。右と下が +。±64 まで）。− で始まるときは `--fx-offset=-1,2` |
+| `--fx-end keep\|hide` | 1 回で終わるもの（surprise・sweat）の終わり方。`keep` = 最後の形で止めて残す（既定）、`hide` = 最後に透明のコマを足して消す |
+
+- 出力: `<キャラのシートの名前>_fx_<名前>.png` / `.json`。キャラのシートの名前から `_sheet`・`_<幅>x<高さ>_<N>f` を除いて付ける
+  （`hero_breathe_sheet.png` → `hero_breathe_fx_surprise.png`、`hero_walk_53x91_4f.png` → `hero_walk_fx_surprise_7x12_5f.png`。コマのシートは
+  エフェクトの 1 コマの大きさとコマの数を付ける）。`--mirror` なら左右反転のキャラ用も（`hero_walk_mirror_fx_…`）。しゃべりのシートには重ねない
+- `--gif` なら、キャラとエフェクトを重ねた見た目の GIF `<…>_fx_<名前>.gif`（確かめ用。長さは、くり返すものはキャラの 1 周とエフェクトの 1 周がそろう長さ
+  （12 秒まで）、1 回で終わるものはエフェクト＋1 秒をキャラの周の切れ目まで延ばした長さ）
+- `--frames --piskel` なら、レイヤー「キャラ」「エフェクト」に分けた `<…>_fx_<名前>.piskel`。Piskel は速さが 1 つだけなので、全部の時間の最大公約数の長さの
+  コマにそろえる（1 秒を割り切れて 24 FPS 以下・256 コマ以下のときだけ。作れなければ警告）
+- 置く場所はキャラのシートの 1 コマ目から自動で決める（仕組みは [how-it-works.md](how-it-works.md) の「重ね」）。左右反転のシートでは置く場所も反転する（エフェクトの絵は反転しない）
+
+### エフェクトの JSON
+
+```json
+{"version": 1, "format": "sprite-fx", "fx": "surprise", "label": "！（驚き）",
+ "image": "hero_breathe_fx_surprise.png", "character_image": "hero_breathe_sheet.png",
+ "frame_width": 6, "frame_height": 16, "frame_count": 5, "columns": 5, "rows": 1,
+ "loop": false, "end": "keep", "anchor": "top", "mirrored": false, "offset": {"x": 0, "y": 0},
+ "position": {"x": 15, "y": -17}, "character_frame": {"width": 34, "height": 44},
+ "outline_color": "#462112", "total_duration_ms": 950,
+ "frames": [{"index": 0, "x": 0, "y": 0, "width": 6, "height": 16, "duration_ms": 50}, ...]}
+```
+
+- `position`: **キャラのコマの左上から見た、エフェクトのコマの左上**（ドット。右と下が +。上や左にはみ出すときはマイナス）。全部のコマで同じ
+  （動きはエフェクトのコマの中で付いている）
+- `loop`: false は 1 回で止める。`end` はそのときの終わり方（くり返すものは `null`）。何も見えないコマ（点滅の消える所・`hide` の最後）は `frames[].empty: true`
+- `character_frame` はキャラのシートの 1 コマの大きさ、`outline_color` はエフェクトの輪郭に使った色（キャラのシルエットの縁のいちばん暗い色）
+- エフェクトのシートは、キャラのシートとは別の長さ・別の時間（それぞれをくり返す）
+
+Godot での使い方: キャラの `AnimatedSprite2D`（`centered` を切る）の子にエフェクトの `AnimatedSprite2D`（同じく `centered` を切る）を置き、
+子の `position` を JSON の `position` にする（ドット＝画素。キャラを拡大しているなら同じ倍率が掛かる）。`centered` を入れたままなら、
+子の位置は `position + (frame_width, frame_height) / 2 − (character_frame.width, character_frame.height) / 2`。
+エフェクトの SpriteFrames は Hframes = `frame_count`、各コマの時間は `duration_ms`、`loop` が false ならループを切る。
+
 ## 手直ししたシートの読み戻し（`--readback`）
 
 Piskel などで直したシート（PNG か `.piskel`）と元の JSON から、JSON・GIF・左右反転・横 1 列に並べ直したシート・.piskel を作り直す。**直したドットはそのまま使う**。手順は [sprite-edit.md](sprite-edit.md)。

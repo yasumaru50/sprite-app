@@ -96,6 +96,15 @@ AI が描いた「ドット絵風の画像」（ドット 1 個が約 20px）か
 
 保存したファイルは、画面の下に出る CLI（例 `--frames --frame-count 4 --frame-name walk --mirror --flicker --piskel`）と**バイト単位で同じ**。
 
+### 重ね（！・汗・ハート・Zzz）
+
+動きの欄（コマが並んだ絵では「コマの再生と保存」）の下の「**重ね（エフェクト）**」でエフェクトを選ぶと、上の再生がキャラとエフェクトを重ねた見た目になる（CLI の `--fx`）。
+
+- 「置く場所をずらす」（横・縦のドット）と、1 回で終わるもの（！・汗）の「終わり方」（残す・消す）を変えるとすぐ作り直す
+- 保存: エフェクトのシート（PNG）・情報（JSON）・重ねた GIF（確かめ用）。コマが並んだ絵では、左右反転用と、レイヤー「キャラ」「エフェクト」に分けた .piskel も
+- キャラのシートは今までと同じ。ゲームでは、エフェクトをキャラの子のスプライトにして、JSON の `position`（キャラのコマの左上から見たエフェクトの左上）に置く（[docs/cli.md](../../docs/cli.md) の「重ね」）
+- 入れておく絵は `retrocore/sprite/fx/art.py` の文字の表（描き直したら `python tools/build_sprite_web.py` で画面にも入る）
+
 ### 直したシートを読み戻す（Piskel で手直ししたあと）
 
 いちばん下の「**直したシートを読み戻す**」で、ファイルを選ぶだけ（CLI の `--readback`）。
@@ -123,6 +132,7 @@ python -m apps.sprite 入力.png --motion-spec apps/sprite/examples/head_rect_no
 python -m apps.sprite 歩き.png --frames --frame-count 4 --frame-order 1,2,3,2 --gif --mirror --piskel
 python -m apps.sprite 走り.png --frames --align-y match --frame-root-y=0,-1,0,-1 --flicker
 python -m apps.sprite 歩き.png --frames --frame-count 4 --steady on --same-as-first 0,0,53,53
+python -m apps.sprite 入力.png --motion breathe --fx surprise --gif                     # ！（驚き）を重ねる（別のシート）
 python -m apps.sprite 直した.piskel --readback 元.json --gif --mirror --piskel           # 手直しを読み戻す
 ```
 

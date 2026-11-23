@@ -21,6 +21,7 @@
     python -m apps.sprite 正面.png --frames --frame-order 1,2,3,2 --frame-duration 150 --mirror   # 1・2・3・2 の順、左右反転のシートも書く
     python -m apps.sprite 走り.png --frames --align-y match --frame-root-y 0,-1,0,-1 --flicker   # 頭の高さでそろえ、体全体を上下させる。ちらつきの画像も書く
     python -m apps.sprite 歩き.png --frames --piskel     # シートと一緒に Piskel で開ける .piskel も書く
+    python -m apps.sprite 入力 --motion breathe --fx surprise --gif   # ！（驚き）を別のシート（<出力名>_breathe_fx_surprise.png / .json）にして重ねる
     python -m apps.sprite 直した.piskel --readback 元.json --gif --mirror --piskel   # 手直ししたシート（PNG か .piskel）を読み戻して作り直す
 
 入力にはファイルかフォルダ（中の画像をすべて処理）を指定する。工程は `build_pipeline()` で組み立てる。
@@ -61,6 +62,7 @@ from retrocore.sprite import frames as frames_mod
 from retrocore.sprite import same as same_mod
 from retrocore.sprite import steady as steady_mod
 from retrocore.sprite import edit as edit_mod
+from retrocore.sprite import fx as fx_mod
 
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tif", ".tiff"}
 DEFAULT_OUT = Path("out") / "sprite"
@@ -262,6 +264,16 @@ def _int_list(text: str) -> list[int]:
     except ValueError:
         raise argparse.ArgumentTypeError(f"0,-1,0,-1 のように整数をカンマで区切って指定してください: {text}")
     return vals
+
+
+def _fx_offset(text: str) -> tuple[int, int]:
+    """重ねのずらす量: X,Y（ドット。右と下が +）。"""
+    vals = _int_list(text)
+    if len(vals) != 2:
+        raise argparse.ArgumentTypeError(f"X,Y の 2 つの整数で指定してください（例 1,-2）: {text}")
+    if max(abs(v) for v in vals) > fx_mod.MAX_OFFSET:
+        raise argparse.ArgumentTypeError(f"−{fx_mod.MAX_OFFSET}〜{fx_mod.MAX_OFFSET} で指定してください: {text}")
+    return vals[0], vals[1]
 
 
 def _frame_order(text: str) -> list[int]:
@@ -613,6 +625,23 @@ def build_parser() -> argparse.ArgumentParser:
     mo.add_argument("--spec-height", choices=SPEC_HEIGHTS, default=None,
                     help="--write-motion-spec で書く分ける高さ（at）の書き方。number（既定）は下から何ドット目の数（このキャラ用）、"
                          "percent はキャラの高さに対する割合（\"35.0%%\"。別のキャラにも使う）。auto はそのまま")
+    fx = p.add_argument_group(
+        "重ね（--fx。！・汗・ハート・Zzz などの漫画的エフェクトを、キャラのシートとは別の小さなシートにして重ねる。"
+        "--motion・--motion-spec・--frames と一緒に使う）")
+    fx.add_argument("--fx", choices=fx_mod.effect_names(), default=None,
+                    help="重ねるエフェクト（1 つ）。" + "、".join(f"{e['name']} = {e['label']}（{e['anchor_label']}・"
+                                                         f"{'くり返し' if e['loop'] else '1 回'}）" for e in fx_mod.fx_spec()["effects"])
+                         + "。キャラのシートは今までと同じで、エフェクトのシート <キャラのシートの名前>_fx_<名前>.png / .json を書く"
+                         "（--frames はさらに _<幅>x<高さ>_<N>f。--mirror なら左右反転のキャラ用も）。"
+                         "JSON の position は、キャラのコマの左上から見たエフェクトのコマの左上（ドット）。"
+                         "--gif なら重ねた見た目の GIF <…>_fx_<名前>.gif、--frames --piskel ならレイヤー「キャラ」「エフェクト」に分けた "
+                         "<…>_fx_<名前>.piskel も書く")
+    fx.add_argument("--fx-offset", type=_fx_offset, default=None, metavar="X,Y",
+                    help="自動で決めた置く場所（頭の上・頭の横）からずらす量（ドット。右と下が +）。− で始まるときは "
+                         "--fx-offset=-1,2 のように = でつなぐ。左右反転のシートでは左右も反転する")
+    fx.add_argument("--fx-end", choices=list(fx_mod.ENDS), default=None,
+                    help="1 回で終わるエフェクト（surprise・sweat）の終わり方。"
+                         + "、".join(f"{k} = {v}" for k, v in fx_mod.ENDS.items()) + f"（既定 {fx_mod.DEFAULT_END}）")
     fr = p.add_argument_group(
         "コマを切り分けてそろえる（--frames。何コマも横に並んだ 1 枚の絵（AI が描いた歩き・走りなど）を、"
         "同じグリッド・同じパレット・同じ大きさ・同じ足元にそろえて 1 枚のシートにする）")
@@ -811,12 +840,26 @@ def check_frames_args(parser: argparse.ArgumentParser, args: argparse.Namespace)
         parser.error(f"--same-from {args.same_from} が --frame-count {args.frame_count} を超えています")
 
 
+def check_fx_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    """--fx とそのオプションの組み合わせを確かめる。"""
+    if args.fx is None:
+        given = _option_names(args, ("fx_offset", "fx_end"))
+        if given:
+            parser.error(f"{' / '.join(given)} は重ねのオプションです。--fx surprise などと一緒に指定してください")
+        return
+    if args.motion is None and args.motion_spec is None and not args.frames:
+        parser.error("--fx は --motion breathe などか --motion-spec か --frames と一緒に指定してください（キャラのシートに重ねます）")
+    if args.fx_end is not None and fx_mod.load_effect(args.fx).loop:
+        parser.error(f"--fx-end は 1 回で終わるエフェクトだけで使えます（{args.fx} はくり返します）")
+
+
 def check_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
     """入力の種類とオプションの組み合わせを確かめる（合わなければ parser.error で止める）。"""
     given = _option_names(args, READBACK_OPTIONS)
     if given:
         parser.error(f"{' / '.join(given)} は手直しの読み戻しのオプションです。--readback と一緒に指定してください")
     check_frames_args(parser, args)
+    check_fx_args(parser, args)
     args.talk_only = False
     if args.swaps is not None and args.motion is None and args.motion_spec is None and not args.frames:
         if load_swaps_cli(args, quiet=True) is None or args._swaps.find("talk") is None:
@@ -1064,8 +1107,61 @@ def write_motion(args: argparse.Namespace, sprite, dst: Path, src: Path, many: b
     failed = 0
     if getattr(args, "gif", False):
         failed |= write_gif(args, res, png, src)
+    if getattr(args, "fx", None) is not None:
+        failed |= write_fx(args, res, png, src)
     if getattr(args, "swaps", None) is not None:
         failed |= write_talk(args, base_res, sprite, dst, src, skipped)
+    return failed
+
+
+def write_fx(args: argparse.Namespace, anim, png: Path, src: Path) -> int:
+    """--fx: キャラのシート（`anim`。保存した PNG は `png`）に重ねるエフェクトのシート・JSON（--gif なら重ねた GIF、
+    --piskel なら 2 つのレイヤーの .piskel も）を書く。作れなければ警告を出して 1 を返す。"""
+    try:
+        fx = fx_mod.make_fx(args.fx, anim.frames, anim.name.endswith("_mirror"), tuple(args.fx_offset or (0, 0)),
+                            args.fx_end)
+    except ValueError as e:
+        print(f"警告（{src.name}）: エフェクト（{args.fx}）を作れませんでした: {e}", file=sys.stderr)
+        return 1
+    name = fx_mod.fx_file_name(png.name, fx)
+    fp = png.with_name(name)
+    save_rgba(fx_mod.fx_sheet(fx), fp)
+    fp.with_suffix(".json").write_text(fx_mod.fx_json(fx, name, png.name), encoding="utf-8")
+    if not args.quiet:
+        w, h = fx.size
+        x, y = fx.position
+        end = "くり返す" if fx.loop else ("最後の形で止める" if fx.end == "keep" else "最後に消える")
+        print(f"  → {fp}（重ね {fx.label}: {len(fx.frames)} コマ、{w}×{h}、{'/'.join(str(d) for d in fx.durations)} ミリ秒、"
+              f"{end}。キャラのコマの左上から x {x:+d}・y {y:+d} ドットに置く{'（左右反転）' if fx.mirrored else ''}）")
+        print(f"  → {fp.with_suffix('.json')}")
+    failed = 0
+    stem = fx_mod.fx_stem(png.name, fx.name)
+    if getattr(args, "gif", False):
+        gp = png.with_name(stem + ".gif")
+        try:
+            gif = fx_mod.combined_gif(anim.frames, anim.durations, fx, args.gif_scale or gif_mod.DEFAULT_SCALE,
+                                      args.gif_background)
+        except ValueError as e:
+            print(f"警告（{src.name}）: 重ねた GIF を書けませんでした: {e}", file=sys.stderr)
+            failed = 1
+        else:
+            gp.write_bytes(gif.data)
+            for m in gif.warnings:
+                print(f"警告（{src.name}）: {m}", file=sys.stderr)
+            if not args.quiet:
+                print(f"  → {gp}（キャラとエフェクトを重ねた GIF: {len(gif.durations)} フレーム、合計 {sum(gif.durations)} ミリ秒。確かめ用）")
+    if getattr(args, "piskel", None):
+        text, notes = fx_mod.combined_piskel(anim.frames, anim.durations, fx, stem)
+        if text is None:
+            for m in notes:
+                print(f"警告（{src.name}）: {m}", file=sys.stderr)
+        else:
+            pp = png.with_name(stem + ".piskel")
+            pp.write_text(text, encoding="ascii")
+            if not args.quiet:
+                print(f"  → {pp}（レイヤー「キャラ」「エフェクト」の .piskel）")
+                for m in notes:
+                    print(f"    メモ: {m}")
     return failed
 
 
@@ -1351,6 +1447,8 @@ def write_frames(args: argparse.Namespace, rgba, settings: SpriteSettings, dst: 
                     print(f"    メモ: {m}")
         if args.gif:
             failed |= write_gif(args, anim, png, src)
+        if args.fx is not None and not any(anim is t for t in talks):
+            failed |= write_fx(args, anim, png, src)
     try:
         rep = frames_mod.flicker_report(res.frames, args.flicker_rows)
     except ValueError as e:

@@ -555,6 +555,45 @@
       </div>
       <div class="note help" id="frames-extra-note" data-help-at="motion-head" hidden>左右反転のシートは、反対の向きに歩かせるとき用です。ちらつきの見える化は、上の方（頭のあたり）で
         1 コマ目と違うドットを赤紫の枠で囲んだ画像です（自動では直しません。手直しの目印にしてください）。</div>
+      <div id="fx-box">
+        <h3 id="fx-title">重ね（エフェクト）</h3>
+        <div class="controls">
+          <div class="field">
+            <label for="fx-name">エフェクト</label>
+            <select id="fx-name"></select>
+            <small class="help" id="fx-name-help">！・汗・ハート・Zzz を頭の上か横に重ねます。キャラのシートは変わりません（エフェクトは別のシートになります）</small>
+          </div>
+          <div class="field">
+            <label for="fx-x" id="fx-offset-label">置く場所をずらす</label>
+            <div class="inline">横 <input type="number" id="fx-x" step="1" value="0" style="width:4.5em" aria-label="横にずらす（ドット。右が +）">
+              縦 <input type="number" id="fx-y" step="1" value="0" style="width:4.5em" aria-label="縦にずらす（ドット。下が +）"></div>
+            <small class="help" id="fx-offset-help">ドット。右と下が +。自動の場所（頭の上・頭の横）からずらします。左右反転のシートでは左右も反転します</small>
+          </div>
+          <div class="field" id="fx-end-field">
+            <label for="fx-end">終わり方</label>
+            <select id="fx-end"></select>
+            <small class="help" id="fx-end-help">1 回で終わるエフェクト（！・汗）だけ</small>
+          </div>
+        </div>
+        <div class="meta" id="fx-meta"></div>
+        <div id="fx-warn" class="message warn" hidden><div id="fx-warn-text" style="white-space:pre-wrap"></div></div>
+        <div class="actions" id="fx-files" hidden>
+          <a id="dl-fx" class="button secondary" aria-disabled="true" href="#">エフェクトのシート（PNG）</a>
+          <a id="dl-fx-json" class="button secondary" aria-disabled="true" href="#">エフェクトの情報（JSON）</a>
+          <button type="button" class="secondary" id="dl-fx-gif" disabled>重ねた GIF（確かめ用）</button>
+          <a id="dl-fx-piskel" class="button secondary" aria-disabled="true" href="#" hidden>重ねた .piskel（キャラ・エフェクトの 2 レイヤー）</a>
+        </div>
+        <div class="actions" id="fx-mirror-files" hidden>
+          <a id="dl-fx-mirror" class="button secondary" aria-disabled="true" href="#">左右反転用のエフェクト（PNG）</a>
+          <a id="dl-fx-mirror-json" class="button secondary" aria-disabled="true" href="#">左右反転用の情報（JSON）</a>
+          <button type="button" class="secondary" id="dl-fx-mirror-gif" disabled>左右反転の重ねた GIF</button>
+          <a id="dl-fx-mirror-piskel" class="button secondary" aria-disabled="true" href="#">左右反転の重ねた .piskel</a>
+        </div>
+        <div class="note help" id="fx-help" data-help-at="fx-title">エフェクトを選ぶと、上の再生がキャラとエフェクトを重ねた見た目になります（「行の番号」は出ません）。
+          ゲームでは、キャラのシートとエフェクトのシートを別々に読み、エフェクトをキャラの子のスプライトにして、JSON の
+          <code>position</code>（キャラのコマの左上から見た、エフェクトのコマの左上。ドット）に置きます。エフェクトのシートは、キャラとは別の長さ・別の時間です
+          （<code>loop</code> が false のものは 1 回で止めます）。CLI では <code id="fx-cli">--fx</code>。</div>
+      </div>
       <div id="same-box" hidden>
         <h3 id="same-title">1 コマ目と同じにする範囲</h3>
         <div class="note help" data-help-at="same-title">頭など。変えるとすぐ写し直します。変換はやり直しません。
@@ -816,6 +855,7 @@ let framesSameForWeb = null;
 let framesEditsForWeb = null;
 let framesRestoreForWeb = null;
 let readbackForWeb = null;
+let fxForWeb = null;
 async function init(indexURL, sources) {
   importScripts(indexURL + "pyodide.js");
   pyodide = await loadPyodide({ indexURL });
@@ -846,6 +886,9 @@ async function init(indexURL, sources) {
     "    return motion_for_web(js_bytes.to_bytes(), options_json)",
     "def sprite_app_gif(js_bytes, sheet_json, options_json):",
     "    return gif_for_web(js_bytes.to_bytes(), sheet_json, options_json)",
+    "from retrocore.sprite.fx import fx_for_web",
+    "def sprite_app_fx(js_bytes, sheet_json, options_json):",
+    "    return fx_for_web(js_bytes.to_bytes(), sheet_json, options_json)",
     "def sprite_app_table(request_json, js_bytes=None):",
     "    return table_for_web(request_json, None if js_bytes is None else js_bytes.to_bytes())",
     // 画面の範囲の一覧: 割合で書いた端を数にする（CLI と同じ retrocore の edge_number。表示と絵の上の枠に使う）
@@ -868,6 +911,7 @@ async function init(indexURL, sources) {
   framesEditsForWeb = pyodide.globals.get("frames_edits_for_web");
   framesRestoreForWeb = pyodide.globals.get("frames_restore_for_web");
   readbackForWeb = pyodide.globals.get("sprite_app_readback");
+  fxForWeb = pyodide.globals.get("sprite_app_fx");
 }
 self.onmessage = async (ev) => {
   const msg = ev.data;
@@ -888,6 +932,10 @@ self.onmessage = async (ev) => {
       self.postMessage({ type: "result", id: msg.id, result: JSON.parse(json) });
     } else if (msg.type === "gif") {
       const json = gifForWeb(new Uint8Array(msg.bytes), msg.sheetJson, JSON.stringify(msg.options));
+      self.postMessage({ type: "result", id: msg.id, result: JSON.parse(json) });
+    } else if (msg.type === "fx") {
+      // 重ね（エフェクト）: キャラのシートに重ねるエフェクトのシートと、重ねた見た目（CLI の --fx と同じ関数）
+      const json = fxForWeb(new Uint8Array(msg.bytes), msg.sheetJson, JSON.stringify(msg.options));
       self.postMessage({ type: "result", id: msg.id, result: JSON.parse(json) });
     } else if (msg.type === "frames") {
       // コマが並んだ絵: 変換してそろえる（結果のコマは Python の中に覚えておき、シートは "frames-sheets" で作る）
@@ -1373,7 +1421,9 @@ const motion = {
   sheetImg: null, info: null, sheetUrl: null, jsonUrl: null, frame: 0, playing: true, timer: null,
   sheetPng: null, sheetJson: null,   // GIF の材料（保存するシートの PNG と JSON そのもの）
   inFlight: false, again: false, debounce: null, limits: null, height: null, staticImg: null,
+  fxView: null,   // 重ね（エフェクト）を選んでいるときの、重ねた見た目 {img, info}
 };
+const fx = { urls: [], debounce: null, inFlight: false, again: false, results: [], seq: 0 };   // 重ね（エフェクト）
 for (const [id, spec] of [["depth", MSPEC.depth], ["amount", MSPEC.sway.amount], ["bounce-height", BSPEC.height]]) {
   for (let d = spec.min; d <= spec.max; d++) {
     const o = document.createElement("option");
@@ -1561,6 +1611,7 @@ function stopTimer() { if (motion.timer) clearTimeout(motion.timer); motion.time
 function clearMotion(text) {
   stopTimer();
   revokeMotionFiles();
+  fxClear();
   motion.sheetImg = motion.info = motion.staticImg = motion.badRows = null;
   motion.limits = motion.height = null;
   $("motion-wrap").hidden = true;
@@ -1806,6 +1857,7 @@ async function showMotion(result, ms) {
   updatePlayer();
   showFrame(motion.frame);
   if (motion.playing) schedule();
+  if (fxEffect()) requestFx(0);   // 重ね（エフェクト）を選んでいれば、新しいキャラのシートに重ね直す
 }
 
 function motionScale(w, h, rulerW) {
@@ -1849,12 +1901,16 @@ function drawRuler(h, k) {
   }
   ctx.globalAlpha = 1;
 }
+// 再生する絵と情報: 重ね（エフェクト）を選んでいれば重ねた見た目、無ければキャラのシート
+function playInfo() { return motion.fxView ? motion.fxView.info : motion.info; }
 function drawMotion() {
-  const img = motion.sheetImg || motion.staticImg;
+  const fv = motion.fxView;
+  const info = playInfo();
+  const img = fv ? fv.img : (motion.sheetImg || motion.staticImg);
   if (!img) return;
-  const w = motion.info ? motion.info.frame_width : img.width;
-  const h = motion.info ? motion.info.frame_height : img.height;
-  const rows = $("show-rows").checked;
+  const w = info ? info.frame_width : img.width;
+  const h = info ? info.frame_height : img.height;
+  const rows = $("show-rows").checked && !fv;
   const rulerW = rows ? 45 : 0;
   const k = motionScale(w, h, rulerW);
   const c = $("motion-canvas");
@@ -1862,7 +1918,7 @@ function drawMotion() {
   const ctx = c.getContext("2d");
   ctx.imageSmoothingEnabled = false;  // ぼかさず、ドットのまま拡大する
   ctx.clearRect(0, 0, c.width, c.height);
-  const f = motion.info ? motion.info.frames[motion.frame] : { x: 0, y: 0 };
+  const f = info ? info.frames[motion.frame] : { x: 0, y: 0 };
   ctx.drawImage(img, f.x, f.y, w, h, 0, 0, w * k, h * k);
   if (motion.badRows && !motion.info) {
     // 表の作れなかった行: 分けられなかった高さ（下から何ドット目）を赤い帯で示す
@@ -1889,21 +1945,23 @@ function drawMotion() {
   }
   $("ruler").hidden = !rows;
   if (rows) drawRuler(h, k);
-  if (motion.info) $("frame-label").textContent =
-    `フレーム ${motion.frame + 1} / ${motion.info.frame_count}（${f.duration_ms} ミリ秒）`;
+  if (info) $("frame-label").textContent = (fv ? "重ねた見た目 " : "フレーム ")
+    + `${motion.frame + 1} / ${info.frame_count}（${f.duration_ms} ミリ秒）`;
   $("motion-stage").dataset.scale = String(k);
 }
 function showFrame(i) {
-  if (!motion.info) return;
-  const n = motion.info.frame_count;
+  const info = playInfo();
+  if (!info) return;
+  const n = info.frame_count;
   motion.frame = ((i % n) + n) % n;
   drawMotion();
 }
 function schedule() {
   stopTimer();
-  if (!motion.info || !motion.playing) return;
+  const info = playInfo();
+  if (!info || !motion.playing) return;
   motion.timer = setTimeout(() => { showFrame(motion.frame + 1); schedule(); },
-                            motion.info.frames[motion.frame].duration_ms);
+                            info.frames[motion.frame].duration_ms);
 }
 $("play").addEventListener("click", () => {
   motion.playing = !motion.playing;
@@ -3252,6 +3310,197 @@ async function saveGif(sheetPng, sheetJson, button) {
   }
 }
 
+// ---- 重ね（エフェクト。CLI の --fx） ----
+// キャラのシート（保存する PNG と JSON そのもの）を fx_for_web に渡し、エフェクトのシート・JSON・重ねた見た目を作る。
+// キャラのシートには手を入れない。中身は CLI と同じ関数なので、同じ設定なら同じバイトになる。
+const XSPEC = SPEC.fx;
+(function fillFx() {
+  const none = document.createElement("option");
+  none.value = "none"; none.textContent = "なし";
+  $("fx-name").appendChild(none);
+  for (const e of XSPEC.effects) {
+    const o = document.createElement("option");
+    o.value = e.name;
+    o.textContent = `${e.label}（${e.anchor_label}・${e.loop ? "くり返し" : "1 回"}）`;
+    $("fx-name").appendChild(o);
+  }
+  for (const [k, v] of XSPEC.end.choices) {
+    const o = document.createElement("option");
+    o.value = k; o.textContent = v + (k === XSPEC.end.default ? "（既定）" : "");
+    $("fx-end").appendChild(o);
+  }
+  $("fx-end").value = XSPEC.end.default;
+  for (const id of ["fx-x", "fx-y"]) { $(id).min = -XSPEC.max_offset; $(id).max = XSPEC.max_offset; }
+})();
+function fxEffect() { return XSPEC.effects.find((e) => e.name === $("fx-name").value) || null; }
+function fxOptions() {
+  const e = fxEffect();
+  if (!e) return null;
+  const off = ["fx-x", "fx-y"].map((id) => {
+    const t = $(id).value.trim();
+    const v = t === "" ? 0 : Number(t);
+    if (!Number.isInteger(v) || Math.abs(v) > XSPEC.max_offset) {
+      throw new Error(`置く場所をずらす量は −${XSPEC.max_offset}〜${XSPEC.max_offset} の整数（ドット）にしてください: ${t}`);
+    }
+    return v;
+  });
+  const o = { fx: e.name, offset: off };
+  if (!e.loop) o.end = $("fx-end").value;
+  return o;
+}
+function fxCli(o) {
+  if (!o) return "";
+  let t = ` --fx ${o.fx}`;
+  if (o.offset[0] || o.offset[1]) t += ` --fx-offset=${o.offset[0]},${o.offset[1]}`;
+  if (o.end && o.end !== XSPEC.end.default) t += ` --fx-end ${o.end}`;
+  return t;
+}
+function fxStripCli() { $("cli-equiv").textContent = $("cli-equiv").textContent.replace(/ --fx .*$/, ""); }
+function fxSetLink(id, bytes, type, name) {
+  const u = URL.createObjectURL(new Blob([bytes], { type }));
+  fx.urls.push(u);
+  $(id).href = u; $(id).download = name; $(id).setAttribute("aria-disabled", "false");
+}
+// 重ねた見た目・保存のボタンを消す（キャラのシートを作り直すとき・「なし」にしたとき）
+function fxClear(note) {
+  fx.seq++;
+  for (const u of fx.urls) URL.revokeObjectURL(u);
+  fx.urls = []; fx.results = [];
+  if (motion.fxView) { motion.fxView = null; motion.frame = 0; }
+  for (const id of ["dl-fx", "dl-fx-json", "dl-fx-piskel", "dl-fx-mirror", "dl-fx-mirror-json", "dl-fx-mirror-piskel"]) {
+    $(id).href = "#"; $(id).setAttribute("aria-disabled", "true");
+  }
+  $("dl-fx-gif").disabled = $("dl-fx-mirror-gif").disabled = true;
+  $("fx-files").hidden = $("fx-mirror-files").hidden = true;
+  $("fx-warn").hidden = true;
+  $("fx-meta").textContent = note || "";
+  fxStripCli();
+}
+function fxLayout() {
+  const e = fxEffect();
+  $("fx-end").disabled = !e || e.loop;
+  $("fx-end-field").style.opacity = !e || e.loop ? "0.55" : "";
+  for (const id of ["fx-x", "fx-y"]) $(id).disabled = !e;
+}
+function requestFx(delay = 200) {
+  if (fx.debounce) clearTimeout(fx.debounce);
+  fx.debounce = setTimeout(() => { fx.debounce = null; runFx(); }, delay);
+}
+// キャラのシート（と、コマが並んだ絵なら左右反転のシート）を材料に作る
+function fxSheets() {
+  if (!motion.sheetPng || !motion.sheetJson) return [];
+  const out = [{ png: motion.sheetPng, json: motion.sheetJson }];
+  if (framesMode() && frames.mirrorPng && frames.mirrorJson) out.push({ png: frames.mirrorPng, json: frames.mirrorJson });
+  return out;
+}
+async function runFx() {
+  fxLayout();
+  if (!ready) return;
+  let o;
+  try { o = fxOptions(); } catch (e) { fxClear(); $("fx-warn-text").textContent = e.message; $("fx-warn").hidden = false; return; }
+  if (!o) {
+    const had = !!motion.fxView;
+    fxClear();
+    if (had) { drawMotion(); if (motion.playing) schedule(); }
+    return;
+  }
+  const sheets = fxSheets();
+  if (!sheets.length) { fxClear(motion.staticImg ? "動きを作れなかったので、エフェクトは重ねていません（キャラのシートが無いため）。" : ""); return; }
+  if (fx.inFlight) { fx.again = true; return; }
+  fx.inFlight = true;
+  const seq = ++fx.seq;
+  try {
+    const results = [];
+    for (const sh of sheets) {
+      const { result } = await call({ type: "fx", bytes: sh.png.slice().buffer, sheetJson: sh.json,
+                                       options: { ...o, piskel: framesMode() } });
+      results.push({ result, sheet: sh });
+    }
+    if (fx.again || seq !== fx.seq) return;
+    await fxShow(results, o);
+  } catch (e) {
+    fxClear();
+    $("fx-warn-text").textContent = "思いがけないエラーでエフェクトを作れませんでした。" + failureDetail(e);
+    $("fx-warn").hidden = false;
+  } finally {
+    fx.inFlight = false;
+    if (fx.again) { fx.again = false; runFx(); }
+  }
+}
+async function fxShow(results, o) {
+  fxClear();
+  const first = results[0].result;
+  if (!first.ok) { $("fx-warn-text").textContent = first.error; $("fx-warn").hidden = false; drawMotion(); return; }
+  fx.results = results;
+  const v = first.view;
+  const viewUrl = URL.createObjectURL(new Blob([decodeBase64(v.png_base64)], { type: "image/png" }));
+  fx.urls.push(viewUrl);
+  const img = await loadImage(viewUrl);
+  let x = 0;
+  const frs = v.durations.map((d) => { const f = { x, y: 0, duration_ms: d }; x += v.width; return f; });
+  stopTimer();
+  motion.fxView = { img, info: { frame_width: v.width, frame_height: v.height, frame_count: frs.length, frames: frs } };
+  motion.frame = 0;
+  const rows = [["dl-fx", "dl-fx-json", "dl-fx-piskel"], ["dl-fx-mirror", "dl-fx-mirror-json", "dl-fx-mirror-piskel"]];
+  results.forEach(({ result: r }, i) => {
+    if (!r.ok) return;
+    const [png, js, pk] = rows[i];
+    fxSetLink(png, decodeBase64(r.png_base64), "image/png", r.name);
+    fxSetLink(js, r.json, "application/json", r.name.replace(/\.png$/, ".json"));
+    if (r.piskel) fxSetLink(pk, r.piskel, "application/json", r.piskel_name);
+    $(i ? "dl-fx-mirror-gif" : "dl-fx-gif").disabled = false;
+  });
+  $("fx-files").hidden = false;
+  $("fx-mirror-files").hidden = results.length < 2;
+  $("dl-fx-piskel").hidden = !framesMode();
+  const pnote = framesMode() && first.piskel === null ? (first.piskel_notes || []) : [];
+  const warns = [...(first.warnings || []), ...pnote];
+  if (warns.length) { $("fx-warn-text").textContent = warns.join("\n"); $("fx-warn").hidden = false; }
+  const e = fxEffect();
+  const [px, py] = first.position;
+  const sgn = (n) => (n >= 0 ? "+" + n : String(n));
+  $("fx-meta").textContent = `${e.label}: ${first.frame_width}×${first.frame_height} ドット × ${first.frame_count} コマ`
+    + `（${first.durations.join("/")} ミリ秒、${first.loop ? "くり返す" : first.end === "hide" ? "1 回で、最後に消える" : "1 回で、最後の形で止める"}）`
+    + ` ／ キャラのコマの左上から x ${sgn(px)}・y ${sgn(py)} ドットに置く`
+    + (results.length > 1 && results[1].result.ok ? `（左右反転のシートでは x ${sgn(results[1].result.position[0])}）` : "")
+    + ` ／ 再生は重ねた見た目（${v.length_ms} ミリ秒で 1 回）`;
+  fxStripCli();
+  $("cli-equiv").textContent += fxCli(o);
+  $("fx-cli").textContent = fxCli(o).trim() || "--fx";
+  drawMotion();
+  updatePlayer();
+  if (motion.playing) schedule();
+}
+async function saveFxGif(i, button) {
+  const item = fx.results[i];
+  if (!item || !item.result.ok) return;
+  let o;
+  try { o = fxOptions(); } catch (e) { return; }
+  button.disabled = true;
+  $("gif-status").textContent = "重ねた GIF を作っています…";
+  try {
+    const { result } = await call({ type: "fx", bytes: item.sheet.png.slice().buffer, sheetJson: item.sheet.json,
+                                     options: { ...o, gif: gifOptions() } });
+    if (!result.ok) { $("gif-status").textContent = result.error; return; }
+    saveBlob(decodeBase64(result.gif_base64), result.gif_name, "image/gif");
+    const g = result.gif;
+    $("gif-status").textContent = `「${result.gif_name}」を保存しました（キャラとエフェクトを重ねた見た目。${g.durations.length} フレーム、`
+      + `${g.scale} 倍、${g.background ? "背景 " + g.background : "透明"}、合計 ${g.durations.reduce((a, b) => a + b, 0)} ミリ秒）。`
+      + (g.warnings || []).map((w) => w + "。").join("") + `CLI では ${$("gif-cli").textContent}${fxCli(o)}。`;
+  } finally {
+    button.disabled = false;
+  }
+}
+$("dl-fx-gif").addEventListener("click", () => saveFxGif(0, $("dl-fx-gif")));
+$("dl-fx-mirror-gif").addEventListener("click", () => saveFxGif(1, $("dl-fx-mirror-gif")));
+for (const id of ["dl-fx", "dl-fx-json", "dl-fx-piskel", "dl-fx-mirror", "dl-fx-mirror-json", "dl-fx-mirror-piskel"]) {
+  $(id).addEventListener("click", (ev) => { if ($(id).getAttribute("aria-disabled") === "true") ev.preventDefault(); });
+}
+$("fx-name").addEventListener("change", () => requestFx(0));
+$("fx-end").addEventListener("change", () => requestFx(0));
+for (const id of ["fx-x", "fx-y"]) $(id).addEventListener("input", () => requestFx());
+fxLayout();
+
 // ---- コマが並んだ絵（CLI の --frames） ----
 // 「② 変換する」で frames_convert_for_web（切り分け・グリッド・単純化…・そろえる。重い）を呼び、結果のコマは Python の中に覚えておく。
 // 順番・時間・体の上下・名前を変えたときは frames_sheets_for_web（シートを作るだけ。軽い）だけを呼び直す。
@@ -3657,6 +3906,7 @@ async function showSheets(result, req) {
   updatePlayer();
   showFrame(motion.frame);
   if (motion.playing) schedule();
+  if (fxEffect()) requestFx(0);   // 重ね（エフェクト）を選んでいれば、新しいキャラのシートに重ね直す
 }
 // ちらつきを減らした結果（「ちらつきを減らす: あり」のときだけ）: 各コマで 1 コマ目に戻したドットの数
 function steadyText(result) {
