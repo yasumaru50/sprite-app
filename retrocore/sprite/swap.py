@@ -47,7 +47,7 @@
 1. **何周にするか**: 口の 1 回り（閉じる → 開く、か 閉じる → 半分 → 開く → 半分）の時間で、シート全体の時間がちょうど割り切れるように
    動きを何周か繰り返す（まばたきもあれば、まばたきの間隔に近い周の数から探す）。`TALK_MAX_MS` までで割り切れなければ、
    口の切り替えの時間を `TALK_STRETCH`（2%）まで伸び縮みさせてつなぐ（どちらでも、シートの終わりと始まりで口がつながる）
-2. **位置を探す・確かめる**: まばたきと同じ（`_place()`）。口を入れられないフレームは閉じた口のまま（警告）。
+2. **位置を探す・確かめる**: まばたきと同じ（`_place()`。ただし位置を探す窓は四角のまわり `TALK_MARGIN` ドット。口のまわりは肌だけのことが多いため）。口を入れられないフレームは閉じた口のまま（警告）。
    入れられないフレームが半分以上なら、しゃべりのシートは作らない（理由と次に試せることを警告にする）
 3. **まばたき**: ふつうのシートと同じ決め方で 1 回入れる。目と口の四角が重なるフレームには、口を優先してまばたきを入れない（`overlap`）
 4. **時間を分ける**: 口の切り替え・まばたき・元のフレームの境目で時間を分ける（全体の時間は変えない）。`MIN_PIECE` ミリ秒より
@@ -88,6 +88,7 @@ TALK_STRETCH = 0.02      # 割り切れないとき、口の切り替えの時�
 TALK_MAX_SKIP = 0.5      # 口を入れられないフレームがこの割合以上なら、しゃべりのシートは作らない
 MIN_MATCH = 0.7          # これ未満の合い方のフレームには当てない
 MARGIN = 2               # 位置を探すとき・違う部品を確かめるときに、四角のまわりを何ドット広げて見るか
+TALK_MARGIN = 4          # 口の位置を探すときに、四角のまわりを何ドット広げて見るか（口のまわりは肌だけで、2 ドットでは合う位置が決まらないことがあるため）
 CLUSTER_GAP = 2          # 違うドットどうしがこのドット数以内なら、同じ固まり（同じ四角）にする
 MIN_PIECE = 20           # これより短い切れ端は作らない（多くのブラウザは 20 ミリ秒未満の GIF を 100 ミリ秒にする）
 MAX_FRAMES = 256         # 繰り返したシートのフレームの数の上限
@@ -559,8 +560,9 @@ def _intrusion(ref: np.ndarray, frame: np.ndarray, rect, at) -> bool:
 
 
 def _place(frame: np.ndarray, index: int, ref: np.ndarray, sw: Swap, origin: tuple[int, int], search: int,
-           line_colors: np.ndarray) -> Placement:
-    """1 フレームで差し替えの位置を探し、確かめて、形ごとの絵を作る（四角が何個あっても、ずれは 1 つ）。"""
+           line_colors: np.ndarray, margin: int = MARGIN) -> Placement:
+    """1 フレームで差し替えの位置を探し、確かめて、形ごとの絵を作る（四角が何個あっても、ずれは 1 つ）。
+    `margin` は位置を探す窓の広げ方（確かめるときは `MARGIN` のまま）。"""
     from .same import _classes, _seam_mask
     rects = sw.rects()
     H, W = ref.shape[:2]
@@ -569,8 +571,8 @@ def _place(frame: np.ndarray, index: int, ref: np.ndarray, sw: Swap, origin: tup
     # 位置を探す窓（四角のまわりを MARGIN ドット広げる。1 コマ目のキャンバスの中だけ）
     wins = []
     for rx, ry, rw, rh in rects:
-        wx0, wy0 = max(0, rx - MARGIN), max(0, ry - MARGIN)
-        wx1, wy1 = min(W, rx + rw + MARGIN), min(H, ry + rh + MARGIN)
+        wx0, wy0 = max(0, rx - margin), max(0, ry - margin)
+        wx1, wy1 = min(W, rx + rw + margin), min(H, ry + rh + margin)
         wins.append((wx0, wy0, wx1 - wx0, wy1 - wy0, _keys(ref[wy0:wy1, wx0:wx1])))
     best = None
     for dx, dy in _shifts(search):
@@ -925,7 +927,7 @@ def apply_talk(anim, ref: np.ndarray, s: SwapSet, palette: list[str] | None = No
 
     step = s.talk_step()
     pattern = talk.talk_pattern()
-    mouth = [_place(frames[i], i, ref, talk, origins[i], s.search, line_colors) for i in range(n)]
+    mouth = [_place(frames[i], i, ref, talk, origins[i], s.search, line_colors, TALK_MARGIN) for i in range(n)]
     item: dict = {"type": talk.type, "rects": [{"x": r[0], "y": r[1], "w": r[2], "h": r[3]} for r in talk.rects()],
                   "shapes": [sn for sn in TYPES[talk.type] if talk.shapes.get(sn)], "step_ms": int(step),
                   "pattern": list(pattern)}
