@@ -286,17 +286,22 @@ python -m apps.sprite 正面歩き.png --frames --frame-count 3 --frame-order 1,
 ```json
 {"version": 1, "kind": "sprite_swaps", "name": "frames", "frame_width": 66, "frame_height": 92,
  "palette": ["#rrggbb", ...], "interval_ms": 3000, "close_ms": 120, "half_ms": 60, "search": 3,
- "swaps": [{"type": "blink", "rect": {"x": 22, "y": 39, "w": 20, "h": 1},
+ "swaps": [{"type": "blink", "rects": [{"x": 22, "y": 39, "w": 2, "h": 1}, {"x": 40, "y": 39, "w": 2, "h": 1}],
             "closed": [[22, 39, 13, 0], ...], "half": [[x, y, 色の番号 か null, 1 コマ目の色の番号 か null], ...]}]}
 ```
 
 - `closed`（閉じた目）はいる、`half`（半分閉じた目）はなくてもよい。あれば 開く → 半分（`half_ms`）→ 閉じる（`close_ms`）→ 半分 → 開く
 - 動き 1 周が `interval_ms`（500〜20000）より短いときは、動きを何周か繰り返したシートにして 1 回だけ入れる（周の数 = 間隔 ÷ 1 周 を四捨五入）。シートの名前のフレームの数も増える
 - まばたきはシートの真ん中あたりのフレームの始まりから入れ、かかるフレームを時間で分ける（全体の時間は変えない。20 ミリ秒より短い切れ端は作らない）
-- 各フレームで頭の位置を上下左右 `search` ドット以内で探す。合い方 0.7 未満・足元が変わるフレームには入れず警告する（入れられるフレームから始める）。どのフレームにも入れられなければ、元のシートのまま警告する
+- `rects` は違うドットの離れた固まりごとの四角（2 ドット以内のドットは同じ固まり。左右の目は別々）。書き出すときだけ付け、読むときはドットから決め直す
+- 各フレームで頭の位置を上下左右 `search` ドット以内で探す（四角が何個あってもずれは 1 つ）。次のフレームには入れず、どのフレームがなぜ入らなかったかを警告する
+  （入れられるフレームから始める。迷ったら入れない）: 合い方 0.7 未満（`low_match`）・キャンバスの外（`edge`）・足元が変わる（`foot`）・
+  四角の境目をまたいで 1 コマ目と違う部品がある（`crossing`。コマごとに動く前髪・手など）・外から入ってきた太い部品がある（`intrusion`）・
+  置き換えると四角の境目で段差・輪郭の途切れができる（`seam`。`intrusion`・`seam` は `--same-as-first` と同じ確かめ）。
+  どのフレームにも入れられなければ、元のシートのまま警告する
 - 1 コマ目の大きさ・パレットが描いたときと違うと、作らずに理由を出す（終了コード 1）。1 コマ目の色が描いたときと違うドットは数を警告する
-- シートの JSON に `swaps`（`interval_ms`・`cycle_ms`・`repeats`・`items`。`items[]` は `type`・`rect`・`shapes`・`applied`・`start_ms`・`duration_ms`・`frames`（入れたフレームの番号。0 から）・
-  `placements`（元のフレームごとの `shift`・`match`・`used`）・`frames_not_used`）と、入れたフレームの `frames[].swap`（`{"type": "blink", "shape": "closed"}`）を足す。
+- シートの JSON に `swaps`（`interval_ms`・`cycle_ms`・`repeats`・`items`。`items[]` は `type`・`rects`・`shapes`・`applied`・`start_ms`・`duration_ms`・`frames`（入れたフレームの番号。0 から）・
+  `placements`（元のフレームごとの `shift`・`match`・`used`）・`frames_not_used`（入れなかったフレームと `code`））と、入れたフレームの `frames[].swap`（`{"type": "blink", "shape": "closed"}`）を足す。
   `.piskel` は速さを 1 つしか持てないので、短いフレームもいちばん多い時間で再生される（本当の時間は JSON）。読み戻しでは、まばたきのフレームを「同じ元のコマが違う」として数えない
 
 ## 手直ししたシートの読み戻し（`--readback`）
