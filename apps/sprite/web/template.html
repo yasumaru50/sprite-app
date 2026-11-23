@@ -167,6 +167,13 @@
   #same-canvas:focus { outline: 2px solid var(--accent, #3b6fd8); }
   table.same-table { border-collapse: collapse; font-size: 0.88em; margin-top: 6px; }
   table.same-table th, table.same-table td { border: 1px solid var(--line); padding: 2px 8px; text-align: left; }
+  ol#join-list { margin: 6px 0; padding-left: 1.6em; }
+  ol#join-list li { margin: 3px 0; }
+  ol#join-list button { padding: 1px 8px; font-size: 0.85em; margin-left: 4px; }
+  ol#join-list button.join-pick { margin-left: 0; background: transparent; color: inherit; border: 1px solid transparent; text-align: left; }
+  ol#join-list li.selected button.join-pick { border-color: currentColor; font-weight: 700; }
+  ol#join-list .join-info { color: var(--muted); font-size: 0.9em; margin-left: 6px; }
+  ol#join-list .join-info.warn { color: #b35c00; }
   ul#same-list { margin: 6px 0; padding-left: 1.2em; }
   ul#same-list button { padding: 1px 8px; font-size: 0.85em; margin-left: 6px; }
   ul#same-list button.same-pick { margin-left: 0; background: transparent; color: inherit; border: 1px solid transparent; text-align: left; }
@@ -244,7 +251,7 @@
 
   <section class="panel">
     <div class="drop" id="drop">
-      <div>① 変換したい画像を選ぶ（ここに画像をドラッグしても選べます）</div>
+      <div>① 変換したい画像を選ぶ（ここに画像をドラッグしても選べます。「コマが並んだ絵」では何枚でも選べます）</div>
       <input type="file" id="file" accept="image/png,image/jpeg,image/webp,image/bmp,image/gif">
     </div>
     <div class="input-kind" role="radiogroup" aria-label="入力の種類">
@@ -278,6 +285,23 @@
       </div>
     </div>
     <div id="frames-settings" hidden>
+      <div id="join-box" hidden>
+        <h3 id="join-title">つなげるファイル</h3>
+        <div class="note help" data-help-at="join-title">長い動き（ダンスなど）を AI に何枚かに分けて描かせたときは、ファイルを全部選ぶと、上から順につなげて 1 つの動きにします
+          （1 枚の中のコマは 1 つでも何コマでもかまいません）。▲▼ で並び順を入れ替え、「外す」で一覧から外せます。変えたら「② 変換する」をもう一度押します。
+          ドットの大きさはファイルごとに見つけ、色（パレット）は全部のファイルで 1 つにします。つなぎ目のコマは自動では混ぜません。
+          CLI では <code>python -m apps.sprite dance1.png dance2.png --frames --join</code>。</div>
+        <ol id="join-list"></ol>
+        <div class="actions">
+          <button type="button" class="secondary" id="join-add-button">＋ ファイルを足す</button>
+          <input type="file" id="join-add" multiple hidden accept="image/png,image/jpeg,image/webp,image/bmp,image/gif">
+          <label class="check"><input type="checkbox" id="join-height">
+            <span>キャラの高さを合わせる<small class="help" data-help-at="join-title">ファイルごとにキャラの高さ（ファイルの中でいちばん高いコマ）が違うとき、ドット絵に戻すときの格子の大きさを少し変えて、
+              いちばん小さいファイルに合わせます（完成したドット絵は拡大・縮小しません）。最初は印なし（合わせない）です。しゃがみ・ジャンプのコマだけのファイルが混ざると、
+              ほかのファイルが小さくされてしまうためです。印なしでも、高さの違うファイルがあれば注意を出します。違いが 1 割より大きいときは、印を付けても合わせません（AI に描き直させてください）</small></span></label>
+        </div>
+        <div class="note" id="join-note" role="status" aria-live="polite"></div>
+      </div>
       <h3 id="frames-cut-title">コマの切り分けとそろえ方</h3>
       <div class="note help" data-help-at="frames-cut-title">変えたら「② 変換する」をもう一度押します。</div>
       <div class="controls">
@@ -850,6 +874,7 @@ let tableForWeb = null;
 let gifForWeb = null;
 let edgesForWeb = null;
 let framesConvertForWeb = null;
+let framesJoinForWeb = null;
 let framesSheetsForWeb = null;
 let framesSameForWeb = null;
 let framesEditsForWeb = null;
@@ -877,6 +902,10 @@ async function init(indexURL, sources) {
     "from retrocore.sprite.convert import frames_convert_for_web, frames_sheets_for_web, frames_same_for_web, frames_edits_for_web, frames_restore_for_web",
     "def sprite_app_frames(js_bytes, request_json):",
     "    return frames_convert_for_web(js_bytes.to_bytes(), request_json)",
+    "from retrocore.sprite.convert import frames_convert_files_for_web",
+    "def sprite_app_frames_join(js_list, names_json, request_json):",
+    "    import json",
+    "    return frames_convert_files_for_web([b.to_bytes() for b in js_list], json.loads(names_json), request_json)",
     "from retrocore.sprite.convert import readback_for_web",
     "def sprite_app_readback(edited, name, info_text, original, options_json):",
     "    return readback_for_web(edited.to_bytes(), name, info_text, None if original is None else original.to_bytes(), options_json)",
@@ -906,6 +935,7 @@ async function init(indexURL, sources) {
   gifForWeb = pyodide.globals.get("sprite_app_gif");
   edgesForWeb = pyodide.globals.get("sprite_app_edges");
   framesConvertForWeb = pyodide.globals.get("sprite_app_frames");
+  framesJoinForWeb = pyodide.globals.get("sprite_app_frames_join");
   framesSheetsForWeb = pyodide.globals.get("frames_sheets_for_web");
   framesSameForWeb = pyodide.globals.get("frames_same_for_web");
   framesEditsForWeb = pyodide.globals.get("frames_edits_for_web");
@@ -941,6 +971,11 @@ self.onmessage = async (ev) => {
       // コマが並んだ絵: 変換してそろえる（結果のコマは Python の中に覚えておき、シートは "frames-sheets" で作る）
       const t0 = performance.now();
       const json = framesConvertForWeb(new Uint8Array(msg.bytes), JSON.stringify(msg.request));
+      self.postMessage({ type: "result", id: msg.id, result: JSON.parse(json), pyMs: performance.now() - t0 });
+    } else if (msg.type === "frames-join") {
+      // コマが並んだ絵（ファイルを何枚も選んだとき。1 枚でもよい）: 並べた順につなげて変換する（CLI の --frames --join）
+      const t0 = performance.now();
+      const json = framesJoinForWeb(msg.list.map((b) => new Uint8Array(b)), JSON.stringify(msg.names), JSON.stringify(msg.request));
       self.postMessage({ type: "result", id: msg.id, result: JSON.parse(json), pyMs: performance.now() - t0 });
     } else if (msg.type === "frames-same") {
       // 1 コマ目と同じにする範囲だけをやり直す（変換はやり直さない）
@@ -1083,6 +1118,9 @@ $("reset").addEventListener("click", resetSettings);
 let busy = true, ready = false, srcFile = null, srcBytes = null, srcImage = null, outImage = null, outUrl = null;
 let outPng = null, outBase = "sprite", spriteVersion = 0;  // 変換の結果（動きの材料）
 let srcBoxes = null, srcBoxesBad = false;   // コマが並んだ絵: 元の絵で見つけたコマの枠 [[x0, y0, x1, y1], ...]
+// コマが並んだ絵で、つなげるファイルの一覧（並べた順）。files: [{ file, bytes, image }]。1 つ目が srcFile・srcBytes・srcImage と同じ。
+// view は「元の画像」に出しているファイルの番号（0 から）。stale は一覧を変えた後、まだ変換し直していないとき
+const join = { files: [], view: 0, stale: false };
 function framesMode() { const r = document.querySelector('input[name="input-kind"]:checked'); return !!r && r.value === "frames"; }
 let outSkipped = [];  // 変換の工程の作らなかった理由の記録（シートの JSON の "skipped" に入れるので、動きを作るときに渡す）
 function setStatus(text, spinning) {
@@ -1129,6 +1167,9 @@ function showWarnings(list) {
 }
 function updateButtons() {
   $("convert").disabled = busy || !ready || !srcBytes;
+  // つなげるファイルの一覧の ▲▼・外す・足す（変換している間は押せない）
+  for (const b of document.querySelectorAll("#join-list button.secondary")) b.disabled = busy || b.dataset.off === "1";
+  if ($("join-add-button")) $("join-add-button").disabled = busy;
   $("download").setAttribute("aria-disabled", outUrl && !busy ? "false" : "true");
 }
 function zoomFor(img, stage) {
@@ -1172,9 +1213,13 @@ function drawBoxes(ctx, boxes, scale, shrink) {
   });
 }
 function redraw() {
-  if (srcImage) $("meta-src").textContent = `${srcImage.width}×${srcImage.height} 画素 ／ `
-    + draw($("stage-src"), srcImage, framesMode() ? srcBoxes : null)
-    + (framesMode() && srcBoxes ? ` ／ ${srcBoxesBad ? "橙" : "赤い"}枠 = 見つけたコマ（${srcBoxes.length} 個）` : "");
+  const many = framesMode() && join.files.length > 1;
+  const view = many ? join.files[Math.min(join.view, join.files.length - 1)] : null;
+  const vimg = view ? view.image : srcImage, vboxes = many ? joinViewBoxes() : (framesMode() ? srcBoxes : null);
+  if (vimg) $("meta-src").textContent = (view ? `${view.file.name} ／ ` : "") + `${vimg.width}×${vimg.height} 画素 ／ `
+    + draw($("stage-src"), vimg, vboxes)
+    + (vboxes ? ` ／ ${srcBoxesBad ? "橙" : "赤い"}枠 = 見つけたコマ（${vboxes.length} 個）` : "");
+  else if (view) { $("stage-src").innerHTML = '<span class="empty">この画像はブラウザで表示できません</span>'; $("meta-src").textContent = view.file.name; }
   if (outImage) $("meta-out").dataset.zoom = draw($("stage-out"), outImage);
   if (outImage) $("meta-out").textContent = $("meta-out").dataset.info + " ／ " + $("meta-out").dataset.zoom;
 }
@@ -1212,7 +1257,7 @@ async function pickFile(file) {
   const bytes = new Uint8Array(await file.arrayBuffer());
   // 直しがあるときは、前の画像と結果を控えておく（変換した後に、直しをどうするかを確認の窓で聞く。「ドットを直す」の touchCarry）
   if (typeof touchCount === "function" && touchCount() && !touch.carry) {
-    touch.carry = { name: srcFile ? srcFile.name : "", outBase, src: { file: srcFile, bytes: srcBytes, image: srcImage },
+    touch.carry = { name: srcFile ? srcFile.name : "", outBase, src: { file: srcFile, bytes: srcBytes, image: srcImage, join: join.files.slice() },
                     snap: frames.token && frames.result ? framesSnapshot() : null };
   }
   if (touch.carry) {
@@ -1238,7 +1283,7 @@ async function pickFile(file) {
   if (ready && !busy) setStatus(`「${file.name}」を選びました。「② 変換する」を押してください。`
     + (touch.carry ? `直したドット ${touchCount()} 個があります。変換した後に、新しい画像に当てるかどうかを聞きます。` : ""), false);
 }
-$("file").addEventListener("change", (ev) => pickFile(ev.target.files[0]));
+$("file").addEventListener("change", (ev) => pickFiles(ev.target.files));
 // 直しがあるときは、同じファイルを選び直しても選んだことになるようにする（中身が変わっているかもしれないため）。
 // 直しが無いときは今までと同じ（同じファイルを選び直しても何もしない）
 $("file").addEventListener("click", (ev) => { if (touchCount()) ev.target.value = ""; });
@@ -1247,8 +1292,120 @@ drop.addEventListener("dragover", (ev) => { ev.preventDefault(); drop.classList.
 drop.addEventListener("dragleave", () => drop.classList.remove("over"));
 drop.addEventListener("drop", (ev) => {
   ev.preventDefault(); drop.classList.remove("over");
-  if (ev.dataTransfer.files.length) pickFile(ev.dataTransfer.files[0]);
+  if (ev.dataTransfer.files.length) pickFiles(ev.dataTransfer.files);
 });
+
+// ---- つなげるファイルの一覧（コマが並んだ絵で、ファイルを何枚も選んだとき。CLI の --frames --join） ----
+async function joinEntry(file) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let image = null;
+  const url = URL.createObjectURL(file);
+  try { image = await loadImage(url); } catch (e) { image = null; } finally { URL.revokeObjectURL(url); }
+  return { file, bytes, image };
+}
+// 選んだファイル（何枚でも）。「1 枚の絵」のときは 1 枚目だけ。一覧は選び直したファイルで置き換える（足すのは「＋ ファイルを足す」）
+async function pickFiles(list) {
+  const files = [...(list || [])].filter(Boolean);
+  if (!files.length) return;
+  await pickFile(files[0]);
+  join.files = [{ file: srcFile, bytes: srcBytes, image: srcImage }];
+  join.view = 0;
+  join.stale = false;
+  if (framesMode()) for (const f of files.slice(1)) join.files.push(await joinEntry(f));
+  joinRender();
+  redraw();
+  if (join.files.length > 1 && ready && !busy) {
+    setStatus(`${join.files.length} 個のファイルを選びました（上から順につなげます）。並び順を確かめて「② 変換する」を押してください。`
+      + (touch.carry ? `直したドット ${touchCount()} 個があります。変換した後に、新しい画像に当てるかどうかを聞きます。` : ""), false);
+  }
+}
+// ファイルの名前（同じ名前が 2 つ以上あれば 2 つ目から "名前#2"。Python の join.file_keys() と同じ）
+function joinKeys() {
+  const seen = {};
+  return join.files.map((f) => { const b = f.file.name || "image"; seen[b] = (seen[b] || 0) + 1; return seen[b] === 1 ? b : `${b}#${seen[b]}`; });
+}
+function joinViewBoxes() {
+  const r = frames.result;
+  if (!r || !r.files || srcBoxesBad) return null;
+  const key = joinKeys()[Math.min(join.view, join.files.length - 1)];
+  const f = r.files.find((v) => v.name === key);
+  return f ? f.boxes : null;
+}
+// 一覧を変えた（並び順・外す・足す）: 1 つ目のファイルを元の画像にする。結果は変換し直すまでそのまま（古い印を付ける）
+function joinChanged(text) {
+  const first = join.files[0];
+  srcFile = first.file; srcBytes = first.bytes; srcImage = first.image;
+  join.view = Math.min(join.view, join.files.length - 1);
+  join.stale = !!frames.token;
+  joinRender();
+  redraw();
+  updateButtons();
+  if (ready && !busy) setStatus(text + "「② 変換する」を押すと、この並び順でつなげ直します。", false);
+}
+const JOIN_STATUS = { base: "いちばん小さい（基準）", same: "そのまま", adjusted: "高さを合わせた", too_far: "違いが大きくて合わせていない",
+                      off: "高さが違う（合わせていない）" };
+function joinRender() {
+  const on = framesMode() && join.files.length > 0;
+  $("join-box").hidden = !on;
+  if (!on) return;
+  const ul = $("join-list");
+  ul.innerHTML = "";
+  const keys = joinKeys(), r = frames.result && !join.stale ? frames.result : null;
+  join.files.forEach((f, i) => {
+    const li = document.createElement("li");
+    li.classList.toggle("selected", join.files.length > 1 && i === join.view);
+    const pick = document.createElement("button");
+    pick.type = "button"; pick.className = "join-pick"; pick.textContent = f.file.name;
+    pick.title = "元の画像に出す";
+    pick.addEventListener("click", () => { join.view = i; joinRender(); redraw(); });
+    li.appendChild(pick);
+    const btn = (label, title, disabled, run) => {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "secondary"; b.textContent = label; b.title = title; b.setAttribute("aria-label", `${f.file.name}: ${title}`);
+      b.dataset.off = disabled ? "1" : "0";
+      b.disabled = disabled || busy; b.addEventListener("click", run); li.appendChild(b);
+    };
+    btn("▲", "1 つ上へ", i === 0, () => { join.files.splice(i - 1, 0, join.files.splice(i, 1)[0]); if (join.view === i) join.view = i - 1; joinChanged(`「${f.file.name}」を上へ動かしました。`); });
+    btn("▼", "1 つ下へ", i === join.files.length - 1, () => { join.files.splice(i + 1, 0, join.files.splice(i, 1)[0]); if (join.view === i) join.view = i + 1; joinChanged(`「${f.file.name}」を下へ動かしました。`); });
+    btn("外す", "一覧から外す", join.files.length === 1, () => { join.files.splice(i, 1); joinChanged(`「${f.file.name}」を一覧から外しました。`); });
+    const info = r && r.files ? r.files.find((v) => v.name === keys[i]) : null;
+    if (info) {
+      const span = document.createElement("span");
+      const last = info.first_frame + info.frame_count - 1;
+      span.className = "join-info" + (info.height_match === "too_far" || info.height_match === "off" ? " warn" : "");
+      span.textContent = `${info.frame_count} コマ（${info.first_frame}${last > info.first_frame ? "〜" + last : ""} コマ目）・ドット ${info.dot_size}px・高さ ${info.height}`
+        + (info.height_match === "adjusted" ? ` → ${info.height_used} ドット（格子 ${info.grid_scale} 倍）` : " ドット")
+        + (r.files.length > 1 ? `・${JOIN_STATUS[info.height_match] || ""}` : "");
+      li.appendChild(span);
+    }
+    ul.appendChild(li);
+  });
+  const notes = [];
+  if (join.stale) notes.push("一覧を変えました。まだ前の並び順の結果です（「② 変換する」でつなげ直します）。");
+  else if (r && r.files && r.files.length > 1) {
+    const adj = r.files.filter((v) => v.height_match === "adjusted");
+    const far = r.files.filter((v) => v.height_match === "too_far");
+    const off = r.files.filter((v) => v.height_match === "off");
+    if (off.length) notes.push("高さの違うファイル: " + off.map((v) => `${v.name}（${v.height} ドット）`).join("、")
+      + "（合わせていません。同じポーズで大きさだけが違うなら「キャラの高さを合わせる」に印を付けると合わせられます）。");
+    if (adj.length) notes.push("高さを合わせたファイル: " + adj.map((v) => `${v.name}（格子 ${v.grid_scale} 倍、${v.height} → ${v.height_used} ドット）`).join("、") + "。");
+    if (far.length) notes.push("高さの違いが大きくて合わせていないファイル: " + far.map((v) => `${v.name}（${v.height} ドット）`).join("、") + "（下の注意を見てください）。");
+    const big = (r.joins || []).filter((j) => j.large);
+    notes.push(big.length ? `つなぎ目で体の位置が大きくずれる所が ${big.length} か所あります（下の注意。ちらつきの見える化の橙の線がファイルの境目です）。`
+      : "つなぎ目で体の位置が大きくずれる所はありません（ちらつきの見える化の橙の線がファイルの境目です）。");
+  } else if (join.files.length === 1) notes.push("ファイルが 1 つのときは、今までと同じ変換です。別の絵をつなげるときは「＋ ファイルを足す」。");
+  $("join-note").textContent = notes.join("");
+}
+$("join-add-button").addEventListener("click", () => $("join-add").click());
+$("join-add").addEventListener("change", async (ev) => {
+  const files = [...ev.target.files];
+  ev.target.value = "";
+  if (!files.length) return;
+  if (!join.files.length) { await pickFiles(files); return; }
+  for (const f of files) join.files.push(await joinEntry(f));
+  joinChanged(`${files.map((f) => `「${f.name}」`).join("")}を一覧の最後に足しました。`);
+});
+$("join-height").addEventListener("change", () => { if (frames.token) { join.stale = true; joinRender(); setStatus("「② 変換する」を押すと、高さの合わせ方を変えて変換し直します。", false); } });
 
 // ---- Python（Pyodide）とのやりとり ----
 let worker = null, nextId = 1;
@@ -3545,6 +3702,8 @@ function layoutFrames() {
   // コマが並んだ絵のときは、動きの欄を「コマの再生と保存」にする（再生・1 コマ送り・背景・保存のボタンは同じものを使う）
   const on = framesMode();
   $("frames-settings").hidden = !on;
+  $("file").multiple = on;
+  joinRender();
   $("src-title").textContent = on ? "元の画像（赤い枠 = 見つけたコマ）" : "元の画像";
   $("motion-title").textContent = on ? "コマの再生と保存" : "動き";
   for (const id of ["motion-choice", "table-load-error"]) if (on) $(id).hidden = true;
@@ -3610,8 +3769,15 @@ function revokeFrameFiles() {
   $("dl-mirror-gif").disabled = true;
   $("piskel-hint").hidden = true;
 }
+// 「順番」の欄の薄い表示（空のときの例）を、変換したコマの数に合わせる（9 コマ以上は途中を … で省く）
+function framesOrderHint(n) {
+  const k = Number.isInteger(n) && n > 0 ? n : 4;
+  const all = Array.from({ length: k }, (_, i) => i + 1);
+  $("frame-order").placeholder = k > 8 ? [...all.slice(0, 3), "…", k].join(",") : all.join(",");
+}
 function clearFrames() {
   revokeFrameFiles();
+  framesOrderHint(null);
   frames.token = frames.result = frames.sheets = null;
   for (const u of [frames.flickerUrl, frames.flickerJsonUrl, frames.skippedUrl]) if (u) URL.revokeObjectURL(u);
   frames.flickerUrl = frames.flickerJsonUrl = frames.skippedUrl = null;
@@ -3683,6 +3849,10 @@ function sheetRequest() {
 // CLI で同じファイルを作る引数（画面の下に出す）
 function framesCli(req) {
   const parts = ["--frames"];
+  if (join.files.length > 1) {
+    parts.push("--join");
+    if ($("join-height").checked) parts.push("--join-match-height");
+  }
   const c = $("frame-count").value.trim();
   if (c) parts.push(`--frame-count ${c}`);
   if ($("frame-align").value !== FSPEC.align.default) parts.push(`--align ${$("frame-align").value}`);
@@ -3719,7 +3889,11 @@ async function runFramesConvert() {
   setStatus("コマを切り分けて変換しています…（大きな絵では数十秒かかることがあります）", true);
   const t0 = performance.now();
   try {
-    const { result } = await call({ type: "frames", bytes: srcBytes.slice().buffer, request });
+    // ファイルの一覧（1 つでも）を並べた順に渡す（中身は CLI の --frames、2 つ以上は --frames --join と同じ）
+    if (!join.files.length) join.files = [{ file: srcFile, bytes: srcBytes, image: srcImage }];
+    request.match_height = $("join-height").checked;
+    const { result } = await call({ type: "frames-join", list: join.files.map((f) => f.bytes.slice().buffer), names: joinKeys(), request });
+    join.stale = false;
     const sec = ((performance.now() - t0) / 1000).toFixed(1);
     if (!result.ok) {
       clearResult("変換できませんでした");
@@ -3730,7 +3904,8 @@ async function runFramesConvert() {
     if (!result.made) {
       // コマを作らなかった（CLI の「コマを作りませんでした」と <出力名>_<名前>_skipped.json）
       clearResult("コマを作りませんでした");
-      srcBoxes = result.boxes || null; srcBoxesBad = true;
+      srcBoxes = join.files.length > 1 ? null : (result.boxes || null); srcBoxesBad = true;
+      joinRender();
       redraw();
       if (srcBoxes) $("src-title").textContent = `元の画像（橙の枠 = 見つけたコマ ${srcBoxes.length} 個。数が合いません）`;
       $("frames-skip").hidden = false;
@@ -3743,6 +3918,8 @@ async function runFramesConvert() {
       return;
     }
     outBase = `${baseName()}_sprite`;
+    frames.joinAt = join.files.slice();   // この結果を作ったときのファイルの並び（「やめる」で戻す）
+    frames.joinHeightAt = request.match_height;
     await framesShowConverted(result);
     frames.lastInputs = usedInputs;
     setStatus(`変換できました（${sec} 秒。コマ ${result.frame_count} 個）。下の「コマの再生と保存」で確かめてください。`
@@ -3775,6 +3952,9 @@ async function framesShowConverted(result) {
     $("src-title").textContent = "元の画像（赤い枠 = 見つけたコマ）";
     frames.token = result.token;
     frames.result = result;
+    srcBoxesBad = false;
+    framesOrderHint(result.frame_count);
+    joinRender();
     $("meta-out").dataset.info = `そろえた ${result.frame_count} コマを並べた絵（1 コマ ${result.frame_width}×${result.frame_height} ドット）`
       + ` ／ ${result.colors} 色（全部のコマで共通）／ ドット ${result.dot_size}px`;
     redraw();
@@ -3798,7 +3978,8 @@ const FRAMES_CONVERT_INPUTS = ["colors", "cleanup", "outline", "frame-count", "f
 function framesSnapshot() {
   // 入力欄の値は「前の変換に使った値」（変換を押す前に変えた値ではなく）
   return { result: frames.result, outBase, inputs: { ...frames.lastInputs },
-           sameRanges: same.ranges.map((r) => ({ ...r })), sameUndo: same.undo.slice() };
+           sameRanges: same.ranges.map((r) => ({ ...r })), sameUndo: same.undo.slice(),
+           joinFiles: (frames.joinAt || join.files).slice(), joinHeight: frames.joinHeightAt !== undefined ? frames.joinHeightAt : $("join-height").checked };
 }
 // 「やめる」: 変換し直す前の結果・範囲・直し・入力欄の値に戻す（Python の中の結果も 1 つ前に戻す）
 async function framesRestore(snap) {
@@ -3806,6 +3987,15 @@ async function framesRestore(snap) {
   if (!r.ok) { touchMessage(r.error, true); return false; }
   for (const [id, v] of Object.entries(snap.inputs)) $(id).value = v;
   frames.lastInputs = { ...snap.inputs };
+  // つなげるファイルの一覧も、その結果を作ったときの並び順に戻す
+  if (snap.joinFiles && snap.joinFiles.length) {
+    join.files = snap.joinFiles.slice();
+    srcFile = join.files[0].file; srcBytes = join.files[0].bytes; srcImage = join.files[0].image;
+    join.view = Math.min(join.view, join.files.length - 1);
+    join.stale = false;
+    frames.joinAt = join.files.slice();
+    $("join-height").checked = snap.joinHeight; frames.joinHeightAt = snap.joinHeight;
+  }
   clearResult("前の結果に戻しています…");
   outBase = snap.outBase;
   await framesShowConverted(snap.result);
@@ -3815,6 +4005,8 @@ async function framesRestore(snap) {
   sameList(); sameDraw(); sameShow(snap.result.same ? snap.result : null);
   snap.result.touchup_error = null;
   await touchView(snap.result);
+  touchBind(snap.result);
+  joinRender();
   setStatus("変換し直しをやめて、前の結果・範囲・直しに戻しました（変換の設定の入力欄も前の値に戻しました）。", false);
   return true;
 }
@@ -4371,12 +4563,21 @@ function touchColorAt(k, x, y, withEdits) {
 function touchCount() { let n = 0; for (const m of touch.edits.values()) n += m.size; return n; }
 function touchFileName(base = outBase) { return `${base}_${frameNameSafe()}_edits.json`; }
 // 保存する直しの一覧（今の直しのコマの大きさで作る。新しい結果を「ドットを直す」欄に出す前に作っておく）
-function touchSaveFile(base = outBase) { return { text: JSON.stringify(touchDict(), null, 2) + "\n", name: touchFileName(base) }; }
+function touchSaveFile(base = outBase) { return { text: JSON.stringify(touchDict({ forSave: true }), null, 2) + "\n", name: touchFileName(base) }; }
 // 直しを全部捨てる（keep なら saveFile を保存してから）。Python の中の直しは変えない（呼んだ所で消すか、結果ごと消える）
 function touchDrop(keep, saveFile) {
   if (keep) saveText(saveFile.text, saveFile.name);
   touch.edits = new Map(); touch.undo = []; touch.redo = []; touch.changed = new Map(); touch.carry = null;
+  touchBind();
 }
+// 直しの一覧のコマの番号が、いまの結果のどのファイルの何コマ目か（つなげたとき、並び順を入れ替えても同じ絵のコマに付けるため）
+function touchBind(r = frames.result) {
+  touch.editSources = r && r.sources ? r.sources.map((v) => v.slice()) : null;
+  touch.editOffsets = r && r.offsets ? r.offsets.map((v) => v.slice()) : null;
+  touch.editFw = touch.fw; touch.editFh = touch.fh;   // 直しの一覧のキー（y*幅+x）を作ったときのコマの幅（並び順を変えて幅が変わっても読み違えないように）
+}
+// つなげた結果か（ファイルが 2 つ以上）
+function joinedSources(src) { return !!src && new Set(src.map((v) => v[0])).size > 1; }
 function touchOrder() {
   let order = null;
   try { order = frameOrder(); } catch (e) { order = null; }
@@ -4717,6 +4918,7 @@ $("touch-load").addEventListener("change", async (ev) => {
   touchShow(result);
   framesApplyView(result);
   await runSheets();
+  touchBind();
   touchMessage(`直しの一覧（${f.name}）を読み込みました（直したドット ${touchCount()}）。`, false);
 });
 function touchFromDict(d) {
@@ -4733,18 +4935,28 @@ function touchFromDict(d) {
   }
   return out;
 }
-function touchDict() {
+// opts.forSave: 保存するファイル（つなげたときだけファイルの記録を書く。1 つのときは前と同じ形）。
+// それ以外（Python に渡す）は、前かいまの結果がつなげたものなら、ファイルの記録とコマを置いた位置も渡す（Python が今のコマの番号に付け直す）
+function touchDict(opts = {}) {
+  const src = opts.files === false ? null : touch.editSources;
+  const withFiles = !!src && (opts.forSave ? joinedSources(src) : (joinedSources(src) || joinedSources(frames.result && frames.result.sources)));
   const pal = touch.palette.slice();
   const idx = (c) => { if (c === null) return null; let i = pal.indexOf(c); if (i < 0) { pal.push(c); i = pal.length - 1; } return i; };
   const fr = [];
   for (const k of [...touch.edits.keys()].sort((a, b) => a - b)) {
     const m = touch.edits.get(k);
     if (!m.size) continue;
-    const dots = [...m.keys()].sort((a, b) => a - b).map((key) => { const e = m.get(key); return [key % touch.fw, Math.floor(key / touch.fw), idx(e.c), idx(e.was)]; });
-    fr.push({ source_frame: k, dots });
+    const fw = touch.editFw || touch.fw;
+    const dots = [...m.keys()].sort((a, b) => a - b).map((key) => { const e = m.get(key); return [key % fw, Math.floor(key / fw), idx(e.c), idx(e.was)]; });
+    const where = withFiles && src[k - 1] ? { file: src[k - 1][0], file_frame: src[k - 1][1] } : {};
+    if (where.file && touch.editOffsets && touch.editOffsets[k - 1]) where.origin = touch.editOffsets[k - 1].slice();
+    fr.push({ source_frame: k, ...where, dots });
   }
-  return { version: 1, kind: "sprite_edits", name: frameNameSafe(), frame_width: touch.fw, frame_height: touch.fh,
-           frame_count: touch.n, palette: pal, frames: fr };
+  const head = { version: withFiles ? 2 : 1, kind: "sprite_edits", name: frameNameSafe(),
+                 frame_width: touch.editFw || touch.fw, frame_height: touch.editFh || touch.fh,
+                 frame_count: touch.n };
+  if (withFiles) head.files = [...new Set(src.map((v) => v[0]))];
+  return { ...head, palette: pal, frames: fr };
 }
 // ---- 差し替え（まばたき・口パク。CLI の --swaps） ----
 // 「差し替えを描く」では、1 コマ目（直しを当てたもの。1 枚の絵は変換した絵）の上に「閉じた目」「半分閉じた目」「開いた口」「半分開いた口」を描く。
@@ -4790,8 +5002,15 @@ function swapDict(times, allowEmpty = false) {
   const t = { ...(times || swapTimes()) };
   const talkMs = t.talk_ms;
   delete t.talk_ms;
+  // 描いた 1 コマ目がどのファイルの何コマ目か（コマが並んだ絵だけ）。並び順を変えて 1 コマ目が別の絵になったら、Python が注意を返す
+  if (!swapCount()) touch.swapBase = null;
+  else if (!touch.swapBase && !touch.single && frames.result && frames.result.sources) touch.swapBase = frames.result.sources[0].slice();
+  // 書くのは、いまの結果がつなげたもの（ファイルが 2 つ以上）のときだけ（1 つのときの一覧は前と同じ形）
+  const joinedNow = !touch.single && frames.result && joinedSources(frames.result.sources);
+  const base = touch.swapBase && joinedNow ? { base: { file: touch.swapBase[0], file_frame: touch.swapBase[1] } } : {};
   return { version: 1, kind: "sprite_swaps", name: swapName(), frame_width: touch.fw, frame_height: touch.fh, palette: pal,
-           ...t, search: 3, ...(swapHas("open") || swapHas("mouth_half") ? { talk_ms: talkMs === undefined ? null : talkMs } : {}), swaps: list };
+           ...t, search: 3, ...(swapHas("open") || swapHas("mouth_half") ? { talk_ms: talkMs === undefined ? null : talkMs } : {}),
+           ...base, swaps: list };
 }
 // 捨てる前に保存する差し替えの一覧（今の絵の大きさで作る。大きさが変わる前に作っておく）
 function swapSaveFile() {
@@ -4855,7 +5074,7 @@ function swapRequest() {
 }
 function swapChanged() { touch.swapNote = null; if (touch.single) requestMotion(150); else requestSheets(150); }
 function swapReset() {
-  touch.swaps = new Map(); touch.mode = "edits"; touch.single = false; touch.swapName = null;
+  touch.swaps = new Map(); touch.mode = "edits"; touch.single = false; touch.swapName = null; touch.swapBase = null;
   touch.undo = touch.undo.filter((u) => u.every((ch) => typeof ch.k !== "string"));
   touch.redo = touch.redo.filter((u) => u.every((ch) => typeof ch.k !== "string"));
   $("swap-mode").checked = false; $("swap-mode").disabled = false; $("swap-box").hidden = true;
@@ -4868,7 +5087,8 @@ function swapShow(result) {
   if (touch.swapUrl) { URL.revokeObjectURL(touch.swapUrl); touch.swapUrl = null; }
   const n = swapCount(), closed = touch.swaps.get("closed"), half = touch.swaps.get("half");
   talkShow(result);
-  const warns = [...(touch.swapNote ? [touch.swapNote] : []), ...(result.swaps_warnings || [])];
+  const warns = [...(touch.swapNote ? [touch.swapNote] : []), ...(result.swaps_base_warning ? [result.swaps_base_warning] : []),
+                 ...(result.swaps_warnings || [])];
   if (result.swaps_error) warns.unshift(`差し替えを当てられません: ${result.swaps_error.message}`);
   $("swap-warn").hidden = !warns.length;
   $("swap-warn-text").textContent = warns.join("\n");
@@ -5084,6 +5304,8 @@ $("swap-load").addEventListener("change", async (ev) => {
     for (const key of new Set([...a.keys(), ...b.keys()])) changes.push({ k, key, before: a.get(key), after: b.get(key) });
   }
   if (!touch.single) { $("swap-mode").checked = true; touch.mode = "swap"; $("swap-box").hidden = false; }
+  // 読み込んだ一覧に描いた 1 コマ目の記録があれば引き継ぐ（無ければ、いまの 1 コマ目に描いたものとみなす）
+  touch.swapBase = d.base && typeof d.base.file === "string" && Number.isInteger(d.base.file_frame) ? [d.base.file, d.base.file_frame] : null;
   touchPushUndo(changes);
   touchReplay(changes, false);
   $("swap-warn").hidden = true;
@@ -5267,21 +5489,37 @@ async function touchAfterConvert(snap) {
   const why = "前の結果がもう無いため（画像を選び直した・入力の種類を変えたなど）";
   await touchView(r);
   if (!touchCount()) {
+    touchBind(r);
     touchShow(r);
     if (touch.swapHeld) await swapCannotApply(cancel, why);
     return;
   }
-  if (carry) { await touchCarry(carry, prev, saveFile); return; }
-  if (prev && (prev[0] !== r.frame_width || prev[1] !== r.frame_height || touchMaxFrame() > r.frame_count)) {
+  if (carry) { await touchCarry(carry, prev, saveFile); touchBind(r); return; }
+  // つなげたとき（前かいまの結果のファイルが 2 つ以上）は、コマの大きさ・番号が変わっても Python がファイルの記録とコマを置いた位置で付け直す
+  const remap = joinedSources(touch.editSources) || joinedSources(r.sources);
+  if (!remap && prev && (prev[0] !== r.frame_width || prev[1] !== r.frame_height || touchMaxFrame() > r.frame_count)) {
     await touchCannotApply(`コマの大きさか数が変わりました（${prev[0]}×${prev[1]}・${prev[2]} コマ → ${r.frame_width}×${r.frame_height}・${r.frame_count} コマ）`, cancel, why, saveFile);
     return;
   }
   const { result } = await call({ type: "frames-edits", request: { token: frames.token, edits: touchDict() } });
   if (!result.ok) { touchMessage(result.error, true); return; }
   if (!result.applied) { await touchCannotApply(result.error, cancel, why, saveFile); return; }
+  if (remap) touchAdopt(result.edits);
+  touchBind(r);
   framesApplyView(result);
   touchShow(result);
   touchDraw();
+}
+// Python が付け直した直しの一覧（今のコマの番号・位置）にする。番号か位置が変わったら、元に戻す・やり直すの記録は消す（番号が合わなくなるため）
+function touchAdopt(d) {
+  if (!d) return;
+  const next = touchFromDict(d);
+  const key = (m) => JSON.stringify([...m].filter(([, v]) => v.size).map(([k, v]) => [k, [...v.keys()].sort((a, b) => a - b)]).sort((a, b) => a[0] - b[0]));
+  if (key(next) === key(touch.edits)) return;
+  touch.edits = next;
+  touch.undo = touch.undo.filter((u) => u.every((ch) => typeof ch.k === "string"));
+  touch.redo = touch.redo.filter((u) => u.every((ch) => typeof ch.k === "string"));
+  touchMessage("ファイルの並び順を変えたので、直したドットを同じ絵のコマに付け直しました（元に戻す・やり直すの記録は消しました）。", false);
 }
 // 画像を選び直して変換した後: 前の画像で直したドットをどうするかを確認の窓で聞く（直しがあるときだけ）。
 // 「新しい画像にも当てる」はコマの大きさが同じで、当てられるときだけ出す（下の色が変わるドットの数を窓に出す）。
@@ -5293,7 +5531,8 @@ async function touchCarry(carry, prev, saveFile) {
   if (prev && (prev[0] !== r.frame_width || prev[1] !== r.frame_height || touchMaxFrame() > r.frame_count)) {
     why = `コマの大きさか数が違います（直したとき ${size(prev[0], prev[1], prev[2])} → 新しい画像 ${size(r.frame_width, r.frame_height, r.frame_count)}）`;
   } else {
-    const { result } = await call({ type: "frames-edits", request: { token: frames.token, edits: touchDict() } });
+    // 画像を選び直したとき: ファイルの名前が変わるので、前と同じに番号で当てる（ファイルの記録は渡さない）
+    const { result } = await call({ type: "frames-edits", request: { token: frames.token, edits: touchDict({ files: false }) } });
     if (!result.ok || !result.applied) why = result.error;
     else applied = result;
   }
@@ -5319,9 +5558,11 @@ async function touchCarry(carry, prev, saveFile) {
     + (changed ? `（下の色が違うドット ${changed} 個に印を付けました。下の注意を見てください）。` : "。"), false);
 }
 async function touchCarryBack(carry) {
-  const cur = { file: srcFile, bytes: srcBytes, image: srcImage };
+  const cur = { file: srcFile, bytes: srcBytes, image: srcImage, join: join.files.slice() };
   srcFile = carry.src.file; srcBytes = carry.src.bytes; srcImage = carry.src.image;
-  if (!(await framesRestore(carry.snap))) { srcFile = cur.file; srcBytes = cur.bytes; srcImage = cur.image; return; }
+  if (carry.src.join && carry.src.join.length) join.files = carry.src.join.slice();
+  if (!(await framesRestore(carry.snap))) { srcFile = cur.file; srcBytes = cur.bytes; srcImage = cur.image; join.files = cur.join; joinRender(); return; }
+  joinRender();
   redraw();
   setStatus(`画像を選び直すのをやめて、前の画像（${carry.name}）と、その結果・範囲・直しに戻しました（変換の設定の入力欄も前の値に戻しました）。`, false);
 }

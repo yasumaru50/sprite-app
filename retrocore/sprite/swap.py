@@ -38,7 +38,9 @@
      "swaps": [{"type": "blink", "rects": [{"x": 20, "y": 38, "w": 6, "h": 4}, {"x": 40, "y": 38, "w": 6, "h": 4}],
                 "closed": [[x, y, 色の番号 か null（透明）, 1 コマ目の色の番号 か null], ...], "half": [...]}]}
 
-`rects` は書き出すときだけ付ける（読むときは無視して、ドットから決め直す）。シートの JSON には、差し替えたときだけ
+`rects` は書き出すときだけ付ける（読むときは無視して、ドットから決め直す）。別々のファイルの絵をつなげたとき（`join.py`）は、
+描いた 1 コマ目がどのファイルの何コマ目かを `"base": {"file": "dance1.png", "file_frame": 1}` に書く。読んだときに今の 1 コマ目と
+違えば警告する（`base_warning()`。差し替えはフレームごとに位置を探すので当てはするが、合わないフレームには入らない）。シートの JSON には、差し替えたときだけ
 `swaps`（間隔・1 周の時間・周の数・入れた時刻とフレーム・コマごとの位置と合い方）と、差し替えたフレームの `frames[].swap` を足す。
 差し替えが無いときの出力は、今までとバイト単位で同じ。`talk_ms`（口の切り替えの時間。null は自動）は口パクがあるときだけ書く。
 
@@ -209,6 +211,7 @@ class SwapSet:
     half_ms: int = DEFAULT_HALF
     search: int = DEFAULT_SEARCH
     talk_ms: int | None = None     # 口の切り替えの時間（None は自動。半分の口があれば 100、無ければ 150）
+    base: tuple | None = None      # つなげたとき: 描いた 1 コマ目の (ファイルの名前, 何コマ目か)。None は記録なし
 
     def empty(self) -> bool:
         return not any(d for s in self.swaps for d in s.shapes.values())
@@ -262,7 +265,7 @@ def swaps_from_dict(d) -> SwapSet:
     if _int(d.get("version", VERSION), "version") > VERSION:
         raise ValueError(f"新しい版（{d.get('version')}）の差し替えの一覧です。Sprite App を新しくしてください")
     unknown = sorted(set(d) - {"version", "kind", "name", "frame_width", "frame_height", "palette", "interval_ms",
-                               "close_ms", "half_ms", "search", "talk_ms", "swaps"})
+                               "close_ms", "half_ms", "search", "talk_ms", "swaps", "base"})
     if unknown:
         raise ValueError(f"差し替えの一覧に知らない項目があります: {', '.join(unknown)}")
     pal_raw = d.get("palette", [])
@@ -335,6 +338,12 @@ def swaps_from_dict(d) -> SwapSet:
                   interval_ms=d.get("interval_ms", DEFAULT_INTERVAL), close_ms=d.get("close_ms", DEFAULT_CLOSE),
                   half_ms=d.get("half_ms", DEFAULT_HALF), search=d.get("search", DEFAULT_SEARCH),
                   talk_ms=d.get("talk_ms"))
+    if d.get("base") is not None:
+        b = d["base"]
+        if not isinstance(b, dict) or set(b) != {"file", "file_frame"} or not isinstance(b["file"], str) \
+                or _int(b["file_frame"], "file_frame") < 1:
+            raise ValueError("base は {\"file\": ファイルの名前, \"file_frame\": 何コマ目か} の形で書いてください")
+        out.base = (b["file"], int(b["file_frame"]))
     out.validate()
     out.interval_ms, out.close_ms, out.half_ms, out.search = (int(out.interval_ms), int(out.close_ms),
                                                               int(out.half_ms), int(out.search))
@@ -351,8 +360,11 @@ def load_swaps(text: str) -> SwapSet:
     return swaps_from_dict(d)
 
 
-def swaps_dict(s: SwapSet, palette: list[str]) -> dict:
-    """差し替えの一覧のファイルの辞書（`palette` は番号の元。足りない色は後ろに足す）。"""
+def swaps_dict(s: SwapSet, palette: list[str], base: tuple | None = None) -> dict:
+    """差し替えの一覧のファイルの辞書（`palette` は番号の元。足りない色は後ろに足す）。
+
+    `base`（つなげたときの、今の 1 コマ目の (ファイルの名前, 何コマ目か)）を渡すと `base` を書く（無ければ前と同じ形）。
+    """
     pal = list(palette)
     for sw in s.swaps:
         for dots in sw.shapes.values():
@@ -383,13 +395,25 @@ def swaps_dict(s: SwapSet, palette: list[str]) -> dict:
            "close_ms": int(s.close_ms), "half_ms": int(s.half_ms), "search": int(s.search)}
     if any(sw.type == "talk" for sw in s.swaps):   # 口パクがあるときだけ（まばたきだけの一覧は前と同じ）
         out["talk_ms"] = None if s.talk_ms is None else int(s.talk_ms)
+    if base is not None:
+        out["base"] = {"file": str(base[0]), "file_frame": int(base[1])}
     out["swaps"] = items
     return out
 
 
-def swaps_json(s: SwapSet, palette: list[str]) -> str:
+def base_warning(s: SwapSet, sources: list | None) -> str | None:
+    """描いた 1 コマ目（`s.base`）と今の 1 コマ目（`sources[0]`）が違うときの警告の文。同じか記録が無ければ None。"""
+    if s.base is None or not sources or tuple(sources[0]) == tuple(s.base):
+        return None
+    now = sources[0]
+    return (f"差し替えは {s.base[0]} の {s.base[1]} コマ目の上に描いたものですが、いまの 1 コマ目は {now[0]} の {now[1]} コマ目です"
+            "（ファイルの並び順を変えたため）。フレームごとに位置を探して、合うフレームにだけ入れます。"
+            "確実にするには、いまの 1 コマ目の上で描き直してください")
+
+
+def swaps_json(s: SwapSet, palette: list[str], base: tuple | None = None) -> str:
     """差し替えの一覧のファイルの中身（1 つのドットを 1 行に書く。差分が見やすいように）。"""
-    d = swaps_dict(s, palette)
+    d = swaps_dict(s, palette, base)
     lines = ["{"]
     for k, v in d.items():
         if k != "swaps":

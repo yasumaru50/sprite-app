@@ -93,6 +93,13 @@ AI が描いた「ドット絵風の画像」（ドット 1 個が約 20px）か
    まばたきも入る。「半分開いた口」も描くと 閉じる → 半分 → 開く → 半分）。「口の切り替え」（空なら自動: 150、半分ありは 100 ミリ秒）で速さを変えられる。
    しゃべりのシートの PNG・JSON・GIF（コマが並んだ絵は左右反転・.piskel も）は欄の下のボタンで保存する（ふつうのシートは今までと同じ）
 8. 保存: ③ そろえたコマを並べた絵、④ シート（PNG）、⑤ 情報（JSON）、⑥ GIF、⑦⑧⑨ 左右反転のシート・JSON・GIF、ちらつきの見える化、**Piskel で直す用（.piskel）**
+9. **別々のファイルの絵をつなげる**（ダンスなどを何枚かに分けて描かせたとき。`--join`）: 「コマが並んだ絵」でファイルを**何枚も選ぶ**（「＋ ファイルを足す」で後から足せる）と、
+   「つなげるファイル」の一覧が出る。**▲▼** で並び順を入れ替え、「外す」で外し、名前を押すと左の「元の画像」に出る。「② 変換する」で上から順につなげる。
+   変換すると、ファイルごとにコマの数・何コマ目から・ドットの大きさ・高さ（合わせたときは格子を何倍にしたか）が出る。
+   「キャラの高さを合わせる」（最初は印なし＝合わせない）に印を付けると、高さの違いが 1 割までならドット絵に戻すときの格子を少し変えて合わせる。
+   印なしでも、高さの違うファイルがあれば注意を出す（しゃがみ・ジャンプなどポーズの違いなら、そのままでよい）。
+   つなぎ目で体の位置が大きくずれるときは注意が出る（ちらつきの見える化の橙の線と f1・f2… がファイルの境目）。
+   並び順を変えて変換し直しても、直したドットは同じ絵のコマの同じ所に付く
 
 保存したファイルは、画面の下に出る CLI（例 `--frames --frame-count 4 --frame-name walk --mirror --flicker --piskel`）と**バイト単位で同じ**。
 
@@ -132,6 +139,7 @@ python -m apps.sprite 入力.png --motion-spec apps/sprite/examples/head_rect_no
 python -m apps.sprite 歩き.png --frames --frame-count 4 --frame-order 1,2,3,2 --gif --mirror --piskel
 python -m apps.sprite 走り.png --frames --align-y match --frame-root-y=0,-1,0,-1 --flicker
 python -m apps.sprite 歩き.png --frames --frame-count 4 --steady on --same-as-first 0,0,53,53
+python -m apps.sprite dance1.png dance2.png --frames --join -o out/sprite/dance.png --gif # 別々のファイルの絵をつなげる
 python -m apps.sprite 入力.png --motion breathe --fx surprise --gif                     # ！（驚き）を重ねる（別のシート）
 python -m apps.sprite 直した.piskel --readback 元.json --gif --mirror --piskel           # 手直しを読み戻す
 ```

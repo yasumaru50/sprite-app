@@ -238,12 +238,15 @@ python -m apps.sprite run.png -o out/sprite/run.png --frames --frame-count 4 --a
 python -m apps.sprite 歩き.png --frames --frame-count 4 --same-as-first 0,0,53,53
 python -m apps.sprite 走り.png --frames --frame-count 4 --align-y match --same-as-first 0,0,62,54 --same-search 4 --steady on
 python -m apps.sprite 正面歩き.png --frames --frame-count 3 --frame-order 1,2,3,2 --edits ai08_sprite_frames_edits.json --piskel --gif
+python -m apps.sprite dance1.png dance2.png dance3.png --frames --join -o out/sprite/dance.png --frame-name dance --flicker --gif
 ```
 
 | オプション | 内容 |
 | --- | --- |
 | `--frames` | コマが並んだ絵として変換する |
-| `--frame-count N` | コマの数を確かめる。合わなければ作らずに警告し `<出力名>_<名前>_skipped.json`（`code: frame_count`）を書く（終了コード 1） |
+| `--join` | 入力のファイル（何枚でも。フォルダなら中の画像を名前の順に）を、書いた順につなげて 1 つの動きにする（下の「別々のファイルの絵をつなげる」）。無いときは今までどおり 1 枚ずつ別々に変換する |
+| `--join-match-height` | `--join` で、キャラの高さをいちばん小さいファイルに合わせる（違いが 1 割までのとき）。付けないときは合わせず、高さの違いを警告するだけ |
+| `--frame-count N` | コマの数を確かめる（`--join` では全部のファイルの合計）。合わなければ作らずに警告し `<出力名>_<名前>_skipped.json`（`code: frame_count`）を書く（終了コード 1） |
 | `--align` | 横のそろえ方。`match`（既定。上から 3 割の形が 1 コマ目といちばん重なる位置）/ `head`（上の方の横の中心）/ `center` / `none` |
 | `--align-y` | 縦のそろえ方。`foot`（既定。足元）/ `match`（上の方の形がいちばん重なる高さ。走り・跳び向け）/ `none` |
 | `--frame-grid` | グリッドの線の並び。`auto`（既定。形の似たコマだけ共通）/ `each`（コマごと。以前の動き）/ `shared`（いつも共通） |
@@ -270,6 +273,23 @@ python -m apps.sprite 正面歩き.png --frames --frame-count 3 --frame-order 1,
   範囲を使うと図 `<出力名>_<名前>_same.png`（緑の枠 = 写した位置、赤 = 写さなかった、橙 = 境目の問題、青 = 残した部品）も書く
 - `--mirror` の JSON は `pivot.x` も反転し、`source.mirrored` が true。`--gif` は `<出力名>_<名前>_<幅>x<高さ>_<N>f.gif`（幅・高さは 1 倍の大きさ）
 - 使えないもの: `--motion`・`--motion-spec`（体全体の上下は `--frame-root-y`）、`--input-type illust`、`--grid-origin`
+
+### 別々のファイルの絵をつなげる（`--join`）
+
+長い動き（ダンスなど）を AI に何枚かに分けて描かせたときに、ファイルを書いた順につなげて 1 つの動きにする。1 枚の中のコマは 1 つでも何コマでもよい。
+
+- コマの番号（`--frame-order`・`--same-from`・直し・ちらつき）は、1 つ目のファイルの左のコマから 1, 2, … と全部のファイルを通して数える
+- グリッド（ドットの大きさ・線の位置）はファイルごとに見つけ、パレットは全部のファイルで 1 つ（`--colors`）、大きさと足元（`--align-y match` なら頭の高さ）は全部のコマでそろえる
+- `--frame-grid auto` で線の並びを共通にするのは、2 コマ以上のファイルの全部で共通にできるときだけ（どれかが合わなければ全部コマごと）
+- キャラの高さ（ファイルの中でいちばん高いコマ）は、**既定では合わせない**。いちばん小さいファイルより 2 ドット以上高いファイルがあれば警告する（`skipped` の `join_height`）。
+  「いちばん小さいファイルに合わせる」ので、しゃがみ・ジャンプのコマだけのファイルが混ざると、ほかのファイルが黙って小さくされてしまうため（迷ったら何もしない）
+- `--join-match-height` を付けると、違いが 1 割までのファイルは、ドット絵に戻すときの格子をファイルごとに少し大きくして（等間隔の格子にする）、いちばん小さいファイルの高さに合わせる。
+  完成したドット絵の拡大・縮小はしない。1 ドットの違いは合わせない。違いが 1 割より大きいときは付けても合わせずに警告する（AI に描き直させる前提）
+- つなぎ目のコマは自動で混ぜない・中割りを作らない。境目（くり返すときの最後 → 最初も）で体の位置（上の方の横の中心・足元・頭の上）が、ファイルの中の隣のコマどうしのずれの最大より大きく、
+  3 ドット以上ずれるときは警告する（`skipped` の `join_shift`）。`--flicker` の画像では、ファイルの境目のすき間を橙に塗り、各ファイルの 1 コマ目の上に f1・f2… と書く
+- 出力名は 1 つ目のファイルの名前（`-o` で変えられる）。表示に、ファイルごとのコマの数・何コマ目から・ドットの大きさ・高さ（合わせたときは格子を何倍にしたか）を出す
+- ファイルが 1 つのとき（`--join` なしと同じ）の出力は、今までとバイト単位で同じ
+- 同じ名前のファイルが 2 つ以上あるときは、2 つ目から `名前#2` のように区別する（直しの一覧・JSON の記録の名前）
 - 比較画像: `tools/compare_sprite_frames.py`・`compare_sprite_steady.py`・`compare_sprite_same.py`（`--frame-count 4` など）
 
 ## 差し替え（まばたき。`--swaps`）
@@ -441,7 +461,10 @@ python -m apps.sprite 書き出した.png --readback walk_walk_53x91_4f.json --o
 | `source` | （`--frames`）`frame_count`・`align`・`align_y`・`mirrored`・`dot_size` |
 | `same_as_first` | （`--same-as-first` のとき）範囲・コマごとのずれ・合い方・写したか（`copied`・`code`）・`changed_dots`・`kept_dots` など |
 | `steady` | （`--steady on` のとき）`mode`・`size`・`reference_frame`・`rows` と、コマごとの `shift`・`restored_dots`・`kept_dots`・`kept_reasons` |
-| `edits` | （`--edits` のとき）`palette`・`dot_count`・元のコマごとの `dots`（[x, y, 色の番号 か null]） |
+| `edits` | （`--edits` のとき）`palette`・`dot_count`・元のコマごとの `dots`（[x, y, 色の番号 か null]）。`--join` では `file`・`file_frame` も |
+| `frames[].source_file` / `source_file_frame` | （`--join` で 2 つ以上のファイル）そのフレームがどのファイルの何コマ目か |
+| `source.files` | （`--join` で 2 つ以上のファイル）ファイルごとの `name`・`frame_count`・`first_frame`・`dot_size`（使った大きさ）・`detected_dot_size`・`grid_scale`（格子を何倍にしたか）・`height`・`height_used`・`height_match`（`base` いちばん小さい / `same` / `adjusted` 合わせた / `off` 高さが違うが合わせていない（既定）/ `too_far` 違いが 1 割より大きくて合わせない） |
+| `source.joins` | （`--join` で 2 つ以上のファイル）境目ごとの `from_file`・`to_file`・`from_frame`・`to_frame`・`loop`（くり返すときの最後 → 最初）・`shift`（`x`・`foot`・`top`。ドット）・`large`（警告したか） |
 | `swaps` / `frames[].swap` | （`--swaps` のとき）まばたきの記録（上の「差し替え」）。しゃべりのシートでは口パクとまばたきの記録（上の「口パク」）。1 枚の絵の動きでは `skipped` の前に入る |
 | `palette` | （`--frames`、PR #40 から）シートで使った色（`"#rrggbb"`、小さい順）。読み戻しで新しい色を見つけるのに使う |
 | `skipped` | 作らなかった理由・警告の記録（いちばん外の最後。何もなければ `[]`） |
