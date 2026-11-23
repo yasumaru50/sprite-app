@@ -73,7 +73,7 @@ Sprite App の設計は `docs/sprite-app-plan.md`、作業の引き継ぎは `do
 
 - 半端な位置（小数の座標）に置いたり、拡大率が整数でなかったりすると、ドットがぼやけたり太さがそろわなくなる。
   ゲーム側で**ピクセル単位にそろえる設定**が要る（Unity の Pixel Perfect Camera など。Godot ではテクスチャのフィルターを最近傍にし、
-  ピクセル単位にスナップする設定）。`apps/sprite/README.md` の書き出しの説明に添えるとよい
+  ピクセル単位にスナップする設定）。`docs/cli.md` の「シートの JSON」に添えるとよい
 
 ## 8. ソースを読んだ比較（unfake・proper-pixel-art と私たちのグリッド検出）
 

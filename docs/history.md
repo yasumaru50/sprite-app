@@ -6,6 +6,7 @@ PR の番号は前のリポジトリのものです（前のリポジトリは�
 
 確認用の画像（ai01〜ai09）は、利用者が AI で作った画像です。比較画像は前のリポジトリの `preview/ai-check` ブランチの
 `ai-output/` に置いていました（このリポジトリには入れていません）。
+PR ごとの詳しい記録（数・試したこと）は [archive/TODO-full.md](archive/TODO-full.md) と [archive/sprite-app-plan-full.md](archive/sprite-app-plan-full.md)。
 
 ## 土台づくり（CG 変換アプリと共通ライブラリ）
 
@@ -183,3 +184,10 @@ PR の番号は前のリポジトリのものです（前のリポジトリは�
 
 ### #45 直しがあるときに画像を選び直す
 - 直しが残ったまま画像を選び直したり入力の種類を変えたりしたら、確認の窓を出す（保存してから捨てる・保存せずに捨てる・新しい画像にも当てる・やめる）
+
+## このリポジトリに移したあと
+
+- 移した直後: Sprite App の分だけを移し、このまとめ（`docs/history.md`）を足した
+- 文書の整理（プログラムは変えていない）: `CLAUDE.md` にファイルの地図と作業の決まりを足した。`apps/sprite/README.md` を使う人向けの短い説明にし、
+  オプションと出力の形を `docs/cli.md`、仕組みと値を決めた理由を `docs/how-it-works.md` に分けた。`docs/TODO.md` は残っていることだけ、
+  `docs/sprite-app-plan.md` は今の設計と方針だけにし、前の全文は `docs/archive/` に移した
