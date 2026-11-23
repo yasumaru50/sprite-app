@@ -898,11 +898,13 @@ def _frame_settings(values: dict):
 def _frames_view(res) -> dict:
     """変換・範囲のやり直しの後に画面へ返す、コマの結果（そろえたコマの絵・ちらつき・範囲の記録）。"""
     from . import frames as F
+    from .join import file_starts
     strip = F.source_strip(res)
     rep = F.flicker_report(res.frames)
     out = {"png": encode_png(strip), "width": int(strip.shape[1]), "height": int(strip.shape[0]),
            "warnings": list(res.warnings), "skipped": list(res.skipped),
-           "flicker_png": encode_png(F.flicker_image(res.frames, rep)), "flicker_json": F.flicker_json(rep),
+           "flicker_png": encode_png(F.flicker_image(res.frames, rep, file_starts=file_starts(res))),
+           "flicker_json": F.flicker_json(rep),
            "flicker_rows": rep.rows, "flicker_counts": [f.count for f in rep.frames],
            "steady": res.steady.info() if res.steady is not None else None,
            "steady_counts": res.steady.counts() if res.steady is not None else None,
@@ -939,7 +941,7 @@ def _touchup_apply(finished, edits) -> tuple:
         return finished, {"code": e.code, "message": str(e)}
 
 
-def frames_convert_bytes(data: bytes, request: dict) -> dict:
+def frames_convert_bytes(data, request: dict) -> dict:
     """コマが並んだ絵を変換してそろえる（例外は投げない）。`request` は
     {"settings": 変換の設定（convert_for_web と同じ）, "frames": {"frame_count": N か None, "align", "align_y",
     "steady": "off" / "on"（CLI の --steady）, "steady_size": N（--steady-size）}, "name": 名前}。
@@ -952,22 +954,37 @@ def frames_convert_bytes(data: bytes, request: dict) -> dict:
     "aligned_png": そろえた直後のコマを並べた絵（範囲を描くための 1 コマ目の元）}。
     コマを作らなかった（CLI では「コマを作りませんでした」と <出力名>_<名前>_skipped.json）: {"ok": True, "made": False,
     "error": 説明, "skipped_json": 理由の JSON, "boxes": 見つかったコマ（分かれば）}。設定の間違いなど: {"ok": False, "error", "detail"}。
+
+    別々のファイルの絵をつなげるとき（CLI の --join）は、`data` を [(ファイルの名前, バイト列), ...]（並べた順）にする。
+    `request` の "match_height": False でキャラの高さを合わせない（CLI の --join-height off）。結果には、どのときも
+    "files": ファイルごとの記録（`join.JoinFile.info()` と "boxes"）, "sources": コマごとの [ファイルの名前, 何コマ目か],
+    "joins": 境目の記録, "file_starts": 2 つ目からのファイルの 1 コマ目の番号 が入る（1 つのときの絵・ファイルは前と同じ）。
     """
     from . import frames as F
     from .grid import GridNotFoundError
     try:
-        unknown = sorted(set(request) - {"settings", "frames", "name"})
+        unknown = sorted(set(request) - {"settings", "frames", "name", "match_height"})
         if unknown:
             raise ValueError(f"知らない設定です: {', '.join(unknown)}")
         settings = SpriteSettings.from_dict(dict(request.get("settings") or {}))
         settings.validate()
         fs = _frame_settings(dict(request.get("frames") or {}))
         name = str(request.get("name") or F.DEFAULT_NAME)
-        rgba = decode_image(data)
+        match_height = request.get("match_height", True)
+        if not isinstance(match_height, bool):
+            raise ValueError(f"match_height は true か false で指定してください: {match_height}")
+        files = [("image", data)] if isinstance(data, (bytes, bytearray, memoryview)) else list(data)
+        images = []
+        for fname, fdata in files:
+            try:
+                images.append((str(fname), decode_image(bytes(fdata))))
+            except Exception as e:
+                raise ValueError(f"{fname}: {friendly_error(e)}") from None
     except Exception as e:
         return {"ok": False, "error": friendly_error(e), "detail": error_detail(e)}
     try:
-        res = F.convert_frames(rgba, settings, fs)
+        from .join import convert_frame_files
+        res = convert_frame_files(images, settings, fs, match_height=match_height)
     except (F.FramesError, GridNotFoundError) as e:
         boxes = e.extra.get("boxes") if isinstance(e, F.FramesError) else None
         return {"ok": True, "made": False, "error": str(e), "code": getattr(e, "code", "grid_not_found"),
@@ -988,7 +1005,10 @@ def frames_convert_bytes(data: bytes, request: dict) -> dict:
            "dot_size": round(float(res.dot_size[0]), 3),
            "colors": int(len(np.unique(opaque.reshape(-1, 3), axis=0))) if len(opaque) else 0,
            "notes": list(res.notes), "steps": [r.description for r in res.steps],
-           "aligned_png": encode_png(np.concatenate(res.aligned, 1))}
+           "aligned_png": encode_png(np.concatenate(res.aligned, 1)),
+           "files": [dict(f.info(), boxes=[[b.x0, b.y0, b.x1, b.y1] for b in f.boxes]) for f in res.files],
+           "sources": [[n, int(k)] for n, k in res.sources], "joins": list(res.joins or []),
+           "file_starts": [f.first for f in res.files[1:]]}
     out.update(_frames_view(res))
     return out
 
@@ -1028,8 +1048,8 @@ def frames_same(request: dict) -> dict:
     if edits is not None and err is None:
         from .touchup import palette_of, touchup_dict, touchup_json
         pal = palette_of(finished.frames)
-        out["edits"] = touchup_dict(edits, pal)
-        out["edits_json"] = touchup_json(edits, pal)
+        out["edits"] = touchup_dict(edits, pal, finished.sources)
+        out["edits_json"] = touchup_json(edits, pal, finished.sources)
     out.update(_frames_view(res))
     return out
 
@@ -1076,7 +1096,8 @@ def frames_edits(request: dict) -> dict:
     当てられない（大きさ・コマの数・パレットが違う）: {"ok": True, "applied": False, "code", "error"}（覚えている直しは変えない）。
     設定の間違い: {"ok": False, "error", "detail"}。
     """
-    from .touchup import TouchupError, palette_of, touchup_dict, touchup_from_dict, touchup_json, touchup_result
+    from .touchup import (TouchupError, palette_of, remap_touchup, touchup_dict, touchup_from_dict, touchup_json,
+                          touchup_result)
     try:
         unknown = sorted(set(request) - {"token", "edits"})
         if unknown:
@@ -1089,6 +1110,8 @@ def frames_edits(request: dict) -> dict:
         return {"ok": False, "error": f"直しの一覧に問題があり、当てられませんでした: {e}", "detail": error_detail(e)}
     finished = _FRAMES_CACHE.get("finished") or _FRAMES_CACHE["result"]
     try:
+        # つなげたときは、直しのファイルの記録で今のコマの番号に付け直す（並び順を入れ替えても同じ絵のコマに付く）
+        edits = remap_touchup(edits, finished.sources) if edits is not None else None
         res = touchup_result(finished, edits)
     except TouchupError as e:
         return {"ok": True, "applied": False, "code": e.code, "error": str(e)}
@@ -1099,8 +1122,8 @@ def frames_edits(request: dict) -> dict:
     out = {"ok": True, "applied": True, "token": _FRAMES_CACHE["token"], "edits": None, "edits_json": None}
     if _FRAMES_CACHE["edits"] is not None:
         pal = palette_of(finished.frames)
-        out["edits"] = touchup_dict(edits, pal)
-        out["edits_json"] = touchup_json(edits, pal)
+        out["edits"] = touchup_dict(edits, pal, finished.sources)
+        out["edits_json"] = touchup_json(edits, pal, finished.sources)
     out.update(_frames_view(res))
     return out
 
@@ -1150,6 +1173,20 @@ def frames_convert_for_web(data: bytes, request_json: str = "{}") -> str:
     return json.dumps(_web_b64(frames_convert_bytes(data, values)), ensure_ascii=False)
 
 
+def frames_convert_files_for_web(datas: list, names: list, request_json: str = "{}") -> str:
+    """ブラウザ UI（Pyodide）から呼ぶ形（ファイルを何枚も選んだとき。`datas` はバイト列、`names` はファイルの名前の並び）。"""
+    try:
+        values = json.loads(request_json or "{}")
+        if not isinstance(values, dict):
+            raise ValueError("設定は {\"settings\": {...}, \"frames\": {...}} のような形で渡してください")
+        if len(datas) != len(names) or not datas:
+            raise ValueError("ファイルの名前とバイト列の数が合いません")
+    except ValueError as e:
+        return json.dumps({"ok": False, "error": friendly_error(ValueError(f"設定を読めません: {e}")),
+                           "detail": error_detail(e)}, ensure_ascii=False)
+    return json.dumps(_web_b64(frames_convert_bytes(list(zip(names, datas)), values)), ensure_ascii=False)
+
+
 def frames_sheets(request: dict, result=None) -> dict:
     """そろえたコマ（`result`。省くと最後に変換したもの）からシートを作る（例外は投げない）。`request` は
     {"token": 変換の番号, "base": 出力名（<出力名>.png の名前の部分）, "name": 名前, "order": [1, 2, 3, 2] か None,
@@ -1196,7 +1233,12 @@ def frames_sheets(request: dict, result=None) -> dict:
         got = _apply_swaps_view(out, anims[0], swaps, result.frames[0], pal)
         if got is not anims[0]:
             anims = [got] + [mirror_swapped(got, a) for a in anims[1:]]
-        out["swaps_json"] = swaps_json(swaps, pal)   # 保存する <出力名>_<名前>_swaps.json の中身
+        base = tuple(result.sources[0]) if getattr(result, "joined", False) else None
+        out["swaps_json"] = swaps_json(swaps, pal, base)   # 保存する <出力名>_<名前>_swaps.json の中身
+        from .swap import base_warning
+        msg = base_warning(swaps, result.sources if base is not None else None)
+        if msg:
+            out["swaps_base_warning"] = msg
 
     def sheet_entry(anim):
         png_name = F.sheet_file_name(base, anim)

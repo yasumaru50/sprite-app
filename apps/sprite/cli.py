@@ -21,6 +21,7 @@
     python -m apps.sprite 正面.png --frames --frame-order 1,2,3,2 --frame-duration 150 --mirror   # 1・2・3・2 の順、左右反転のシートも書く
     python -m apps.sprite 走り.png --frames --align-y match --frame-root-y 0,-1,0,-1 --flicker   # 頭の高さでそろえ、体全体を上下させる。ちらつきの画像も書く
     python -m apps.sprite 歩き.png --frames --piskel     # シートと一緒に Piskel で開ける .piskel も書く
+    python -m apps.sprite dance1.png dance2.png --frames --join -o out/sprite/dance.png   # 別々のファイルの絵を並べた順につなげて 1 つの動きにする
     python -m apps.sprite 入力 --motion breathe --fx surprise --gif   # ！（驚き）を別のシート（<出力名>_breathe_fx_surprise.png / .json）にして重ねる
     python -m apps.sprite 直した.piskel --readback 元.json --gif --mirror --piskel   # 手直ししたシート（PNG か .piskel）を読み戻して作り直す
 
@@ -59,6 +60,7 @@ from retrocore.sprite.motion import stretch as stretch_mod
 from retrocore.sprite.motion import sway as sway_mod
 from retrocore.sprite.motion.report import skipped_json
 from retrocore.sprite import frames as frames_mod
+from retrocore.sprite import join as join_mod
 from retrocore.sprite import same as same_mod
 from retrocore.sprite import steady as steady_mod
 from retrocore.sprite import edit as edit_mod
@@ -95,7 +97,7 @@ MAX_PREVIEW_SCALE = 32
 # コマを切り分けてそろえる（--frames）のオプション（--frames と一緒にだけ使える）
 FRAME_OPTIONS = ("frame_count", "align", "align_y", "frame_grid", "frame_order", "frame_duration", "frame_name", "frame_root_y",
                  "mirror", "flicker", "flicker_rows", "steady", "steady_size", "steady_rows",
-                 "same_ranges", "same_search", "same_from", "edits")
+                 "same_ranges", "same_search", "same_from", "edits", "join", "join_height")
 # 手直しの読み戻し（--readback）だけのオプション
 READBACK_OPTIONS = ("original", "same_frames", "fix_colors")
 # 読み戻しで使えるほかのオプション（ほかの変換・動きのオプションは使えない）
@@ -652,6 +654,16 @@ def build_parser() -> argparse.ArgumentParser:
                          "<出力名>.png にそろえたコマを元の順に並べた絵、<出力名>_<名前>_<幅>x<高さ>_<N>f.png / .json にシートを書く"
                          "（幅・高さは 1 コマの大きさ、N はコマの数。エディタで読み込むときに入れる数）。"
                          "ドット絵風の入力（--input-type pixel）だけ。--motion とは一緒に使えない")
+    fr.add_argument("--join", action="store_const", const=True, default=None,
+                    help="入力のファイル（何枚でも。フォルダなら中の画像を名前の順に）を、書いた順につなげて 1 つの動きにする"
+                         "（長い動きを AI に何枚かに分けて描かせたとき）。1 枚の中のコマは 1 つでも何コマでもよい。"
+                         "グリッドはファイルごとに見つけ、パレットは全部のファイルで 1 つ、大きさと足元は全部のコマでそろえる。"
+                         "出力名は 1 つ目のファイルの名前（-o で変えられる）。--join が無いときは、今までどおり 1 枚ずつ別々に変換する")
+    fr.add_argument("--join-height", choices=["auto", "off"], default=None,
+                    help="--join で、キャラの高さ（ファイルの中でいちばん高いコマ）をいちばん小さいファイルに合わせるか。"
+                         f"auto（既定）= 違いが {round(join_mod.HEIGHT_MAX_RATIO * 100)}% までなら、ドット絵に戻すときの格子の大きさを"
+                         "ファイルごとに少し変えて合わせる（完成したドット絵の拡大・縮小はしない）。それより大きい違いは合わせずに警告する。"
+                         "off = 合わせない（違いは警告だけ）")
     fr.add_argument("--frame-count", type=_frame_count, default=None, metavar="N",
                     help="コマの数。見つかった数が違えば作らずに警告し、理由を <出力名>_<名前>_skipped.json に書く")
     fr.add_argument("--align", choices=list(frames_mod.ALIGNS), default=None,
@@ -817,6 +829,8 @@ def check_frames_args(parser: argparse.ArgumentParser, args: argparse.Namespace)
                      "（体全体の上下は --frame-root-y で付けられます）")
     if args.input_type != "pixel":
         parser.error("--frames はドット絵風の入力（--input-type pixel、既定）だけで使えます")
+    if args.join_height is not None and not args.join:
+        parser.error("--join-height は --join と一緒に指定してください")
     if args.grid_origin is not None:
         parser.error("--frames では --grid-origin は使えません（コマごとにグリッドのずれが違うため、線はコマごとに合わせます）")
     n = len(args.frame_order) if args.frame_order else args.frame_count
@@ -1320,9 +1334,42 @@ def _preset_motion(args: argparse.Namespace, sprite, src: Path):
         return None
 
 
-def write_frames(args: argparse.Namespace, rgba, settings: SpriteSettings, dst: Path, src: Path, on_step,
+def run_join(args: argparse.Namespace, settings: SpriteSettings, inputs: list[Path]) -> int:
+    """--frames --join: 入力のファイルを書いた順につなげて 1 つの動きにする。"""
+    if len(inputs) > join_mod.MAX_FILES:
+        print(f"エラー: つなげるファイルは {join_mod.MAX_FILES} 個までです（いま {len(inputs)} 個）", file=sys.stderr)
+        return 1
+    images = []
+    for src in inputs:
+        try:
+            images.append((src.name, load_rgba(src)))
+        except OSError as e:
+            print(f"読み込めません: {src}（{e}）", file=sys.stderr)
+            return 1
+    dst = output_paths(inputs[:1], args.output)[0]
+    src = inputs[0]
+    steps_dir = dst.with_name(dst.stem + "_steps")
+
+    def on_step(res, _i=[0]):
+        _i[0] += 1
+        if not args.quiet:
+            h, w = res.image.shape[:2]
+            print(f"  {_i[0]}. {res.description}: {w}×{h}（{res.seconds:.2f} 秒）")
+        if args.save_steps:
+            save_rgba(res.image, steps_dir / f"{_i[0]:02d}_{res.name}.png")
+
+    if not args.quiet:
+        print("つなげる: " + " ＋ ".join(f"{p}（{a.shape[1]}×{a.shape[0]}）" for p, (_, a) in zip(inputs, images))
+              + f"、{INPUT_TYPES[args.input_type]}")
+    return write_frames(args, images, settings, dst, src, on_step)
+
+
+def write_frames(args: argparse.Namespace, images: list, settings: SpriteSettings, dst: Path, src: Path, on_step,
                  many: bool = False) -> int:
-    """--frames: コマに切り分けてそろえ、シートなどを書く。作らなかったときは理由を書いて 1 を返す。"""
+    """--frames: コマに切り分けてそろえ、シートなどを書く。作らなかったときは理由を書いて 1 を返す。
+
+    `images` は (ファイルの名前, RGBA) の並び。2 つ以上（--join）なら、並べた順につなげて 1 つの動きにする。
+    """
     name = args.frame_name or frames_mod.DEFAULT_NAME
     fs = frames_mod.FrameSettings(frame_count=args.frame_count, align=args.align or frames_mod.DEFAULT_ALIGN,
                                   align_y=args.align_y or frames_mod.DEFAULT_ALIGN_Y,
@@ -1340,7 +1387,8 @@ def write_frames(args: argparse.Namespace, rgba, settings: SpriteSettings, dst: 
             print(f"エラー（{args.edits.name}）: 手の直しの一覧を読めません: {e}", file=sys.stderr)
             return 1
     try:
-        res = frames_mod.convert_frames(rgba, settings, fs, on_step=on_step)
+        res = join_mod.convert_frame_files(images, settings, fs, on_step=on_step,
+                                           match_height=(args.join_height or "auto") == "auto")
     except ValueError as e:
         from retrocore.sprite.touchup import TouchupError
         if isinstance(e, TouchupError):
@@ -1361,6 +1409,15 @@ def write_frames(args: argparse.Namespace, rgba, settings: SpriteSettings, dst: 
     if not args.quiet:
         for m in res.notes:
             print(f"  メモ: {m}")
+        if res.joined:
+            print(f"  つなげた {len(res.files)} ファイル（全部で {len(res.frames)} コマ）:")
+            for f in res.files:
+                adj = {"adjusted": f"、高さ {f.height} → {f.height_used} ドット（格子 {f.scale:.3f} 倍）",
+                       "too_far": f"、高さ {f.height} ドット（違いが大きいので合わせていない）",
+                       "off": f"、高さ {f.height} ドット（合わせていない）"}.get(f.status, f"、高さ {f.height} ドット")
+                last = f.first + f.frame_count - 1
+                print(f"    {f.name}: {f.frame_count} コマ（{f.first}" + (f"〜{last}" if last > f.first else "")
+                      + f" コマ目）、ドット {f.dot_size[0]:.2f}px{adj}")
         if res.same is not None:
             ok, total = res.same.copied_count()
             print(f"  1 コマ目と同じにした（範囲 {len(res.same.ranges)} 個、写した {ok}/{total}）:")
@@ -1411,7 +1468,12 @@ def write_frames(args: argparse.Namespace, rgba, settings: SpriteSettings, dst: 
     failed = 0
     talks = []
     if args.swaps is not None:
+        from retrocore.sprite.swap import base_warning
         from retrocore.sprite.touchup import palette_of
+        sw = load_swaps_cli(args, quiet=True)
+        msg = base_warning(sw, res.sources if res.joined else None) if sw is not None else None
+        if msg:
+            print_warnings([msg], src)
         talks = frames_talk(args, anims, res, src)
         if talks is None:
             failed, talks = 1, []
@@ -1459,10 +1521,11 @@ def write_frames(args: argparse.Namespace, rgba, settings: SpriteSettings, dst: 
         print(f"  ちらつき（上から {rep.rows} 行で 1 コマ目と違うドット）: {counts or 'コマが 1 つだけ'}")
     if args.flicker:
         fp = dst.with_name(f"{dst.stem}_{name}_flicker.png")
-        save_rgba(frames_mod.flicker_image(res.frames, rep), fp)
+        save_rgba(frames_mod.flicker_image(res.frames, rep, file_starts=join_mod.file_starts(res)), fp)
         fp.with_suffix(".json").write_text(frames_mod.flicker_json(rep), encoding="utf-8")
         if not args.quiet:
-            print(f"  → {fp}（ちらつきの見える化。赤紫の枠が 1 コマ目と違うドット、水色の線から上が数えた範囲）")
+            print(f"  → {fp}（ちらつきの見える化。赤紫の枠が 1 コマ目と違うドット、水色の線から上が数えた範囲"
+                  + ("、橙の線と f1・f2… がファイルの境目" if res.joined else "") + "）")
             print(f"  → {fp.with_suffix('.json')}")
     return 1 if failed else 0
 
@@ -1542,7 +1605,7 @@ def main(argv: list[str] | None = None) -> int:
         inputs = collect_inputs(args.inputs)
         if not inputs:
             parser.error("処理する画像がありません")
-        outputs = output_paths(inputs, args.output)
+        outputs = output_paths(inputs[:1] if args.join else inputs, args.output)   # --join は 1 つの出力
     except (FileNotFoundError, ValueError) as e:
         parser.error(str(e))
     for sp in args.save_palette or []:
@@ -1558,6 +1621,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"パレット: {args.palette}（{len(args.palette_colors)} 色）")
     settings = settings_from_args(args)
 
+    if args.join:
+        return run_join(args, settings, inputs)
     failed = 0
     for src, dst in zip(inputs, outputs):
         try:
@@ -1579,7 +1644,7 @@ def main(argv: list[str] | None = None) -> int:
         if not args.quiet:
             print(f"{src} ({rgba.shape[1]}×{rgba.shape[0]}、{INPUT_TYPES[args.input_type]})")
         if args.frames:
-            if write_frames(args, rgba, settings, dst, src, on_step, many=len(inputs) > 1):
+            if write_frames(args, [(src.name, rgba)], settings, dst, src, on_step, many=len(inputs) > 1):
                 failed += 1
             continue
         try:

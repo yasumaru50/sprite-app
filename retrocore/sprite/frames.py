@@ -185,6 +185,15 @@ class FramesResult:
     aligned: list | None = None      # そろえた直後のコマ（範囲・ちらつきを減らす前。画面で範囲を変えてやり直すのに使う）
     touchup: object = None           # 手の直しの記録（touchup.TouchupReport。直しが無ければ None）
     before_touchup: list | None = None  # 手の直しの前のコマ（直しが無ければ None）
+    # 別々のファイルの絵をつなげたとき（`join.convert_frame_files()`）。1 つの絵から作ったときは None
+    files: list | None = None        # ファイルごとの記録（join.JoinFile の並び。並べた順）
+    sources: list | None = None      # コマごとの (ファイルの名前, そのファイルの何コマ目か。1 から)
+    joins: list | None = None        # ファイルの境目の記録（join.join_report()。ファイルが 2 つ以上のときだけ）
+
+    @property
+    def joined(self) -> bool:
+        """2 つ以上のファイルをつなげた結果か（シートの JSON などにファイルの記録を書くのはこのときだけ）。"""
+        return self.files is not None and len(self.files) > 1
 
     @property
     def size(self) -> tuple[int, int]:
@@ -545,52 +554,39 @@ def _work_steps(settings) -> list:
     return [s for s in build_pipeline(settings).steps if not isinstance(s, (BackgroundStep, GridStep, ResizeStep))]
 
 
-def convert_frames(rgba: np.ndarray, settings=None, frame_settings: FrameSettings | None = None,
-                   on_step: Callable[[StepResult], None] | None = None) -> FramesResult:
-    """何コマも横に並んだ絵を、コマに切り分けて 1 つのキャラとして変換し、そろえる。
-
-    `settings` は 1 枚の絵の変換と同じ `SpriteSettings`（ドット絵風の入力だけ。`grid_origin` は使えない）。
-    作らなかったときは `FramesError`（コマの数が合わないなど）か `GridNotFoundError`。
-    """
-    import time
-
-    from .convert import SpriteSettings
-    s = settings or SpriteSettings()
-    fs = frame_settings or FrameSettings()
+def _check_settings(s, fs) -> None:
     fs.validate()
     if s.input_type != "pixel":
         raise ValueError("コマの切り分けはドット絵風の入力（グリッド検出）だけで使えます")
     if s.grid_origin is not None:
         raise ValueError("コマの切り分けでは、グリッドの始まる位置（grid_origin）は使えません（コマごとにずれが違うため）")
-    steps: list[StepResult] = []
 
-    def emit(name, desc, img, t0):
-        r = StepResult(name, desc, img, time.perf_counter() - t0)
-        steps.append(r)
-        if on_step is not None:
-            on_step(r)
 
+def _remove_background(rgba, s):
+    """背景除去（`BackgroundStep`）。戻り値は (絵, 工程)。背景除去をしない設定なら工程は None。"""
     cur = to_rgba(rgba)
-    if s.background:
-        t0 = time.perf_counter()
-        bg = BackgroundStep(color=s.bg_color, tolerance=s.bg_tolerance, remove_enclosed=s.bg_remove_enclosed)
-        cur = to_rgba(bg.apply(cur))
-        emit(bg.name, bg.describe(), cur, t0)
-    t0 = time.perf_counter()
-    boxes, notes = find_frames(cur, fs.frame_count)
-    emit("frames", f"コマの切り分け（{len(boxes)} コマ: "
-         + "、".join(f"{b.x0}〜{b.x1 - 1}" for b in boxes) + "）", cur, t0)
+    if not s.background:
+        return cur, None
+    bg = BackgroundStep(color=s.bg_color, tolerance=s.bg_tolerance, remove_enclosed=s.bg_remove_enclosed)
+    return to_rgba(bg.apply(cur)), bg
 
-    t0 = time.perf_counter()
-    subs = [frame_image(cur, b, boxes) for b in boxes]
-    grids_local, period, gnotes = detect_frame_grids([img for img, _, _ in subs], s.dot_size, s.grid_snap,
+
+def _grid_cells(subs, s, mode: str, dot_size=None):
+    """切り出したコマ（`frame_image()` の並び）のグリッドを合わせて、1 ドット＝1 画素のコマにする。
+
+    戻り値は (切り詰めたコマ, 元の絵の座標のグリッド, 各コマの左上の元の絵での位置（画素）, ドットの大きさ, 説明,
+    線の並びを共通にしたか)。
+    `dot_size` を渡すとその大きさで線を合わせる（つなげるときの高さ合わせ。大きさの推定はしない）。
+    """
+    imgs = [img for img, _, _ in subs]
+    grids_local, period, notes = detect_frame_grids(imgs, s.dot_size if dot_size is None else dot_size, s.grid_snap,
                                                     s.dot_shape == "square", s.grid_tolerance)
-    notes.extend(gnotes)
+    shared = False
     if s.grid_snap:   # 等間隔の格子（--no-grid-snap）は、もともと全部のコマで同じ並び
-        grids_local, gnote = choose_frame_grids([img for img, _, _ in subs], grids_local, period, fs.grid,
-                                                s.grid_tolerance)
+        grids_local, gnote = choose_frame_grids(imgs, grids_local, period, mode, s.grid_tolerance)
         if gnote:
             notes.append(gnote)
+            shared = True
     raw, grids, src = [], [], []
     for (img, ox, oy), g in zip(subs, grids_local):
         cells = grid_mod.cells_to_pixels(img, g.xs, g.ys, transparent_ratio=s.transparent_ratio)
@@ -602,12 +598,22 @@ def convert_frames(rgba: np.ndarray, settings=None, frame_settings: FrameSetting
         grids.append(Grid(xs=g.xs + ox, ys=g.ys + oy, period=g.period, prominence=g.prominence,
                           alignment=g.alignment, manual=g.manual, square=g.square))
         src.append((float(g.xs[c0] + ox), float(g.ys[r0] + oy)))
-    size = (f"{period[0]:.1f}px" if abs(period[0] - period[1]) < 1e-9 else f"{period[0]:.1f}×{period[1]:.1f}px")
-    emit("grid", f"グリッド検出（全部のコマで同じドット {size}、線はコマごとに合わせる: "
-         + "、".join(f"{f.shape[1]}×{f.shape[0]}" for f in raw) + " ドット）", np.concatenate(
-             [np.pad(f, ((0, max(x.shape[0] for x in raw) - f.shape[0]), (0, 1), (0, 0))) for f in raw], 1), t0)
+    return raw, grids, src, period, notes, shared
 
-    # 単純化・パレット・クリーンアップ・縁取りは、全部のコマを 1 枚に並べて 1 回で通す
+
+def _size_text(period) -> str:
+    return f"{period[0]:.1f}px" if abs(period[0] - period[1]) < 1e-9 else f"{period[0]:.1f}×{period[1]:.1f}px"
+
+
+def _grid_strip(raw: list[np.ndarray]) -> np.ndarray:
+    return np.concatenate([np.pad(f, ((0, max(x.shape[0] for x in raw) - f.shape[0]), (0, 1), (0, 0))) for f in raw], 1)
+
+
+def _work_frames(raw, src, periods, s, steps, on_step):
+    """単純化・パレット・クリーンアップ・縁取りを、全部のコマを 1 枚に並べて 1 回で通す。戻り値は (コマ, 位置, 警告, 記録)。
+
+    `periods` はコマごとのドットの大きさ（縁取りで広がった分だけ元の絵での位置をずらすのに使う）。
+    """
     work = _work_steps(s)
     if work:
         H = max(f.shape[0] for f in raw) + 2 * (WORK_GAP // 2)
@@ -624,6 +630,7 @@ def convert_frames(rgba: np.ndarray, settings=None, frame_settings: FrameSetting
             raise RuntimeError("工程の途中で大きさが変わりました（コマを切り直せません）")
         half = WORK_GAP // 2
         new_raw = []
+        src = list(src)
         for i, (f, x0) in enumerate(zip(raw, xs)):
             cut = out[:, x0 - half:x0 + f.shape[1] + half]
             bb = _bbox(cut[..., 3] > 0)
@@ -631,7 +638,7 @@ def convert_frames(rgba: np.ndarray, settings=None, frame_settings: FrameSetting
             new_raw.append(cut[r0:r1, c0:c1].copy())
             # 縁取りで広がった分だけ、元の絵での位置もずらす
             sx, sy = src[i]
-            src[i] = (sx + (c0 - half) * period[0], sy + (r0 - top) * period[1])
+            src[i] = (sx + (c0 - half) * periods[i][0], sy + (r0 - top) * periods[i][1])
         raw = new_raw
     warnings: list[str] = []
     skipped: list[dict] = []
@@ -640,16 +647,73 @@ def convert_frames(rgba: np.ndarray, settings=None, frame_settings: FrameSetting
         if isinstance(step, PaletteStep) and not step.final and step.last is not None:
             warnings.extend(step.last.warnings)
             skipped.extend(palette_entries(step.last))
+    return raw, src, warnings, skipped
 
-    # 元の絵での位置（ドット単位）。none のために、コマが等間隔に並んでいるとみなした分を引く
+
+def _source_pos(boxes, src, period) -> list[tuple[float, float]]:
+    """元の絵での位置（ドット単位）。none のために、コマが等間隔に並んでいるとみなした分を引く。"""
     n = len(boxes)
     pitch = (boxes[-1].center_x - boxes[0].center_x) / (n - 1) if n > 1 else 0.0
-    pos = [((sx - i * pitch) / period[0], sy / period[1]) for i, (sx, sy) in enumerate(src)]
+    return [((sx - i * pitch) / period[0], sy / period[1]) for i, (sx, sy) in enumerate(src)]
+
+
+def convert_frames(rgba: np.ndarray, settings=None, frame_settings: FrameSettings | None = None,
+                   on_step: Callable[[StepResult], None] | None = None) -> FramesResult:
+    """何コマも横に並んだ絵を、コマに切り分けて 1 つのキャラとして変換し、そろえる。
+
+    `settings` は 1 枚の絵の変換と同じ `SpriteSettings`（ドット絵風の入力だけ。`grid_origin` は使えない）。
+    作らなかったときは `FramesError`（コマの数が合わないなど）か `GridNotFoundError`。
+    別々のファイルの絵をつなげるときは `convert_frame_files()`。
+    """
+    import time
+
+    from .convert import SpriteSettings
+    s = settings or SpriteSettings()
+    fs = frame_settings or FrameSettings()
+    _check_settings(s, fs)
+    steps: list[StepResult] = []
+
+    def emit(name, desc, img, t0):
+        r = StepResult(name, desc, img, time.perf_counter() - t0)
+        steps.append(r)
+        if on_step is not None:
+            on_step(r)
+
+    t0 = time.perf_counter()
+    cur, bg = _remove_background(rgba, s)
+    if bg is not None:
+        emit(bg.name, bg.describe(), cur, t0)
+    t0 = time.perf_counter()
+    boxes, notes = find_frames(cur, fs.frame_count)
+    emit("frames", f"コマの切り分け（{len(boxes)} コマ: "
+         + "、".join(f"{b.x0}〜{b.x1 - 1}" for b in boxes) + "）", cur, t0)
+
+    t0 = time.perf_counter()
+    subs = [frame_image(cur, b, boxes) for b in boxes]
+    raw, grids, src, period, gnotes, _ = _grid_cells(subs, s, fs.grid)
+    notes.extend(gnotes)
+    emit("grid", f"グリッド検出（全部のコマで同じドット {_size_text(period)}、線はコマごとに合わせる: "
+         + "、".join(f"{f.shape[1]}×{f.shape[0]}" for f in raw) + " ドット）", _grid_strip(raw), t0)
+
+    raw, src, warnings, skipped = _work_frames(raw, src, [period] * len(raw), s, steps, on_step)
+    pos = _source_pos(boxes, src, period)
+    return _finish_convert(raw, pos, boxes, grids, period, fs, steps, emit, notes, warnings, skipped)
+
+
+def _finish_convert(raw, pos, boxes, grids, period, fs, steps, emit, notes, warnings, skipped,
+                    files=None, sources=None, joins=None) -> FramesResult:
+    """そろえる → 範囲・ちらつき → 手の直し（`convert_frames()` と `convert_frame_files()` で共通）。"""
+    import time
     t0 = time.perf_counter()
     frames, offs, pivot, anchors = align_frames(raw, fs.align, fs.align_y, fs.head_ratio, pos)
     aligned = frames
     emit("align", f"そろえる（横 {fs.align}・縦 {fs.align_y}、{frames[0].shape[1]}×{frames[0].shape[0]} ドット）",
          np.concatenate(frames, 1), t0)
+    if files is not None and len(files) > 1:
+        from .join import join_report
+        joins, jwarn, jskip = join_report(aligned, files, fs.head_ratio)
+        warnings.extend(jwarn)
+        skipped.extend(jskip)
     frames, same_rep, steady_rep, before = finish_frames(frames, fs, emit)
     if same_rep is not None:
         warnings.extend(same_rep.warnings)
@@ -657,7 +721,7 @@ def convert_frames(rgba: np.ndarray, settings=None, frame_settings: FrameSetting
     res = FramesResult(frames=frames, raw=raw, boxes=boxes, grids=grids, dot_size=period, offsets=offs,
                        pivot=pivot, align=fs.align, align_y=fs.align_y, anchors=anchors, steps=steps, warnings=warnings,
                        skipped=skipped, notes=notes, steady=steady_rep, before_steady=before, same=same_rep,
-                       aligned=aligned)
+                       aligned=aligned, files=files, sources=sources, joins=joins)
     return _with_edits(res, fs, emit)
 
 
@@ -818,6 +882,11 @@ def assemble_frames(res: FramesResult, order: list[int] | None = None, durations
         info["steady"] = res.steady.info()
     if getattr(res, "touchup", None) is not None:
         info["edits"] = res.touchup.info()
+    if getattr(res, "joined", False):
+        # つなげたファイルの記録（ファイルが 2 つ以上のときだけ。1 つのときの JSON は前と同じ）
+        info["files"] = [f.info() for f in res.files]
+        info["source_files"] = [list(res.sources[k - 1]) for k in order]
+        info["joins"] = list(res.joins or [])
     return MotionResult(name=name + ("_mirror" if mirror else ""), frames=frames, durations=ds, info=info)
 
 
@@ -842,10 +911,18 @@ def frames_sheet_info(result, image_name: str, skipped: list | None = None, dot_
     info["pivot"]["x"] = float(result.info["pivot_x"])
     for f, k in zip(info["frames"], result.info["source_frames"]):
         f["source_frame"] = int(k)
+    if "source_files" in result.info:
+        # つなげたとき: どのファイルの何コマ目か（並べた順を入れ替えても、元の絵が分かるように）
+        for f, (fn, ff) in zip(info["frames"], result.info["source_files"]):
+            f["source_file"], f["source_file_frame"] = fn, int(ff)
     src = {"frame_count": int(max(result.info["source_frames"])), "align": result.info["align"],
            "align_y": result.info["align_y"], "mirrored": result.name.endswith("_mirror")}
     if dot_size is not None:
         src["dot_size"] = round(float(dot_size[0]), 3)
+    if "files" in result.info:
+        src["frame_count"] = int(sum(f["frame_count"] for f in result.info["files"]))
+        src["files"] = result.info["files"]
+        src["joins"] = result.info["joins"]
     skipped_list = info.pop("skipped")
     swaps = info.pop("swaps", None)
     info["source"] = src
@@ -986,21 +1063,34 @@ def flicker_json(report: FlickerReport) -> str:
     return json.dumps(report.info(), ensure_ascii=False, indent=2) + "\n"
 
 
-def flicker_image(frames: list[np.ndarray], report: FlickerReport, scale: int = 8) -> np.ndarray:
+JOIN_COLOR = (255, 140, 0, 255)   # ちらつきの見える化で、ファイルの境目に引く線と、ファイルの番号の色（橙）
+
+
+def flicker_image(frames: list[np.ndarray], report: FlickerReport, scale: int = 8,
+                  file_starts: list[int] | None = None) -> np.ndarray:
     """ちらつきの見える化の画像（RGBA）。各コマを scale 倍にし、数える範囲の外を薄く、違うドットを赤紫の枠で囲む。
 
     コマは元の並び順に左から並べ、コマの間は 1 ドット分の灰色。数える範囲の下の線は水色。
+    `file_starts`（つなげたときの、2 つ目からのファイルの 1 コマ目の番号。`join.file_starts()`）があれば、
+    その前のすき間を橙に塗り、各ファイルの 1 コマ目の上に橙で f1・f2… と書く（無ければ今までと同じ画像）。
     """
     from PIL import Image, ImageDraw
     h, w = frames[0].shape[:2]
     gap = scale
+    extra = 12 if file_starts else 0
     W = len(frames) * w * scale + (len(frames) + 1) * gap
-    Hh = h * scale + 2 * gap + 12
+    Hh = h * scale + 2 * gap + 12 + extra
     canvas = Image.new("RGBA", (W, Hh), (200, 200, 200, 255))
     draw = ImageDraw.Draw(canvas)
+    if file_starts:
+        for n, k in enumerate([1] + list(file_starts)):
+            x0 = gap + (k - 1) * (w * scale + gap)
+            if n:
+                draw.rectangle([x0 - gap, 0, x0 - 1, Hh - 1], fill=JOIN_COLOR)
+            _draw_label(draw, x0, 13, f"f{n + 1}", fill=JOIN_COLOR)
     for i, (f, ff) in enumerate(zip(frames, report.frames)):
         x0 = gap + i * (w * scale + gap)
-        y0 = gap + 12
+        y0 = gap + 12 + extra
         bg = np.empty((h, w, 4), np.uint8)
         yy, xx = np.mgrid[0:h, 0:w]
         bg[...] = 236
