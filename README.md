@@ -21,7 +21,8 @@ AI が描いた「ドット絵風の画像」から、本物のドット絵の�
 5. **書き出し**: スプライトシート（PNG）と情報（JSON）、GIF アニメ、左右反転、Piskel で開ける `.piskel`。
    Piskel などで手直ししたシートを読み戻して作り直すこともできます
 
-詳しい使い方は [apps/sprite/README.md](apps/sprite/README.md)、設計は [docs/sprite-app-plan.md](docs/sprite-app-plan.md)、
+詳しい使い方は [apps/sprite/README.md](apps/sprite/README.md)、オプションと出力の形は [docs/cli.md](docs/cli.md)、
+仕組みは [docs/how-it-works.md](docs/how-it-works.md)、設計は [docs/sprite-app-plan.md](docs/sprite-app-plan.md)、
 手直しの手順は [docs/sprite-edit.md](docs/sprite-edit.md)、これまでの作業のまとめは [docs/history.md](docs/history.md) にあります。
 
 ## ブラウザ版の使い方
@@ -46,7 +47,7 @@ pip install -r requirements.txt
 python -m apps.sprite 入力.png -o out/sprite/出力.png
 ```
 
-よく使う例です（ほかのオプションは `python -m apps.sprite --help` と [apps/sprite/README.md](apps/sprite/README.md)）。
+よく使う例です（ほかのオプションは `python -m apps.sprite --help` と [docs/cli.md](docs/cli.md)）。
 
 ```bash
 python -m apps.sprite 入力.png --motion breathe --gif
@@ -93,7 +94,7 @@ python tools/build_sprite_web.py
 | `apps/sprite/` | CLI（`cli.py`）とブラウザ版（`web/`）、動きの表の見本（`examples/`） |
 | `tools/` | ブラウザ版の HTML を作る `build_sprite_web.py`、比較画像を作る `compare_sprite_*.py` など |
 | `tests/` | pytest。テスト画像はすべてコードで合成 |
-| `docs/` | 設計・引き継ぎ（`TODO.md`）・これまでのまとめ |
+| `docs/` | 設計（`sprite-app-plan.md`）・仕組み（`how-it-works.md`）・CLI（`cli.md`）・残っていること（`TODO.md`）・これまでのまとめ（`history.md`）。昔の記録は `archive/` |
 
 ## ライセンス
 
