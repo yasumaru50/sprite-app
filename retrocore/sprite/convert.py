@@ -1008,6 +1008,7 @@ def frames_convert_bytes(data, request: dict) -> dict:
            "aligned_png": encode_png(np.concatenate(res.aligned, 1)),
            "files": [dict(f.info(), boxes=[[b.x0, b.y0, b.x1, b.y1] for b in f.boxes]) for f in res.files],
            "sources": [[n, int(k)] for n, k in res.sources], "joins": list(res.joins or []),
+           "offsets": [[int(x), int(y)] for x, y in res.offsets],
            "file_starts": [f.first for f in res.files[1:]]}
     out.update(_frames_view(res))
     return out
@@ -1048,8 +1049,8 @@ def frames_same(request: dict) -> dict:
     if edits is not None and err is None:
         from .touchup import palette_of, touchup_dict, touchup_json
         pal = palette_of(finished.frames)
-        out["edits"] = touchup_dict(edits, pal, finished.sources)
-        out["edits_json"] = touchup_json(edits, pal, finished.sources)
+        out["edits"] = touchup_dict(edits, pal, finished.sources, finished.offsets)
+        out["edits_json"] = touchup_json(edits, pal, finished.sources, finished.offsets)
     out.update(_frames_view(res))
     return out
 
@@ -1111,7 +1112,7 @@ def frames_edits(request: dict) -> dict:
     finished = _FRAMES_CACHE.get("finished") or _FRAMES_CACHE["result"]
     try:
         # つなげたときは、直しのファイルの記録で今のコマの番号に付け直す（並び順を入れ替えても同じ絵のコマに付く）
-        edits = remap_touchup(edits, finished.sources) if edits is not None else None
+        edits = remap_touchup(edits, finished.sources, finished.offsets, finished.size) if edits is not None else None
         res = touchup_result(finished, edits)
     except TouchupError as e:
         return {"ok": True, "applied": False, "code": e.code, "error": str(e)}
@@ -1122,8 +1123,8 @@ def frames_edits(request: dict) -> dict:
     out = {"ok": True, "applied": True, "token": _FRAMES_CACHE["token"], "edits": None, "edits_json": None}
     if _FRAMES_CACHE["edits"] is not None:
         pal = palette_of(finished.frames)
-        out["edits"] = touchup_dict(edits, pal, finished.sources)
-        out["edits_json"] = touchup_json(edits, pal, finished.sources)
+        out["edits"] = touchup_dict(edits, pal, finished.sources, finished.offsets)
+        out["edits_json"] = touchup_json(edits, pal, finished.sources, finished.offsets)
     out.update(_frames_view(res))
     return out
 
@@ -1233,10 +1234,10 @@ def frames_sheets(request: dict, result=None) -> dict:
         got = _apply_swaps_view(out, anims[0], swaps, result.frames[0], pal)
         if got is not anims[0]:
             anims = [got] + [mirror_swapped(got, a) for a in anims[1:]]
-        base = tuple(result.sources[0]) if getattr(result, "joined", False) else None
-        out["swaps_json"] = swaps_json(swaps, pal, base)   # 保存する <出力名>_<名前>_swaps.json の中身
+        first = tuple(result.sources[0]) if getattr(result, "joined", False) else None
+        out["swaps_json"] = swaps_json(swaps, pal, first)   # 保存する <出力名>_<名前>_swaps.json の中身
         from .swap import base_warning
-        msg = base_warning(swaps, result.sources if base is not None else None)
+        msg = base_warning(swaps, result.sources if first is not None else None)
         if msg:
             out["swaps_base_warning"] = msg
 
