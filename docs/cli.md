@@ -239,6 +239,8 @@ python -m apps.sprite 歩き.png --frames --frame-count 4 --same-as-first 0,0,53
 python -m apps.sprite 走り.png --frames --frame-count 4 --align-y match --same-as-first 0,0,62,54 --same-search 4 --steady on
 python -m apps.sprite 正面歩き.png --frames --frame-count 3 --frame-order 1,2,3,2 --edits ai08_sprite_frames_edits.json --piskel --gif
 python -m apps.sprite dance1.png dance2.png dance3.png --frames --join -o out/sprite/dance.png --frame-name dance --flicker --gif
+python -m apps.sprite jump.png --frames --frame-count 4 --align-y keep --frame-name jump --gif
+python -m apps.sprite spin.png --frames --frame-count 3 --frame-order 1,2,3,2r --frame-name spin --gif
 ```
 
 | オプション | 内容 |
@@ -248,9 +250,10 @@ python -m apps.sprite dance1.png dance2.png dance3.png --frames --join -o out/sp
 | `--join-match-height` | `--join` で、キャラの高さをいちばん小さいファイルに合わせる（違いが 1 割までのとき）。付けないときは合わせず、高さの違いを警告するだけ |
 | `--frame-count N` | コマの数を確かめる（`--join` では全部のファイルの合計）。合わなければ作らずに警告し `<出力名>_<名前>_skipped.json`（`code: frame_count`）を書く（終了コード 1） |
 | `--align` | 横のそろえ方。`match`（既定。上から 3 割の形が 1 コマ目といちばん重なる位置）/ `head`（上の方の横の中心）/ `center` / `none` |
-| `--align-y` | 縦のそろえ方。`foot`（既定。足元）/ `match`（上の方の形がいちばん重なる高さ。走り・跳び向け）/ `none` |
+| `--align-y` | 縦のそろえ方。`foot`（既定。足元）/ `match`（上の方の形がいちばん重なる高さ。走り・跳び向け）/ `keep`（元の絵の高さを保つ。ジャンプなど宙に浮くコマ。下の「宙に浮くコマ」）/ `none` |
+| `--frame-shift-y DY,...` | 元のコマごとに、そろえた位置から上げ下げする（ドット。− が上）。数は元のコマの数（`--join` では合計）。− で始まるときは `--frame-shift-y=0,-3,-6,0` |
 | `--frame-grid` | グリッドの線の並び。`auto`（既定。形の似たコマだけ共通）/ `each`（コマごと。以前の動き）/ `shared`（いつも共通） |
-| `--frame-order 1,2,3,2` | 再生の順番（元の絵の左から 1, 2, …。同じコマを何度使ってもよい） |
+| `--frame-order 1,2,3,2` | 再生の順番（元の絵の左から 1, 2, …。同じコマを何度使ってもよい）。番号の後に `r` を付けたコマは左右に裏返して使う（`1,2,3,2r`。下の「コマごとの左右反転」） |
 | `--frame-duration MS[,MS...]` | 表示時間（既定 150） |
 | `--frame-name NAME` | ファイル名と JSON の `motion`（既定 `frames`） |
 | `--frame-root-y DY,...` | フレームごとに体全体を上下にずらす（− が上。表の `root_y` と同じ）。− で始まるときは `--frame-root-y=-1,0,-1,0` |
@@ -274,6 +277,40 @@ python -m apps.sprite dance1.png dance2.png dance3.png --frames --join -o out/sp
 - `--mirror` の JSON は `pivot.x` も反転し、`source.mirrored` が true。`--gif` は `<出力名>_<名前>_<幅>x<高さ>_<N>f.gif`（幅・高さは 1 倍の大きさ）
 - 使えないもの: `--motion`・`--motion-spec`（体全体の上下は `--frame-root-y`）、`--input-type illust`、`--grid-origin`
 
+### 宙に浮くコマ（ジャンプ。`--align-y keep`・`--frame-shift-y`）
+
+足元でそろえると、跳んだコマも足が地面に着いてしまう。`--align-y keep`（画面の「元の絵の高さを保つ」）は、コマごとに足元をそろえず、
+**元の絵での上下の位置**（ドットの格子に乗せたあとの位置）をそのまま使う。
+
+- 1 つのファイルの中では元の絵の上下のまま。ファイルが何枚か（`--join`）のときは、ファイルどうしをそれぞれの**いちばん低い足元**でそろえる
+- 自動でうまくいかないとき（AI がコマごとに違う高さに描いたなど）は、`--frame-shift-y`（画面の「コマごとの上げ下げ」）で元のコマごとに上げ下げする（− が上）。
+  どのそろえ方でも使え、そろえた後に足す。数は元のコマの数と同じ（順番の数ではない。順番ごとに体を上下させるのは `--frame-root-y`）。
+  指定できるのは −256〜256 ドット（キャラの高さより十分大きい。シートは上げ下げの分だけ広がるので、大きすぎる絵にならないように上限を置いた。超えると理由と範囲を表示する）
+- 直しの一覧（edits.json）: `keep` か上げ下げを使ったときは、ファイルが 1 つでも各コマを置いた位置（`origin`）を書く。上げ下げを変えて変換し直しても、
+  置いた位置の違いだけドットをずらして、キャラの同じ所に付ける（`--edits` でも画面でも）。ずらすとキャンバスの外に出るときは当てない（画面では確認の窓）。
+  画面では、変えたのが上げ下げ・そろえ方だけのときに付け直す（色数などを変えるとコマの絵の大きさが変わることがあり、位置だけでは合わせられないため。そのときは今までどおり）
+- キャンバスは、いちばん高く跳んだコマが入る高さに広がる（全部のコマが同じ大きさのまま）。横のそろえ方は今までどおり
+- JSON に**地面の線** `ground_y`（いちばん低い足元の高さ。`pivot.y` と同じ）と、フレームごとの `air`（足元が地面の線から何ドット上か。着いていれば 0）を書く。
+  Godot では、AnimatedSprite2D の `offset.y` を `-ground_y`（と `centered` を切）にすると、地面の線がノードの位置に来る。影は `air` を見て小さくするなど
+- `keep` も上げ下げも使わないときの出力は今までと同じ
+- 比較画像: ai13（ジャンプ 4 コマ）で、3 コマ目が地面から 27 ドット、2 コマ目が 10 ドット浮く。シートは 58×94（足元でそろえると 56×68）
+
+### コマごとの左右反転（回る動き。`--frame-order 1,2,3,2r`）
+
+正面・横・後ろの 3 コマから「回る」動きを作るとき、反対の横向きは横向きのコマを裏返して使える。順番の番号の後に `r`（大文字でもよい）を付けると、そのコマを左右に裏返す。
+
+- 裏返す軸は、そろえた基準（横のそろえ方の基準。JSON の `pivot.x`）。キャラは横にずれない。基準の左右で同じ幅になるように、全部のフレームの左右に透明の列を足す
+  （JSON の `padding.left`・`padding.right`。`pivot.x` は足した分だけ右に）。シートの大きさは全部のフレームで同じ
+- JSON の裏返したフレームに `"flipped": true`（`source_frame` は元のコマの番号のまま）
+- **左右で違う物（リボン・持ち物など）は反対側に移る**。r を使うと注意を出す。直したいときは、画面の「ドットを直す」で裏返したコマ（`2r`）を開いて直す。
+  元のコマの直しは裏返したコマにも裏返して付き、裏返したコマで直したドットは裏返したコマだけに入る（下の「edits.json の形」）
+- まばたき・口パク（`--swaps`）は、裏返したコマには裏返して当てる（位置を探すのも、裏返し直した向きで）
+- **シート全体の左右反転（`--mirror`）と一緒に使うと**: 反転したシートは、r のコマも含めて全部のフレームを反転したもの（r のコマは元の向きに戻る）。
+  `pivot.x` は同じ（基準の左右で同じ幅なので）、`padding.left` と `right` が入れ替わる。`frames[].flipped` はそのまま（「元のコマを裏返したか」の印）
+- 重ね（`--fx`）・`.piskel`・読み戻し（`--readback`）でもそのまま使える。読み戻しで「同じ元のコマ」を比べる・そろえる（`--same-frames first`）ときは、
+  裏返したコマと裏返していないコマを別のコマとして扱う
+- r を使わないときの出力は今までと同じ
+
 ### 別々のファイルの絵をつなげる（`--join`）
 
 長い動き（ダンスなど）を AI に何枚かに分けて描かせたときに、ファイルを書いた順につなげて 1 つの動きにする。1 枚の中のコマは 1 つでも何コマでもよい。
@@ -291,6 +328,22 @@ python -m apps.sprite dance1.png dance2.png dance3.png --frames --join -o out/sp
 - ファイルが 1 つのとき（`--join` なしと同じ）の出力は、今までとバイト単位で同じ
 - 同じ名前のファイルが 2 つ以上あるときは、2 つ目から `名前#2` のように区別する（直しの一覧・JSON の記録の名前）
 - 比較画像: `tools/compare_sprite_frames.py`・`compare_sprite_steady.py`・`compare_sprite_same.py`（`--frame-count 4` など）
+
+### edits.json の形（「ドットを直す」の直しの一覧）
+
+```json
+{"version": 3, "kind": "sprite_edits", "name": "spin", "frame_width": 77, "frame_height": 95, "frame_count": 3,
+ "palette": ["#rrggbb", ...], "dot_count": 3,
+ "frames": [{"source_frame": 2, "dots": [[x, y, 色の番号 か null, 直したときの下の色]]},
+            {"source_frame": 2, "mirrored": true, "dots": [[x, y, 色の番号 か null, 下の色]]}]}
+```
+
+- `source_frame` は元のコマの番号（1 から）。順番 1,2,3,2 の 2 番目と 4 番目は 1 回直せば両方に入る
+- `"mirrored": true` の項目は、**裏返したコマ（順番の r）だけの直し**。座標は、元のコマを左右に裏返した絵（大きさは元のコマと同じ。左上が 0,0）の上。
+  元のコマの直し（`mirrored` の無い項目）は、裏返したコマにも裏返して付く。同じコマでは、元のコマの直しの後に置く
+- 版: 裏返したコマの直しがあれば 3、つなげたとき（`--join` で 2 つ以上のファイル）は 2（`files`・`file`・`file_frame`・`origin`）、ほかは 1。
+  ファイルが 1 つでも、縦のそろえ方 `keep` か上げ下げを使ったときは `origin`（そのコマの絵を置いた位置）を書く（版は変えない）。
+  前の形（版 1・2。`mirrored` が無い）もそのまま読める。つなげたときの裏返したコマの `origin` は、裏返した絵の中でそのコマの絵を置いた位置
 
 ## 差し替え（まばたき。`--swaps`）
 
@@ -461,7 +514,10 @@ python -m apps.sprite 書き出した.png --readback walk_walk_53x91_4f.json --o
 | `source` | （`--frames`）`frame_count`・`align`・`align_y`・`mirrored`・`dot_size` |
 | `same_as_first` | （`--same-as-first` のとき）範囲・コマごとのずれ・合い方・写したか（`copied`・`code`）・`changed_dots`・`kept_dots` など |
 | `steady` | （`--steady on` のとき）`mode`・`size`・`reference_frame`・`rows` と、コマごとの `shift`・`restored_dots`・`kept_dots`・`kept_reasons` |
-| `edits` | （`--edits` のとき）`palette`・`dot_count`・元のコマごとの `dots`（[x, y, 色の番号 か null]）。`--join` では `file`・`file_frame` も |
+| `edits` | （`--edits` のとき）`palette`・`dot_count`・元のコマごとの `dots`（[x, y, 色の番号 か null]）。`--join` では `file`・`file_frame` も。裏返したコマだけの直しは `"mirrored": true` |
+| `ground_y` / `frames[].air` | （`--align-y keep`・`--frame-shift-y` のとき）地面の線（いちばん低い足元。左上が原点、下向きが +y の画素）と、足元が地面の線から何ドット上か |
+| `frames[].flipped` | （順番に `r` があるとき）左右に裏返したコマ |
+| `source.shift_y` | （`--frame-shift-y` のとき）元のコマごとの上げ下げ |
 | `frames[].source_file` / `source_file_frame` | （`--join` で 2 つ以上のファイル）そのフレームがどのファイルの何コマ目か |
 | `source.files` | （`--join` で 2 つ以上のファイル）ファイルごとの `name`・`frame_count`・`first_frame`・`dot_size`（使った大きさ）・`detected_dot_size`・`grid_scale`（格子を何倍にしたか）・`height`・`height_used`・`height_match`（`base` いちばん小さい / `same` / `adjusted` 合わせた / `off` 高さが違うが合わせていない（既定）/ `too_far` 違いが 1 割より大きくて合わせない） |
 | `source.joins` | （`--join` で 2 つ以上のファイル）境目ごとの `from_file`・`to_file`・`from_frame`・`to_frame`・`loop`（くり返すときの最後 → 最初）・`shift`（`x`・`foot`・`top`。ドット）・`large`（警告したか） |

@@ -394,18 +394,20 @@ def check_frames(frames: list[np.ndarray], info: dict, palette: np.ndarray | Non
         sf = info["frames"][i].get("source_frame") if i < len(info["frames"]) else None
         if isinstance(sf, int) and not isinstance(sf, bool):
             entry["source_frame"] = sf
+            if info["frames"][i].get("flipped") is True:   # 裏返したコマ（順番の r）は、裏返していないコマとは比べない
+                entry["flipped"] = True
         sw = info["frames"][i].get("swap") if i < len(info["frames"]) else None
         if isinstance(sw, dict):   # 差し替え（まばたきなど）を入れたフレームは、同じ元のコマでも違ってよい
             entry["swap"] = sw
         rec_frames.append(entry)
         marks.append({"new": newm, "semi": semi, "repeat": np.zeros(a.shape, bool)})
     # 同じ元のコマ（source_frame）から作ったコマの違い
-    groups: dict[int, list[int]] = {}
+    groups: dict[tuple, list[int]] = {}
     for e in rec_frames:
         if "source_frame" in e and "swap" not in e:
-            groups.setdefault(e["source_frame"], []).append(e["frame"] - 1)
+            groups.setdefault((e["source_frame"], e.get("flipped", False)), []).append(e["frame"] - 1)
     repeats = []
-    for sf, idx in groups.items():
+    for (sf, fl), idx in groups.items():
         if len(idx) < 2:
             continue
         first = _norm(frames[idx[0]])
@@ -416,6 +418,8 @@ def check_frames(frames: list[np.ndarray], info: dict, palette: np.ndarray | Non
                 marks[idx[0]]["repeat"] |= d
                 repeats.append({"source_frame": sf, "frames": [idx[0] + 1, j + 1], "dots": int(d.sum()),
                                 "pixels": _pixels(d)})
+                if fl:
+                    repeats[-1]["flipped"] = True
     return {"frames": rec_frames, "new_colors": sorted(new_color.values(), key=lambda e: (-e["dots"], e["color"])),
             "semi_transparent": {"dots": semi_total, "pixels": semi_pixels}, "repeats": repeats,
             "_marks": marks}
@@ -435,7 +439,7 @@ def _messages(chk: dict, palette_source: str | None, n: int) -> list[str]:
                    "（GIF では透明か不透明のどちらかになります）。場所は確認の画像の橙の枠です")
     for r in chk["repeats"]:
         a, b = r["frames"]
-        out.append(f"{a} コマ目と {b} コマ目は同じコマ（元の {r['source_frame']} コマ目）から作ったものですが、直した結果が "
+        out.append(f"{a} コマ目と {b} コマ目は同じコマ（元の {r['source_frame']}{'r' if r.get('flipped') else ''} コマ目）から作ったものですが、直した結果が "
                    f"{r['dots']} ドット違います。そのまま使いました（片方だけ直し忘れていないか確かめてください。"
                    "場所は確認の画像の青い枠。そろえるときは「同じコマは先に出てくるコマに合わせる」を選びます）")
     return out
@@ -587,12 +591,13 @@ def readback(edited: bytes, edited_name: str, info_text, original: bytes | None 
         frames, fixed = fix_frames(frames, palette)
     same = None
     if opt.same_frames == "first":
-        seen: dict[int, int] = {}
+        seen: dict[tuple, int] = {}
         same = []
         for i, f in enumerate(info["frames"]):
             sf = f.get("source_frame")
             if not isinstance(sf, int) or isinstance(sf, bool) or isinstance(f.get("swap"), dict):
                 continue
+            sf = (sf, f.get("flipped") is True)   # 裏返したコマ（r）は、裏返していない同じコマとは別に扱う
             if sf in seen:
                 j = seen[sf]
                 if not np.array_equal(_norm(frames[i]), _norm(frames[j])):

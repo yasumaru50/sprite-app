@@ -96,6 +96,7 @@ MOTION_DEFAULT_FRAMES = {k: m.DEFAULT_FRAMES for k, m in MOTION_MODULES.items()
 MAX_PREVIEW_SCALE = 32
 # コマを切り分けてそろえる（--frames）のオプション（--frames と一緒にだけ使える）
 FRAME_OPTIONS = ("frame_count", "align", "align_y", "frame_grid", "frame_order", "frame_duration", "frame_name", "frame_root_y",
+                 "frame_shift_y",
                  "mirror", "flicker", "flicker_rows", "steady", "steady_size", "steady_rows",
                  "same_ranges", "same_search", "same_from", "edits", "join", "join_match_height")
 # 手直しの読み戻し（--readback）だけのオプション
@@ -278,14 +279,19 @@ def _fx_offset(text: str) -> tuple[int, int]:
     return vals[0], vals[1]
 
 
-def _frame_order(text: str) -> list[int]:
-    """コマの順番: 1,2,3,2（元の絵の左から 1, 2, …）。"""
-    vals = _int_list(text)
-    if min(vals) < 1:
-        raise argparse.ArgumentTypeError(f"コマの番号は 1 から数えます: {text}")
-    if len(vals) > frames_mod.MAX_FRAMES:
-        raise argparse.ArgumentTypeError(f"コマの順番は {frames_mod.MAX_FRAMES} 個までです: {text}")
-    return vals
+def _frame_order(text: str) -> list:
+    """コマの順番: 1,2,3,2（元の絵の左から 1, 2, …）。r を付けたコマは左右に裏返して使う（1,2,3,2r）。
+    戻り値は数の並び（r が無いとき。今までと同じ）か、"2r" のような文字を混ぜた並び。"""
+    try:
+        nums, flips = frames_mod.parse_order_flips(text, None)
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(f"{e}: {text}") from None
+    return [f"{k}r" if f else k for k, f in zip(nums, flips)]
+
+
+def _order_numbers(order) -> list[int]:
+    """--frame-order の並びの番号だけ（r を除く）。"""
+    return frames_mod.parse_order_flips(order, None)[0]
 
 
 def _steady_size(text: str) -> int:
@@ -673,7 +679,9 @@ def build_parser() -> argparse.ArgumentParser:
     fr.add_argument("--frame-grid", choices=list(frames_mod.GRID_MODES), default=None,
                     help="グリッドの線の並び。" + "、".join(f"{k} = {v}" for k, v in frames_mod.GRID_MODES.items()))
     fr.add_argument("--frame-order", type=_frame_order, default=None, metavar="1,2,3,2",
-                    help="シートに並べるコマの順番（元の絵の左から 1, 2, …。同じコマを何度使ってもよい）。既定は 1, 2, …")
+                    help="シートに並べるコマの順番（元の絵の左から 1, 2, …。同じコマを何度使ってもよい）。既定は 1, 2, …。"
+                         "番号の後に r を付けると、そのコマを左右に裏返して使う（1,2,3,2r。回る動きなど。そろえた基準を軸に裏返すので"
+                         "キャラは横にずれない。左右で違う物は反対側に移る）")
     fr.add_argument("--frame-duration", type=_durations, default=None, metavar="MS[,MS...]",
                     help=f"各フレームの表示時間（ミリ秒。既定 {frames_mod.DEFAULT_DURATION}。走りは 100 前後が目安）。"
                          "フレームごとに 150,100,150,100 のようにも書ける（数は --frame-order の数と同じにする）")
@@ -683,8 +691,14 @@ def build_parser() -> argparse.ArgumentParser:
                     help="フレームごとに体全体を上下にずらす（ドット。− が上。動きの表の root_y と同じ）。数は並べるフレームの数と同じ。"
                          "走りを跳ねて見せるときなど。− で始まるときは --frame-root-y=-1,0,-1,0 のように = でつなぐ。"
                          "はみ出す分は上下に透明の行を足し、JSON の padding と offset_y に書く")
+    fr.add_argument("--frame-shift-y", type=_int_list, default=None, metavar="DY,DY,...",
+                    help="元のコマごとに、そろえた位置から上げ下げする（ドット。− が上）。数は元のコマの数と同じ"
+                         "（--join では全部のファイルの合計）。--align-y keep（元の絵の高さを保つ）でジャンプの高さがうまく出ないときなど。"
+                         "− で始まるときは --frame-shift-y=0,-3,-6,0 のように = でつなぐ。キャンバスは全部のコマが入る高さに広がり、"
+                         "JSON に地面の線（ground_y）と、フレームごとの足元の高さ（frames[].air）を書く")
     fr.add_argument("--mirror", action="store_const", const=True, default=None,
-                    help="左右を反転したシート <出力名>_<名前>_mirror_<幅>x<高さ>_<N>f.png / .json も書く（--gif なら GIF も）")
+                    help="左右を反転したシート <出力名>_<名前>_mirror_<幅>x<高さ>_<N>f.png / .json も書く（--gif なら GIF も）。"
+                         "--frame-order の r（裏返したコマ）も含めて全部のフレームを反転する（r のコマは元の向きに戻る）")
     fr.add_argument("--flicker", action="store_const", const=True, default=None,
                     help="ちらつきの見える化: 上の方（本来は動かないはずの所）で 1 コマ目と違うドットに色を付けた画像 "
                          "<出力名>_<名前>_flicker.png と、コマごとの数・場所の <出力名>_<名前>_flicker.json を書く"
@@ -834,8 +848,14 @@ def check_frames_args(parser: argparse.ArgumentParser, args: argparse.Namespace)
     if args.grid_origin is not None:
         parser.error("--frames では --grid-origin は使えません（コマごとにグリッドのずれが違うため、線はコマごとに合わせます）")
     n = len(args.frame_order) if args.frame_order else args.frame_count
-    if args.frame_order and args.frame_count is not None and max(args.frame_order) > args.frame_count:
-        parser.error(f"--frame-order の番号（最大 {max(args.frame_order)}）が --frame-count {args.frame_count} を超えています")
+    if args.frame_order and args.frame_count is not None and max(_order_numbers(args.frame_order)) > args.frame_count:
+        parser.error(f"--frame-order の番号（最大 {max(_order_numbers(args.frame_order))}）が --frame-count {args.frame_count} を超えています")
+    if args.frame_shift_y is not None:
+        if args.frame_count is not None and len(args.frame_shift_y) != args.frame_count:
+            parser.error(f"--frame-shift-y の数（{len(args.frame_shift_y)}）は元のコマの数（--frame-count {args.frame_count}）と同じにしてください")
+        if any(abs(v) > frames_mod.MAX_SHIFT_Y for v in args.frame_shift_y):
+            parser.error(f"--frame-shift-y は −{frames_mod.MAX_SHIFT_Y}〜{frames_mod.MAX_SHIFT_Y} ドットで指定してください"
+                         "（シートが上げ下げの分だけ広がるので、大きすぎる絵にならないように）")
     if args.frame_duration is not None and len(args.frame_duration) != 1 and n is not None \
             and len(args.frame_duration) != n:
         parser.error(f"--frame-duration の数（{len(args.frame_duration)}）は並べるフレームの数（{n}）と同じか、"
@@ -1378,7 +1398,8 @@ def write_frames(args: argparse.Namespace, images: list, settings: SpriteSetting
                                   steady_size=args.steady_size or steady_mod.DEFAULT_SIZE, steady_rows=args.steady_rows,
                                   same_ranges=tuple(args.same_ranges or ()),
                                   same_search=same_mod.DEFAULT_SEARCH if args.same_search is None else args.same_search,
-                                  same_from=args.same_from or 1)
+                                  same_from=args.same_from or 1,
+                                  shift_y=None if args.frame_shift_y is None else tuple(args.frame_shift_y))
     if args.edits is not None:
         from retrocore.sprite.touchup import load_touchup
         try:
@@ -1432,7 +1453,7 @@ def write_frames(args: argparse.Namespace, images: list, settings: SpriteSetting
                   + "、".join(f"{f.frame} コマ目 戻した {f.restored_count}・残した {f.kept_count}" for f in res.steady.frames))
         if res.touchup is not None:
             print(f"  手の直しを当てた（直したドット {res.touchup.dot_count}）: "
-                  + "、".join(f"{f.frame} コマ目 {len(f.dots)}" for f in res.touchup.frames))
+                  + "、".join(f"{f.label} コマ目 {len(f.dots)}" for f in res.touchup.frames))
     if res.touchup is not None:
         print_warnings(res.touchup.warnings, src)
     strip = frames_mod.source_strip(res)
@@ -1465,6 +1486,9 @@ def write_frames(args: argparse.Namespace, images: list, settings: SpriteSetting
     except ValueError as e:
         print(f"エラー（{src.name}）: {e}", file=sys.stderr)
         return 1
+    fw = frames_mod.flip_warning(args.frame_order)
+    if fw:
+        print_warnings([fw], src)
     failed = 0
     talks = []
     if args.swaps is not None:
@@ -1487,12 +1511,18 @@ def write_frames(args: argparse.Namespace, images: list, settings: SpriteSetting
                                                res.skipped, res.dot_size)
         if not args.quiet:
             w, h = anim.size
-            order = ",".join(str(k) for k in anim.info["source_frames"])
+            order = frames_mod.order_text(anim.info["source_frames"], anim.info.get("flipped"))
             extra = ""
             if "offset_y" in anim.info:
                 top, bottom = anim.info["padding_y"]
                 extra = (f"、体全体の上下 {'/'.join(f'{d:+d}' for d in anim.info['offset_y'])}"
                          + (f"（上に {top} 行・下に {bottom} 行の余白を足した）" if top or bottom else ""))
+            if "padding_x" in anim.info and any(anim.info["padding_x"]):
+                a, b = anim.info["padding_x"]
+                extra += f"、裏返したコマのために左に {a} 列・右に {b} 列を足した"
+            if anim.info.get("ground"):
+                air = frames_mod.frames_sheet_info(anim, png.name)["frames"]
+                extra += f"、足元の高さ {'/'.join(str(f['air']) for f in air)} ドット"
             print(f"  → {png}（{'左右反転、' if anim.name.endswith('_mirror') else ''}{len(anim.frames)} フレーム、"
                   f"コマ {order}、{w}×{h}、{'/'.join(str(d) for d in anim.durations)} ミリ秒{extra}）")
             print(f"  → {js}")

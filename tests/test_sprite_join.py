@@ -270,7 +270,7 @@ def test_edits_file_checks():
     with pytest.raises(ValueError, match="file と file_frame"):
         T.touchup_from_dict({"frames": [{"source_frame": 1, "file": "a.png", "dots": []}]})
     with pytest.raises(ValueError, match="新しい版"):
-        T.touchup_from_dict({"version": 3, "frames": []})
+        T.touchup_from_dict({"version": 4, "frames": []})
 
 
 # ---- 差し替え ----
