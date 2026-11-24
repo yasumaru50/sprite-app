@@ -1,0 +1,6 @@
+{"version": 1, "kind": "sprite_anims", "name": "anims",
+ "common": {"mirror": false},
+ "anims": [
+  {"name": "walk", "files": ["ai07.png"], "duration_ms": 150},
+  {"name": "run", "files": ["ai09.png"], "duration_ms": 100},
+  {"name": "jump", "files": ["ai13_jump.png"], "align_y": "keep", "loop": false, "duration_ms": 150}]}

@@ -1,0 +1,329 @@
+{
+  "version": 2,
+  "motion": "anims",
+  "image": "chara_anims_62x94_12f.png",
+  "frame_width": 62,
+  "frame_height": 94,
+  "frame_count": 12,
+  "columns": 4,
+  "rows": 3,
+  "loop": false,
+  "pivot": {
+    "x": 33.0,
+    "y": 94
+  },
+  "ground_y": 94,
+  "total_duration_ms": 1600,
+  "animations": {
+    "walk": {
+      "frames": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "duration_ms": 150,
+      "loop": true,
+      "row": 0
+    },
+    "run": {
+      "frames": [
+        4,
+        5,
+        6,
+        7
+      ],
+      "duration_ms": 100,
+      "loop": true,
+      "row": 1
+    },
+    "jump": {
+      "frames": [
+        8,
+        9,
+        10,
+        11
+      ],
+      "duration_ms": 150,
+      "loop": false,
+      "row": 2
+    }
+  },
+  "frames": [
+    {
+      "index": 0,
+      "x": 0,
+      "y": 0,
+      "width": 62,
+      "height": 94,
+      "duration_ms": 150,
+      "source_frame": 1,
+      "air": 0,
+      "source_file": "ai07.png",
+      "source_file_frame": 1,
+      "animation": "walk"
+    },
+    {
+      "index": 1,
+      "x": 62,
+      "y": 0,
+      "width": 62,
+      "height": 94,
+      "duration_ms": 150,
+      "source_frame": 2,
+      "air": 0,
+      "source_file": "ai07.png",
+      "source_file_frame": 2,
+      "animation": "walk"
+    },
+    {
+      "index": 2,
+      "x": 124,
+      "y": 0,
+      "width": 62,
+      "height": 94,
+      "duration_ms": 150,
+      "source_frame": 3,
+      "air": 0,
+      "source_file": "ai07.png",
+      "source_file_frame": 3,
+      "animation": "walk"
+    },
+    {
+      "index": 3,
+      "x": 186,
+      "y": 0,
+      "width": 62,
+      "height": 94,
+      "duration_ms": 150,
+      "source_frame": 4,
+      "air": 0,
+      "source_file": "ai07.png",
+      "source_file_frame": 4,
+      "animation": "walk"
+    },
+    {
+      "index": 4,
+      "x": 0,
+      "y": 94,
+      "width": 62,
+      "height": 94,
+      "duration_ms": 100,
+      "source_frame": 5,
+      "air": 0,
+      "source_file": "ai09.png",
+      "source_file_frame": 1,
+      "animation": "run"
+    },
+    {
+      "index": 5,
+      "x": 62,
+      "y": 94,
+      "width": 62,
+      "height": 94,
+      "duration_ms": 100,
+      "source_frame": 6,
+      "air": 0,
+      "source_file": "ai09.png",
+      "source_file_frame": 2,
+      "animation": "run"
+    },
+    {
+      "index": 6,
+      "x": 124,
+      "y": 94,
+      "width": 62,
+      "height": 94,
+      "duration_ms": 100,
+      "source_frame": 7,
+      "air": 0,
+      "source_file": "ai09.png",
+      "source_file_frame": 3,
+      "animation": "run"
+    },
+    {
+      "index": 7,
+      "x": 186,
+      "y": 94,
+      "width": 62,
+      "height": 94,
+      "duration_ms": 100,
+      "source_frame": 8,
+      "air": 0,
+      "source_file": "ai09.png",
+      "source_file_frame": 4,
+      "animation": "run"
+    },
+    {
+      "index": 8,
+      "x": 0,
+      "y": 188,
+      "width": 62,
+      "height": 94,
+      "duration_ms": 150,
+      "source_frame": 9,
+      "air": 0,
+      "source_file": "ai13_jump.png",
+      "source_file_frame": 1,
+      "animation": "jump"
+    },
+    {
+      "index": 9,
+      "x": 62,
+      "y": 188,
+      "width": 62,
+      "height": 94,
+      "duration_ms": 150,
+      "source_frame": 10,
+      "air": 10,
+      "source_file": "ai13_jump.png",
+      "source_file_frame": 2,
+      "animation": "jump"
+    },
+    {
+      "index": 10,
+      "x": 124,
+      "y": 188,
+      "width": 62,
+      "height": 94,
+      "duration_ms": 150,
+      "source_frame": 11,
+      "air": 27,
+      "source_file": "ai13_jump.png",
+      "source_file_frame": 3,
+      "animation": "jump"
+    },
+    {
+      "index": 11,
+      "x": 186,
+      "y": 188,
+      "width": 62,
+      "height": 94,
+      "duration_ms": 150,
+      "source_frame": 12,
+      "air": 0,
+      "source_file": "ai13_jump.png",
+      "source_file_frame": 4,
+      "animation": "jump"
+    }
+  ],
+  "source": {
+    "frame_count": 12,
+    "align": "match",
+    "mirrored": false,
+    "dot_size": 5.883,
+    "files": [
+      {
+        "name": "ai07.png",
+        "frame_count": 4,
+        "first_frame": 1,
+        "dot_size": 5.883,
+        "detected_dot_size": 5.883,
+        "grid_scale": 1.0,
+        "height": 91,
+        "height_used": 91,
+        "height_match": "too_far"
+      },
+      {
+        "name": "ai09.png",
+        "frame_count": 4,
+        "first_frame": 5,
+        "dot_size": 5.839,
+        "detected_dot_size": 5.839,
+        "grid_scale": 1.0,
+        "height": 83,
+        "height_used": 83,
+        "height_match": "too_far"
+      },
+      {
+        "name": "ai13_jump.png",
+        "frame_count": 4,
+        "first_frame": 9,
+        "dot_size": 5.906,
+        "detected_dot_size": 5.906,
+        "grid_scale": 1.0,
+        "height": 68,
+        "height_used": 68,
+        "height_match": "base"
+      }
+    ],
+    "joins": [],
+    "anims": [
+      {
+        "name": "walk",
+        "files": [
+          "ai07.png"
+        ],
+        "first_frame": 1,
+        "frame_count": 4,
+        "order": "1,2,3,4",
+        "align_y": "foot",
+        "shift_y": null
+      },
+      {
+        "name": "run",
+        "files": [
+          "ai09.png"
+        ],
+        "first_frame": 5,
+        "frame_count": 4,
+        "order": "1,2,3,4",
+        "align_y": "foot",
+        "shift_y": null
+      },
+      {
+        "name": "jump",
+        "files": [
+          "ai13_jump.png"
+        ],
+        "first_frame": 9,
+        "frame_count": 4,
+        "order": "1,2,3,4",
+        "align_y": "keep",
+        "shift_y": null
+      }
+    ]
+  },
+  "palette": [
+    "#19153d",
+    "#394b7f",
+    "#6a433c",
+    "#87d0fa",
+    "#89888e",
+    "#977dcf",
+    "#a5e8fc",
+    "#ad7a44",
+    "#afdfd9",
+    "#c0daf5",
+    "#d53e49",
+    "#d8188a",
+    "#dbf0fc",
+    "#fc9287",
+    "#fce897",
+    "#fcefe8"
+  ],
+  "skipped": [
+    {
+      "stage": "frames",
+      "code": "join_height",
+      "message": "ai07.png のキャラの高さ 91 ドットは、いちばん小さい ai13_jump.png（68 ドット）より 34% 高いので、合わせませんでした（自動で合わせられるのは 10% まで）。AI に同じ大きさで描き直させるか、大きさの近いファイルどうしでつなげてください（しゃがみ・ジャンプなどポーズの違いなら、そのままで大丈夫です）",
+      "file": "ai07.png",
+      "height": 91,
+      "target": 68,
+      "ratio": 0.338,
+      "suggestions": [],
+      "result": "held"
+    },
+    {
+      "stage": "frames",
+      "code": "join_height",
+      "message": "ai09.png のキャラの高さ 83 ドットは、いちばん小さい ai13_jump.png（68 ドット）より 22% 高いので、合わせませんでした（自動で合わせられるのは 10% まで）。AI に同じ大きさで描き直させるか、大きさの近いファイルどうしでつなげてください（しゃがみ・ジャンプなどポーズの違いなら、そのままで大丈夫です）",
+      "file": "ai09.png",
+      "height": 83,
+      "target": 68,
+      "ratio": 0.221,
+      "suggestions": [],
+      "result": "held"
+    }
+  ]
+}
