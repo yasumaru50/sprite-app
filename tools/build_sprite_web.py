@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from retrocore.sprite import frames as frames_mod  # noqa: E402
+from retrocore.sprite import anims as anims_mod  # noqa: E402
 from retrocore.sprite import steady as steady_mod  # noqa: E402
 from retrocore.sprite import outline as outline_mod  # noqa: E402
 from retrocore.sprite.cleanup import LEVEL_HELP  # noqa: E402
@@ -61,6 +62,9 @@ def settings_spec() -> dict:
                        ["off", "なし（今までと同じ）"], ["on", "あり（小さな違いを 1 コマ目に戻す）"]]},
                    "duration": frames_mod.DEFAULT_DURATION, "name": frames_mod.DEFAULT_NAME,
                    "max_frames": frames_mod.MAX_FRAMES, "max_shift_y": frames_mod.MAX_SHIFT_Y},
+        # 動きに名前を付けてまとめる（--anims）。名前の候補・決まり・まとめている間は使えないものの理由
+        "anims": {"name": anims_mod.DEFAULT_NAME, "suggested": list(anims_mod.SUGGESTED), "name_max": anims_mod.NAME_MAX,
+                  "max_anims": anims_mod.MAX_ANIMS, "unsupported": dict(anims_mod.UNSUPPORTED)},
     }
 
 

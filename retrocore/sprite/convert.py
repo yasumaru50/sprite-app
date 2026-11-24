@@ -955,7 +955,8 @@ def _touchup_apply(finished, edits) -> tuple:
 def _edits_origins(res) -> bool:
     """直しの一覧に、ファイルが 1 つのときもコマを置いた位置（origin）を書くか。縦のそろえ方 keep・コマごとの上げ下げを
     使ったときだけ（上げ下げを変えて変換し直しても、直しがキャラの同じ所に付くように。使わないときのファイルは前と同じ）。"""
-    return res.align_y == "keep" or getattr(res, "shift_y", None) is not None
+    # 動きをまとめたとき（anims）は、ほかの動きの大きさでキャンバスが変わるので、いつも書く
+    return res.align_y == "keep" or getattr(res, "shift_y", None) is not None or getattr(res, "anims", None) is not None
 
 
 def frames_convert_bytes(data, request: dict) -> dict:
@@ -1332,6 +1333,200 @@ def readback_for_web(edited: bytes, edited_name: str, info_text: str, original: 
            "report": res.report, "names": res.names,
            "files": [{"name": k, "base64": base64.b64encode(v).decode("ascii")} for k, v in res.files.items()]}
     if res.made:
+        fr = res.info["frames"]
+        anim = res.report.get("animation")
+        if anim:   # まとめたシート: 直した動きのフレームだけを再生する（シートの中の位置 "rects" も渡す）
+            fr = [fr[i] for i in res.info["animations"][anim]["frames"]]
+            out["animation"] = anim
+            out["rects"] = [[int(f["x"]), int(f["y"])] for f in fr]
         out.update({"frame_width": int(res.info["frame_width"]), "frame_height": int(res.info["frame_height"]),
-                    "durations": [int(f["duration_ms"]) for f in res.info["frames"]]})
+                    "durations": [int(f["duration_ms"]) for f in fr]})
     return json.dumps(out, ensure_ascii=False)
+
+
+# ---- ブラウザ UI（Pyodide）向け: 動きに名前を付けてまとめる（CLI の --anims） ----
+# 変換は `anims.convert_anims()`（結果はコマの変換と同じ所に覚えるので、「ドットを直す」はそのまま使える）、
+# シートは `anims.anims_outputs()`、GIF は `anims.anim_gif()`。CLI と同じ関数なので、同じ設定ならバイト単位で同じになる。
+
+def _anims_config(values, settings=None):
+    from .anims import config_from_dict
+    d = dict(values or {})
+    if settings is not None:
+        d["settings"] = settings
+    return config_from_dict(d)
+
+
+def anims_convert_bytes(files: list, request: dict) -> dict:
+    """動きごとのファイルを変換してそろえる（例外は投げない）。`files` は [(ファイルの名前, バイト列), ...]、
+    `request` は {"settings": 変換の設定, "anims": 動きをまとめる設定（anims.json と同じ形。settings は無くてよい）}。
+    結果の形は `frames_convert_bytes()` と同じ（"anims": 動きごとの {"name", "first", "count", "files"} を足す）。"""
+    from . import frames as F
+    from .anims import convert_anims
+    from .grid import GridNotFoundError
+    try:
+        unknown = sorted(set(request) - {"settings", "anims"})
+        if unknown:
+            raise ValueError(f"知らない設定です: {', '.join(unknown)}")
+        settings = SpriteSettings.from_dict(dict(request.get("settings") or {}))
+        settings.validate()
+        cfg = _anims_config(request.get("anims"), dict(request.get("settings") or {}))
+        images = []
+        for fname, fdata in files:
+            try:
+                images.append((str(fname), decode_image(bytes(fdata))))
+            except Exception as e:
+                raise ValueError(f"{fname}: {friendly_error(e)}") from None
+    except Exception as e:
+        return {"ok": False, "error": friendly_error(e), "detail": error_detail(e)}
+    try:
+        res = convert_anims(images, settings, cfg)
+    except (F.FramesError, GridNotFoundError) as e:
+        return {"ok": True, "made": False, "error": str(e), "code": getattr(e, "code", "grid_not_found"),
+                "skipped_json": F.frames_skipped_json(e, cfg.name), "boxes": None}
+    except ValueError as e:
+        return {"ok": False, "error": f"動きをまとめられませんでした: {e}", "detail": error_detail(e)}
+    except Exception as e:
+        return {"ok": False, "error": friendly_error(e), "detail": error_detail(e)}
+    token = int(_FRAMES_CACHE.get("token", 0)) + 1
+    _FRAMES_PREV.clear()
+    _FRAMES_PREV.update(_FRAMES_CACHE)
+    _FRAMES_CACHE.clear()
+    _FRAMES_CACHE.update({"token": token, "result": res, "base": res, "fs": F.FrameSettings(align=cfg.align, grid=cfg.grid),
+                          "finished": res, "edits": None, "anims_cfg": cfg})
+    strip = F.source_strip(res)
+    opaque = strip[strip[..., 3] > 0][:, :3]
+    w, h = res.size
+    out = {"ok": True, "made": True, "token": token,
+           "frame_width": int(w), "frame_height": int(h), "frame_count": len(res.frames),
+           "boxes": [[b.x0, b.y0, b.x1, b.y1] for b in res.boxes],
+           "dot_size": round(float(res.dot_size[0]), 3),
+           "colors": int(len(np.unique(opaque.reshape(-1, 3), axis=0))) if len(opaque) else 0,
+           "notes": list(res.notes), "steps": [r.description for r in res.steps],
+           "aligned_png": encode_png(np.concatenate(res.aligned, 1)),
+           "files": [dict(f.info(), boxes=[[b.x0, b.y0, b.x1, b.y1] for b in f.boxes]) for f in res.files],
+           "sources": [[n, int(k)] for n, k in res.sources], "joins": list(res.joins or []),
+           "offsets": [[int(x), int(y)] for x, y in res.offsets],
+           "mirror_offsets": [[int(x), int(y)] for x, y in res.mirror_offsets()],
+           "shift_y": None, "edits_origin": True, "file_starts": [f.first for f in res.files[1:]],
+           "anims": [dict(r) for r in res.anims]}
+    out.update(_frames_view(res))
+    return out
+
+
+def anims_convert_files_for_web(datas: list, names: list, request_json: str = "{}") -> str:
+    """ブラウザ UI（Pyodide）から呼ぶ形。結果は JSON 文字列（PNG は base64）。"""
+    try:
+        values = json.loads(request_json or "{}")
+        if not isinstance(values, dict):
+            raise ValueError("設定は {\"settings\": {...}, \"anims\": {...}} のような形で渡してください")
+        if len(datas) != len(names) or not datas:
+            raise ValueError("ファイルの名前とバイト列の数が合いません")
+    except ValueError as e:
+        return json.dumps({"ok": False, "error": friendly_error(ValueError(f"設定を読めません: {e}")),
+                           "detail": error_detail(e)}, ensure_ascii=False)
+    return json.dumps(_web_b64(anims_convert_bytes(list(zip(names, datas)), values)), ensure_ascii=False)
+
+
+def anims_sheets(request: dict, result=None) -> dict:
+    """まとめたシート（PNG・JSON・反転・動きごとの .piskel）を作る（例外は投げない）。`request` は
+    {"token", "base": 出力名, "anims": 動きをまとめる設定（変換したときと同じ動き・ファイル・縦のそろえ方・上げ下げ）,
+    "settings": 変換の設定（保存する設定のファイルに入れる）}。
+    作れた: {"ok": True, "sheets": [{"name", "png", "json", "frame_width", "frame_height", "frame_count", "columns", "rows"}...]
+    （反転は 2 つ目）, "piskels": [{"anim", "name", "text"}], "config_json": 保存する設定のファイル, "config_name"}。"""
+    from . import frames as F
+    from .anims import anims_outputs, config_json
+    try:
+        unknown = sorted(set(request) - {"token", "base", "anims", "settings"})
+        if unknown:
+            raise ValueError(f"知らない設定です: {', '.join(unknown)}")
+        if result is None:
+            if not _FRAMES_CACHE or request.get("token") != _FRAMES_CACHE.get("token") or "anims_cfg" not in _FRAMES_CACHE:
+                raise ValueError("動きをまとめた変換の結果がありません（もう一度変換してください）")
+            result = _FRAMES_CACHE["result"]
+            done = _FRAMES_CACHE["anims_cfg"]
+        else:
+            done = None
+        base = str(request.get("base") or "sprite")
+        cfg = _anims_config(request.get("anims"), request.get("settings"))
+        if done is not None:
+            same = [(a.name, a.files, a.align_y, a.shift_y) for a in cfg.anims] == \
+                [(a.name, a.files, a.align_y, a.shift_y) for a in done.anims] and \
+                (cfg.align, cfg.grid, cfg.match_height) == (done.align, done.grid, done.match_height)
+            if not same:
+                raise ValueError("動き・ファイル・そろえ方が変換したときと違います（「② 変換する」をもう一度押してください）")
+        made = anims_outputs(result, cfg, base)
+    except ValueError as e:
+        return {"ok": False, "error": f"シートの設定に問題があり、作れませんでした: {e}", "detail": error_detail(e)}
+    except Exception as e:
+        return {"ok": False, "error": friendly_error(e), "detail": error_detail(e)}
+    files = made["files"]
+    out: dict = {"ok": True, "sheets": [], "piskels": []}
+    for sh in made["sheets"]:
+        w, h = sh.size
+        out["sheets"].append({"name": sh.image_name, "png": files[sh.image_name],
+                              "json": files[sh.image_name[:-4] + ".json"].decode("utf-8"),
+                              "frame_width": int(w), "frame_height": int(h), "frame_count": len(sh.frames),
+                              "columns": sh.columns, "rows": len(sh.anims), "mirror": sh.name.endswith("_mirror")})
+    for a in cfg.anims:
+        from .anims import anim_file_stem
+        name = anim_file_stem(made["sheets"][0].info, a.name) + ".piskel"
+        out["piskels"].append({"anim": a.name, "name": name, "text": files[name].decode("ascii")})
+    warn = [w for a in cfg.anims for w in [F.flip_warning(a.order)] if w]
+    if warn:
+        out["flip_warning"] = warn[0]
+    out["config_json"] = config_json(cfg)
+    out["config_name"] = f"{base}_{cfg.name}.anims.json"
+    return out
+
+
+def anims_sheets_for_web(request_json: str = "{}") -> str:
+    """ブラウザ UI（Pyodide）から呼ぶ形。結果は JSON 文字列（各シートの PNG は base64 の "png_base64"）。"""
+    try:
+        values = json.loads(request_json or "{}")
+        if not isinstance(values, dict):
+            raise ValueError("設定は {\"anims\": {...}} のような形で渡してください")
+    except ValueError as e:
+        return json.dumps({"ok": False, "error": f"シートの設定を読めません: {e}", "detail": error_detail(e)},
+                          ensure_ascii=False)
+    res = anims_sheets(values)
+    for s in res.get("sheets", []):
+        s["png_base64"] = base64.b64encode(s.pop("png")).decode("ascii")
+    return json.dumps(res, ensure_ascii=False)
+
+
+def anims_gif_bytes(sheet_png: bytes, sheet_json_text: str, anim: str, options: dict | None = None) -> dict:
+    """まとめたシートの 1 つの動きの GIF（例外は投げない。CLI の --anims --gif と同じ）。"""
+    from .anims import anim_gif
+    from .motion.gif import DEFAULT_SCALE
+    values = dict(options or {})
+    try:
+        unknown = sorted(set(values) - {"scale", "background"})
+        if unknown:
+            raise ValueError(f"知らない GIF の設定です: {', '.join(unknown)}")
+        info = json.loads(sheet_json_text)
+        if not isinstance(info, dict) or not isinstance(info.get("animations"), dict):
+            raise ValueError("まとめたシートの情報（animations のある JSON）を渡してください")
+        if anim not in info["animations"]:
+            raise ValueError(f"シートの情報に動き「{anim}」がありません")
+        name, g = anim_gif(decode_image(sheet_png), info, anim, values.get("scale", DEFAULT_SCALE), values.get("background"))
+    except ValueError as e:
+        return {"ok": False, "error": f"GIF を作れませんでした: {e}", "detail": error_detail(e)}
+    except Exception as e:
+        return {"ok": False, "error": friendly_error(e), "detail": error_detail(e)}
+    out = {"ok": True, "gif": g.data, "name": name, "loop": bool(info["animations"][anim].get("loop", True))}
+    out.update(g.summary())
+    return out
+
+
+def anims_gif_for_web(sheet_png: bytes, sheet_json_text: str, anim: str, options_json: str = "{}") -> str:
+    try:
+        values = json.loads(options_json or "{}")
+        if not isinstance(values, dict):
+            raise ValueError("GIF の設定は {\"scale\": 4} のような形で渡してください")
+    except ValueError as e:
+        return json.dumps({"ok": False, "error": f"GIF の設定を読めません: {e}", "detail": error_detail(e)},
+                          ensure_ascii=False)
+    res = anims_gif_bytes(sheet_png, sheet_json_text, anim, values)
+    if "gif" in res:
+        res["gif_base64"] = base64.b64encode(res.pop("gif")).decode("ascii")
+    return json.dumps(res, ensure_ascii=False)

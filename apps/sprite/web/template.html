@@ -238,6 +238,12 @@
   .help.choices div { margin: 1px 0; }
   .field .help { max-width: 22em; }
   .lead.help { margin-top: -6px; }
+  /* 動きに名前を付けてまとめる（anims）: まとめている間は使えない欄を隠す */
+  body.anims-mode .anims-hidden { display: none !important; }
+  #anims-list .anim-row { border: 1px solid var(--line, #ccc); border-radius: 6px; padding: 6px 10px; margin: 6px 0; }
+  #anims-list .anim-row h4 { margin: 0 0 4px; font-size: 1em; }
+  #anims-list .controls { margin: 0; }
+  #join-list input.anim-name { width: 7em; margin-left: 6px; }
 </style>
 </head>
 <body>
@@ -301,11 +307,25 @@
               ほかのファイルが小さくされてしまうためです。印なしでも、高さの違うファイルがあれば注意を出します。違いが 1 割より大きいときは、印を付けても合わせません（AI に描き直させてください）</small></span></label>
         </div>
         <div class="note" id="join-note" role="status" aria-live="polite"></div>
+        <label class="check" id="anims-on-label"><input type="checkbox" id="anims-on">
+          <span><b>動きに名前を付けてまとめる</b><small class="help" data-help-at="join-title">「立ち」「歩き」「走り」「ジャンプ」などのファイルを全部選び、上の一覧の各行に動きの名前（idle・walk・run・jump など）を入れると、
+            1 つのシート（1 つの動き = 1 行）にまとめます。シートの情報（JSON）の animations に、動きの名前とフレームの番号・時間・くり返すかが入ります
+            （ゲームのエンジンで 1 つのキャラに idle・walk などを持たせて切り替えるとき）。同じ名前のファイルが続けば 1 つの動きとしてつなげます。
+            色・コマの大きさ・地面の高さは全部の動きで同じにします。印を付けていないときは今までと同じです。CLI では <code>--anims 設定.anims.json</code></small></span></label>
+        <datalist id="anim-names"></datalist>
+        <div id="anims-box" hidden>
+          <h3 id="anims-title">動きごとの設定</h3>
+          <div class="note help" data-help-at="anims-title">順番は、その動きの中での番号です（その動きのファイルの左のコマから 1, 2, …。例 1,2,3,2 や 1,2,3,2r）。
+            順番・時間・くり返すかは変えるとすぐ作り直します。縦のそろえ方と上げ下げは「② 変換する」をもう一度押すと変わります。</div>
+          <div id="anims-list"></div>
+          <div class="message warn" id="anims-error" hidden></div>
+          <div class="note" id="anims-off" role="note"></div>
+        </div>
       </div>
       <h3 id="frames-cut-title">コマの切り分けとそろえ方</h3>
       <div class="note help" data-help-at="frames-cut-title">変えたら「② 変換する」をもう一度押します。</div>
       <div class="controls">
-        <div class="field">
+        <div class="field anims-hidden">
           <label for="frame-count">コマの数</label>
           <input type="number" id="frame-count" step="1" placeholder="自動">
           <small id="frame-count-help" class="help">絵に並んでいるコマの数。空なら自動で数えます（数が違えば作らずに知らせます）</small>
@@ -315,24 +335,25 @@
           <select id="frame-align"></select>
           <small class="help" id="frame-align-help">コマごとの左右の位置を、何に合わせるか</small>
         </div>
-        <div class="field">
+        <div class="field anims-hidden">
           <label for="frame-align-y">縦のそろえ方</label>
           <select id="frame-align-y"></select>
           <small class="help" id="frame-align-y-help">歩きは「足元」、足が地面から離れる走り・跳びは「頭の高さ」、ジャンプで宙に浮くコマがあるときは「元の絵の高さを保つ」</small>
         </div>
-        <div class="field">
+        <div class="field anims-hidden">
           <label for="frame-shift-y">コマごとの上げ下げ</label>
           <input type="text" id="frame-shift-y" inputmode="numeric" spellcheck="false" placeholder="なし（例 0,-3,-6,0）">
           <small class="help" id="frame-shift-y-help">元のコマごとに、そろえた位置から何ドット上げる・下げるか（− が上）。数は元のコマの数と同じ。空ならなし。
             ジャンプの高さが自動でうまく出ないときに使います（CLI の --frame-shift-y）。−256〜256 ドット（シートはそのぶん広がります）。
             直したドットがあっても、上げ下げ・そろえ方だけを変えたときは、キャラの同じ所に付け直します</small>
         </div>
-        <div class="field">
+        <div class="field anims-hidden">
           <label for="frame-steady">ちらつきを減らす</label>
           <select id="frame-steady"></select>
           <small class="help" id="frame-steady-help">「あり」は、上の方（頭のあたり）で 1 コマ目と違う小さな点・短い線だけを 1 コマ目の色に戻します（腕・脚・目や口の形の違いは戻しません）</small>
         </div>
       </div>
+      <div id="frames-play-box" class="anims-hidden">
       <h3 id="frames-play-title">再生の順番と時間</h3>
       <div class="note help" data-help-at="frames-play-title">変えるとすぐ作り直します。変換はやり直しません。</div>
       <div class="controls">
@@ -365,6 +386,7 @@
           <input type="text" id="frame-name" spellcheck="false">
           <small class="help">保存するファイルの名前に入ります（walk・run など。半角英数字）</small>
         </div>
+      </div>
       </div>
     </div>
     <div id="status" style="margin-top:12px" role="status" aria-live="polite"></div>
@@ -569,6 +591,7 @@
         </select>
         <input type="color" id="motion-bg-color" value="#4060a0" hidden aria-label="背景の色">
         <label class="check" id="show-rows-label"><input type="checkbox" id="show-rows"> 行の番号を表示</label>
+        <label id="anims-play-label" hidden>再生する動き <select id="anims-play"></select></label>
       </div>
       <div class="meta" id="motion-meta"></div>
       <div class="actions">
@@ -576,18 +599,19 @@
         <a id="dl-json" class="button" aria-disabled="true" href="#">⑤ シートの情報を保存（JSON）</a>
         <button type="button" id="dl-gif" disabled>⑥ GIF を保存</button>
         <a id="dl-piskel" class="button" aria-disabled="true" href="#" hidden>Piskel で直す用（.piskel）を保存</a>
+        <a id="dl-anims-config" class="button secondary" aria-disabled="true" href="#" hidden>動きをまとめる設定を保存（.anims.json）</a>
       </div>
       <div class="actions" id="frames-extra" hidden>
         <a id="dl-mirror" class="button secondary" aria-disabled="true" href="#">⑦ 左右反転のシート（PNG）</a>
         <a id="dl-mirror-json" class="button secondary" aria-disabled="true" href="#">⑧ 左右反転の情報（JSON）</a>
         <button type="button" class="secondary" id="dl-mirror-gif" disabled>⑨ 左右反転の GIF</button>
-        <a id="dl-mirror-piskel" class="button secondary" aria-disabled="true" href="#">左右反転の .piskel</a>
-        <a id="dl-flicker" class="button secondary" aria-disabled="true" href="#">ちらつきの見える化（PNG）</a>
-        <a id="dl-flicker-json" class="button secondary" aria-disabled="true" href="#">ちらつきの記録（JSON）</a>
+        <a id="dl-mirror-piskel" class="button secondary anims-hidden" aria-disabled="true" href="#">左右反転の .piskel</a>
+        <a id="dl-flicker" class="button secondary anims-hidden" aria-disabled="true" href="#">ちらつきの見える化（PNG）</a>
+        <a id="dl-flicker-json" class="button secondary anims-hidden" aria-disabled="true" href="#">ちらつきの記録（JSON）</a>
       </div>
       <div class="note help" id="frames-extra-note" data-help-at="motion-head" hidden>左右反転のシートは、反対の向きに歩かせるとき用です。ちらつきの見える化は、上の方（頭のあたり）で
         1 コマ目と違うドットを赤紫の枠で囲んだ画像です（自動では直しません。手直しの目印にしてください）。</div>
-      <div id="fx-box">
+      <div id="fx-box" class="anims-hidden">
         <h3 id="fx-title">重ね（エフェクト）</h3>
         <div class="controls">
           <div class="field">
@@ -626,7 +650,7 @@
           <code>position</code>（キャラのコマの左上から見た、エフェクトのコマの左上。ドット）に置きます。エフェクトのシートは、キャラとは別の長さ・別の時間です
           （<code>loop</code> が false のものは 1 回で止めます）。CLI では <code id="fx-cli">--fx</code>。</div>
       </div>
-      <div id="same-box" hidden>
+      <div id="same-box" class="anims-hidden" hidden>
         <h3 id="same-title">1 コマ目と同じにする範囲</h3>
         <div class="note help" data-help-at="same-title">頭など。変えるとすぐ写し直します。変換はやり直しません。
           下の 1 コマ目の上を<b>マウスでドラッグ</b>すると、四角い範囲を描けます（何個でも足せます）。2 コマ目以降で、
@@ -690,7 +714,7 @@
         <div class="note help" id="touch-help" data-help-at="touch-title"><b>マウス</b>: 左ドラッグ = 描く（ペン・消しゴム）／右クリック・右ドラッグ = 消しゴム／Alt＋クリック = スポイト（色を拾ってペンに戻る）。
           <b>キー</b>（カーソルが絵の上にあるとき・この欄を選んでいるとき）: B ペン／E 消しゴム／I スポイト／「,」「.」前後のコマ／O 前のコマを薄く重ねる・やめる／
           Ctrl＋Z 元に戻す／Ctrl＋Y か Ctrl＋Shift＋Z やり直し。元に戻すは 1 回のドラッグを 1 つと数えて 50 回まで。前のコマの重ね（再生の順番で 1 つ前。1 コマ目は最後のコマ）は見るためだけで、保存には入りません。</div>
-        <div class="actions edits-only" id="swap-mode-row">
+        <div class="actions edits-only anims-hidden" id="swap-mode-row">
           <label class="check" id="swap-mode-label"><input type="checkbox" id="swap-mode"> 差し替えを描く（まばたき・口パク）</label>
         </div>
         <div class="note help" data-help-at="touch-title">「差し替えを描く」: 1 コマ目が出るので、目を閉じた形に描き直してください（使える色はシートのパレットだけ）。
@@ -738,7 +762,7 @@
           </div>
         </div>
         <div class="note" id="touch-cursor">&nbsp;</div>
-        <div id="talk-box" hidden>
+        <div id="talk-box" class="anims-hidden" hidden>
           <h3 id="talk-title">しゃべりのシート（口パク）</h3>
           <div class="note help" data-help-at="talk-title">ふつうのシート（④⑤⑥）とは別のシートです。ふつうのシートは今までと同じです。CLI の <code>--swaps</code> でも同じファイルができます
             （<code>&lt;出力名&gt;_&lt;動き&gt;_talk_sheet.png</code>、コマが並んだ絵は <code>&lt;出力名&gt;_&lt;名前&gt;_talk_&lt;幅&gt;x&lt;高さ&gt;_&lt;N&gt;f.png</code>）。</div>
@@ -827,8 +851,14 @@
       <div class="field">
         <label for="edit-orig">C. 直す前のシート（PNG・なくてもよい）</label>
         <input type="file" id="edit-orig" accept=".png,image/png">
-        <small class="help">選ぶと、直したドットに印を付けた画像も作ります（前の版の JSON では、色を比べるのにも使います）</small>
+        <small class="help">選ぶと、直したドットに印を付けた画像も作ります（前の版の JSON では、色を比べるのにも使います）。
+          動きをまとめたシートのときは要ります（ほかの動きのコマはここから使います）</small>
         <span class="file-name" id="edit-orig-name"></span>
+      </div>
+      <div class="field" id="edit-anim-field" hidden>
+        <label for="edit-anim">D. 直した動き（まとめたシートのとき）</label>
+        <select id="edit-anim"></select>
+        <small class="help">直したファイルの名前（<出力名>_walk.piskel など）から決めます。分からないときは選んでください</small>
       </div>
     </div>
     <div class="controls" style="margin-top:6px">
@@ -891,6 +921,7 @@ let framesEditsForWeb = null;
 let framesRestoreForWeb = null;
 let readbackForWeb = null;
 let fxForWeb = null;
+let animsConvertForWeb = null, animsSheetsForWeb = null, animsGifForWeb = null;
 async function init(indexURL, sources) {
   importScripts(indexURL + "pyodide.js");
   pyodide = await loadPyodide({ indexURL });
@@ -916,6 +947,12 @@ async function init(indexURL, sources) {
     "def sprite_app_frames_join(js_list, names_json, request_json):",
     "    import json",
     "    return frames_convert_files_for_web([b.to_bytes() for b in js_list], json.loads(names_json), request_json)",
+    "from retrocore.sprite.convert import anims_convert_files_for_web, anims_sheets_for_web, anims_gif_for_web",
+    "def sprite_app_anims(js_list, names_json, request_json):",
+    "    import json",
+    "    return anims_convert_files_for_web([b.to_bytes() for b in js_list], json.loads(names_json), request_json)",
+    "def sprite_app_anims_gif(js_bytes, sheet_json, anim, options_json):",
+    "    return anims_gif_for_web(js_bytes.to_bytes(), sheet_json, anim, options_json)",
     "from retrocore.sprite.convert import readback_for_web",
     "def sprite_app_readback(edited, name, info_text, original, options_json):",
     "    return readback_for_web(edited.to_bytes(), name, info_text, None if original is None else original.to_bytes(), options_json)",
@@ -951,6 +988,9 @@ async function init(indexURL, sources) {
   framesEditsForWeb = pyodide.globals.get("frames_edits_for_web");
   framesRestoreForWeb = pyodide.globals.get("frames_restore_for_web");
   readbackForWeb = pyodide.globals.get("sprite_app_readback");
+  animsConvertForWeb = pyodide.globals.get("sprite_app_anims");
+  animsSheetsForWeb = pyodide.globals.get("anims_sheets_for_web");
+  animsGifForWeb = pyodide.globals.get("sprite_app_anims_gif");
   fxForWeb = pyodide.globals.get("sprite_app_fx");
 }
 self.onmessage = async (ev) => {
@@ -1001,6 +1041,17 @@ self.onmessage = async (ev) => {
       self.postMessage({ type: "result", id: msg.id, result: JSON.parse(json) });
     } else if (msg.type === "frames-sheets") {
       const json = framesSheetsForWeb(JSON.stringify(msg.request));
+      self.postMessage({ type: "result", id: msg.id, result: JSON.parse(json) });
+    } else if (msg.type === "anims") {
+      // 動きに名前を付けてまとめる（CLI の --anims）: 変換してそろえる（結果は「コマが並んだ絵」と同じ所に覚える）
+      const t0 = performance.now();
+      const json = animsConvertForWeb(msg.list.map((b) => new Uint8Array(b)), JSON.stringify(msg.names), JSON.stringify(msg.request));
+      self.postMessage({ type: "result", id: msg.id, result: JSON.parse(json), pyMs: performance.now() - t0 });
+    } else if (msg.type === "anims-sheets") {
+      const json = animsSheetsForWeb(JSON.stringify(msg.request));
+      self.postMessage({ type: "result", id: msg.id, result: JSON.parse(json) });
+    } else if (msg.type === "anims-gif") {
+      const json = animsGifForWeb(new Uint8Array(msg.bytes), msg.sheetJson, msg.anim, JSON.stringify(msg.options));
       self.postMessage({ type: "result", id: msg.id, result: JSON.parse(json) });
     } else if (msg.type === "readback") {
       // 直したシートの読み戻し（CLI の --readback と同じ関数）
@@ -1378,6 +1429,18 @@ function joinRender() {
     btn("▲", "1 つ上へ", i === 0, () => { join.files.splice(i - 1, 0, join.files.splice(i, 1)[0]); if (join.view === i) join.view = i - 1; joinChanged(`「${f.file.name}」を上へ動かしました。`); });
     btn("▼", "1 つ下へ", i === join.files.length - 1, () => { join.files.splice(i + 1, 0, join.files.splice(i, 1)[0]); if (join.view === i) join.view = i + 1; joinChanged(`「${f.file.name}」を下へ動かしました。`); });
     btn("外す", "一覧から外す", join.files.length === 1, () => { join.files.splice(i, 1); joinChanged(`「${f.file.name}」を一覧から外しました。`); });
+    if (animsOn()) {
+      // 動きの名前（同じ名前が続くファイルは 1 つの動き）
+      const inp = document.createElement("input");
+      inp.type = "text"; inp.className = "anim-name"; inp.spellcheck = false;
+      inp.setAttribute("list", "anim-names"); inp.placeholder = "動きの名前";
+      inp.setAttribute("aria-label", `${f.file.name}: 動きの名前`);
+      inp.value = f.anim || "";
+      // 打つたびに動きごとの欄を作り直し（動きの並びが変わったときだけ）、決まったら（change）変換し直しの印を付ける
+      inp.addEventListener("input", () => { f.anim = inp.value.trim(); animsRenderSettings(); });
+      inp.addEventListener("change", () => { f.anim = inp.value.trim(); animsChanged(true); });
+      li.appendChild(inp);
+    }
     const info = r && r.files ? r.files.find((v) => v.name === keys[i]) : null;
     if (info) {
       const span = document.createElement("span");
@@ -1405,6 +1468,7 @@ function joinRender() {
       : "つなぎ目で体の位置が大きくずれる所はありません（ちらつきの見える化の橙の線がファイルの境目です）。");
   } else if (join.files.length === 1) notes.push("ファイルが 1 つのときは、今までと同じ変換です。別の絵をつなげるときは「＋ ファイルを足す」。");
   $("join-note").textContent = notes.join("");
+  if (typeof animsRenderSettings === "function") animsRenderSettings();
 }
 $("join-add-button").addEventListener("click", () => $("join-add").click());
 $("join-add").addEventListener("change", async (ev) => {
@@ -3456,7 +3520,8 @@ function saveBlob(bytes, name, type) {
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
-$("dl-gif").addEventListener("click", () => saveGif(motion.sheetPng, motion.sheetJson, $("dl-gif")));
+$("dl-gif").addEventListener("click", () => (anims.at && framesMode() ? saveAnimsGif(motion.sheetPng, motion.sheetJson, $("dl-gif"))
+  : saveGif(motion.sheetPng, motion.sheetJson, $("dl-gif"))));
 async function saveGif(sheetPng, sheetJson, button) {
   if (!sheetPng || !sheetJson) return;
   const options = gifOptions();
@@ -3727,6 +3792,7 @@ function layoutFrames() {
   $("touch-box").hidden = !on || !frames.token || !touch.base;
   $("dl-piskel").hidden = !on;
   $("show-rows-label").hidden = on;
+  animsLayout();
   if (on) {
     $("show-rows").checked = false;
     $("table-editor").hidden = true;
@@ -3803,6 +3869,7 @@ function clearFrames() {
 function blobUrl(bytes, type) { const u = URL.createObjectURL(new Blob([bytes], { type })); frames.urls.push(u); return u; }
 
 function frameName() {
+  if (animsOn()) return ASPEC.name;   // 動きをまとめたとき（ファイル名・直しの一覧の名前）
   const v = $("frame-name").value.trim() || FSPEC.name;
   if (!/^[A-Za-z0-9_-]+$/.test(v)) throw new Error(`名前は半角の英数字と _ - で入れてください（walk・run など。いまは「${v}」）。`);
   return v;
@@ -3873,6 +3940,12 @@ function sheetRequest() {
 }
 // CLI で同じファイルを作る引数（画面の下に出す）
 function framesCli(req) {
+  if (anims.at && framesMode()) {
+    // 動きをまとめたとき: 保存した設定のファイル（.anims.json）と入力の画像で同じファイルを作る（変換の設定も設定のファイルに入る）
+    const parts = [...join.files.map((f) => f.file.name), `--anims ${anims.result ? anims.result.config_name : "設定.anims.json"}`, "--gif", "--piskel"];
+    if (touchCount()) parts.push(`--edits ${touchFileName()}`);
+    return parts.join(" ");
+  }
   const parts = ["--frames"];
   if (join.files.length > 1) {
     parts.push("--join");
@@ -3903,7 +3976,8 @@ async function runFramesConvert() {
   if (busy || !ready || !srcBytes) return;
   showError("");
   let request;
-  try { request = frameConvertRequest(); } catch (e) { showError(e.message); return; }
+  const animsMode = animsOn();
+  try { request = animsMode ? animsRequest() : frameConvertRequest(); } catch (e) { showError(e.message); return; }
   // 直し・差し替えがあるときは、変換する前の結果を控えておく（当てられない確認の「やめる」で戻す）
   const snap = frames.token && frames.result && (touchCount() || swapCount()) ? framesSnapshot() : null;
   const usedInputs = Object.fromEntries(FRAMES_CONVERT_INPUTS.map((id) => [id, $(id).value]));   // この変換に使う値
@@ -3917,8 +3991,8 @@ async function runFramesConvert() {
   try {
     // ファイルの一覧（1 つでも）を並べた順に渡す（中身は CLI の --frames、2 つ以上は --frames --join と同じ）
     if (!join.files.length) join.files = [{ file: srcFile, bytes: srcBytes, image: srcImage }];
-    request.match_height = $("join-height").checked;
-    const { result } = await call({ type: "frames-join", list: join.files.map((f) => f.bytes.slice().buffer), names: joinKeys(), request });
+    if (!animsMode) request.match_height = $("join-height").checked;
+    const { result } = await call({ type: animsMode ? "anims" : "frames-join", list: join.files.map((f) => f.bytes.slice().buffer), names: joinKeys(), request });
     join.stale = false;
     const sec = ((performance.now() - t0) / 1000).toFixed(1);
     if (!result.ok) {
@@ -3938,21 +4012,22 @@ async function runFramesConvert() {
       $("frames-skip-text").textContent = "コマを作りませんでした: " + result.error;
       frames.skippedUrl = URL.createObjectURL(new Blob([result.skipped_json], { type: "application/json" }));
       $("dl-skipped").href = frames.skippedUrl;
-      $("dl-skipped").download = `${baseName()}_sprite_${request.name}_skipped.json`;
+      $("dl-skipped").download = `${baseName()}_sprite_${animsMode ? ASPEC.name : request.name}_skipped.json`;
       clearMotion("コマを作れなかったので、再生するものがありません");
       setStatus(`変換を止めました（${sec} 秒）。`, false);
       return;
     }
     outBase = `${baseName()}_sprite`;
     frames.joinAt = join.files.slice();   // この結果を作ったときのファイルの並び（「やめる」で戻す）
-    frames.joinHeightAt = request.match_height;
+    frames.joinHeightAt = $("join-height").checked;
+    anims.at = animsMode ? request.anims : null;   // 変換に使った動きの設定（シートはこの動き・そろえ方で作る）
     await framesShowConverted(result);
     frames.lastInputs = usedInputs;
     setStatus(`変換できました（${sec} 秒。コマ ${result.frame_count} 個）。下の「コマの再生と保存」で確かめてください。`
       + (result.steady ? `ちらつきを減らしました（1 コマ目に戻したドット: `
         + result.steady.frames.map((f) => `${f.source_frame} コマ目 ${f.restored_dots}`).join("、") + "）。" : ""), false);
     window.__framesTimings = (window.__framesTimings || []).concat([{ seconds: Number(sec), frames: result.frame_count }]);
-    await sameAfterConvert(result);
+    if (!animsMode) await sameAfterConvert(result);
     await touchAfterConvert(snap, usedInputs);
     await runSheets();
   } catch (e) {
@@ -4044,6 +4119,10 @@ function requestSheets(delay = 250) {
 }
 async function runSheets() {
   if (!framesMode() || !frames.token || !ready) return;
+  if (animsOn() || anims.at) {
+    if (animsOn() && anims.at) return runAnimsSheets();
+    return;   // まとめる印と変換の結果が合わない（「② 変換する」を押すまで待つ）
+  }
   if (frames.inFlight) { frames.again = true; return; }
   let req;
   try { req = sheetRequest(); } catch (e) {
@@ -4614,6 +4693,16 @@ function touchBind(r = frames.result) {
 // つなげた結果か（ファイルが 2 つ以上）
 function joinedSources(src) { return !!src && new Set(src.map((v) => v[0])).size > 1; }
 function touchOrder() {
+  if (anims.at && framesMode() && frames.result && frames.result.anims) {
+    // 動きをまとめたとき: 全部の動きの順番を、全部のファイルを通した番号にしてつなげる（r の裏返したコマは −番号）
+    const out = [];
+    for (const r of frames.result.anims) {
+      const st = animSettings(r.name), t = (st.order || "").trim();
+      const toks = t ? t.split(",").map((v) => v.trim()) : Array.from({ length: r.count }, (_, i) => String(i + 1));
+      for (const v of toks) { const fl = /[rR]$/.test(v), k = Number(fl ? v.slice(0, -1) : v); if (k >= 1 && k <= r.count) out.push((fl ? -1 : 1) * (k + r.first - 1)); }
+    }
+    return out.length ? out : Array.from({ length: touch.n }, (_, i) => i + 1);
+  }
   let order = null;
   try { order = frameOrder(); } catch (e) { order = null; }
   return order && order.length ? order : Array.from({ length: touch.n }, (_, i) => i + 1);
@@ -5683,7 +5772,8 @@ $("dl-piskel").addEventListener("click", (ev) => {
 for (const id of ["dl-mirror-json", "dl-flicker", "dl-flicker-json", "dl-mirror-piskel"]) {
   $(id).addEventListener("click", (ev) => { if ($(id).getAttribute("aria-disabled") === "true") ev.preventDefault(); });
 }
-$("dl-mirror-gif").addEventListener("click", () => saveGif(frames.mirrorPng, frames.mirrorJson, $("dl-mirror-gif")));
+$("dl-mirror-gif").addEventListener("click", () => (anims.at && framesMode() ? saveAnimsGif(frames.mirrorPng, frames.mirrorJson, $("dl-mirror-gif"))
+  : saveGif(frames.mirrorPng, frames.mirrorJson, $("dl-mirror-gif"))));
 $("order-pingpong").addEventListener("click", () => {
   // 行って戻る: 1,2,3 → 1,2,3,2（4 コマなら 1,2,3,4,3,2）
   const n = frames.result ? frames.result.frame_count : Number($("frame-count").value) || 3;
@@ -5706,6 +5796,280 @@ for (const id of ["frame-count", "frame-align", "frame-align-y", "frame-shift-y"
     if (frames.token && !busy) setStatus("コマの数・そろえ方・ちらつきの設定を変えました。「② 変換する」をもう一度押してください。", false);
   });
 }
+// ---- 動きに名前を付けてまとめる（CLI の --anims） ----
+// ファイルの一覧の各行に動きの名前を入れ、同じ名前が続くファイルを 1 つの動きにする（Python の anims.group_rows() と同じ決まり）。
+// 変換は anims_convert_files_for_web（結果は「コマが並んだ絵」と同じ所に覚えるので「ドットを直す」はそのまま使える）、
+// シートは anims_sheets_for_web、GIF は anims_gif_for_web。CLI の --anims と同じ関数なので、同じ設定なら同じバイトになる。
+const ASPEC = SPEC.anims;
+const anims = { settings: new Map(), at: null, result: null, play: null, configUrl: null, shown: null };
+for (const n of ASPEC.suggested) { const o = document.createElement("option"); o.value = n; $("anim-names").appendChild(o); }
+$("anims-off").textContent = "まとめている間は使えないもの: " + ["swaps", "fx", "same", "steady", "flicker"].map((k) => ASPEC.unsupported[k]).join("。") + "。";
+function animsOn() { return framesMode() && $("anims-on").checked; }
+// ファイルの名前から動きの名前の候補（idle・walk などの言葉が入っていれば）
+function animGuess(name) {
+  const t = (name || "").toLowerCase();
+  return ASPEC.suggested.find((n) => new RegExp(`(^|[^a-z])${n}([^a-z]|$)`).test(t)) || "";
+}
+function animDefaults(name) {
+  // 「jump」は宙に浮くコマがあるので、元の絵の高さを保つ・1 回で終わるを最初の値にする（変えられる）
+  const jump = name === "jump";
+  return { order: "", duration: String(FSPEC.duration), loop: !jump, align_y: jump ? "keep" : FSPEC.align_y.default, shift_y: "" };
+}
+function animSettings(name) {
+  if (!anims.settings.has(name)) anims.settings.set(name, animDefaults(name));
+  return anims.settings.get(name);
+}
+// 一覧の並びから動きの並びを作る。{groups: [{name, keys}], error}
+function animsGroups() {
+  const keys = joinKeys(), groups = [];
+  if (new Set(join.files.map((f) => f.file.name)).size !== join.files.length) return { groups, error: "同じ名前のファイルが 2 つあります。名前を変えてから選んでください。" };
+  for (let i = 0; i < join.files.length; i++) {
+    const n = (join.files[i].anim || "").trim();
+    if (!n) return { groups, error: `「${keys[i]}」に動きの名前を入れてください（全部のファイルに要ります）。` };
+    if (!/^[a-z][a-z0-9_]*$/.test(n) || n.length > ASPEC.name_max)
+      return { groups, error: `動きの名前「${n}」は、英小文字で始まり、英小文字・数字・_ だけで書いてください（例 ${ASPEC.suggested.join(" / ")}）。` };
+    const last = groups[groups.length - 1];
+    if (last && last.name === n) last.keys.push(keys[i]);
+    else if (groups.some((g) => g.name === n)) return { groups, error: `動き「${n}」のファイルが離れています（「${keys[i]}」）。同じ動きのファイルは続けて並べてください（▲▼ で並べ替え）。` };
+    else groups.push({ name: n, keys: [keys[i]] });
+  }
+  if (groups.length > ASPEC.max_anims) return { groups, error: `動きは ${ASPEC.max_anims} 個までです。` };
+  return { groups, error: null };
+}
+function animDurations(st, name) {
+  const d = intList(st.duration, `${name} の 1 コマの時間`, false);
+  if (d.some((v) => v < 1)) throw new Error(`${name} の 1 コマの時間は 1 ミリ秒以上にしてください。`);
+  return d.length === 1 ? d[0] : d;
+}
+function animOrder(st, name) {
+  const t = st.order.trim();
+  if (t === "") return null;
+  if (!/^\d+[rR]?(\s*,\s*\d+[rR]?)*$/.test(t)) throw new Error(`${name} の順番は 1,2,3,2 のように、整数をカンマで区切って入れてください（裏返すコマは 2r。いまは「${t}」）。`);
+  return t.replace(/\s+/g, "");
+}
+// 動きをまとめる設定（anims.json と同じ形）。groups を渡さなければ、いまの一覧から作る
+function animsConfig(groups) {
+  if (!groups) { const g = animsGroups(); if (g.error) throw new Error(g.error); groups = g.groups; }
+  return { name: ASPEC.name, common: { align: $("frame-align").value, grid: "auto", match_height: $("join-height").checked, mirror: true },
+           anims: groups.map((g) => {
+             const st = animSettings(g.name);
+             const sy = st.shift_y.trim() === "" ? null : intList(st.shift_y, `${g.name} の上げ下げ`, true);
+             if (sy && sy.some((v) => Math.abs(v) > FSPEC.max_shift_y)) throw new Error(`${g.name} の上げ下げは −${FSPEC.max_shift_y}〜${FSPEC.max_shift_y} ドットで入れてください。`);
+             return { name: g.name, files: g.keys.slice(), order: animOrder(st, g.name), duration_ms: animDurations(st, g.name),
+                      loop: !!st.loop, align_y: st.align_y, shift_y: sy };
+           }) };
+}
+// シートを作るときの設定: 動き・ファイル・そろえ方は変換したときのもの、順番・時間・くり返すかはいまの値
+function animsSheetConfig() {
+  const at = anims.at;
+  return { ...at, anims: at.anims.map((a) => {
+    const st = animSettings(a.name);
+    return { ...a, order: animOrder(st, a.name), duration_ms: animDurations(st, a.name), loop: !!st.loop };
+  }) };
+}
+function animsChanged(reconvert) {
+  if (!framesMode()) return;
+  if (reconvert) {
+    if (frames.token) { join.stale = true; joinRender(); }
+    if (frames.token && !busy) setStatus("動き・ファイル・縦のそろえ方・上げ下げを変えました。「② 変換する」をもう一度押してください。", false);
+  } else if (frames.token && anims.at) requestSheets();
+  animsCheck();
+}
+function animsCheck() {
+  const g = animsOn() ? animsGroups() : { error: null };
+  $("anims-error").hidden = !g.error;
+  $("anims-error").textContent = g.error || "";
+}
+function animsRenderSettings() {
+  const on = animsOn();
+  $("anims-box").hidden = !on;
+  if (!on) { anims.shown = null; return; }
+  const box = $("anims-list");
+  const { groups } = animsGroups();
+  // 動きの並び（名前とファイル）が前と同じなら作り直さない（入力中の欄・押そうとしている欄を消さないため）
+  const sig = JSON.stringify(groups.map((g) => [g.name, g.keys]));
+  if (sig === anims.shown && box.childElementCount === groups.length) { animsCheck(); return; }
+  anims.shown = sig;
+  box.innerHTML = "";
+  for (const g of groups) {
+    const st = animSettings(g.name);
+    const row = document.createElement("div");
+    row.className = "anim-row";
+    const h = document.createElement("h4");
+    h.textContent = `${g.name}（${g.keys.join(" ＋ ")}）`;
+    row.appendChild(h);
+    const ctl = document.createElement("div");
+    ctl.className = "controls";
+    const field = (label, el, help) => {
+      const f = document.createElement("div"); f.className = "field";
+      const l = document.createElement("label"); l.textContent = label; f.appendChild(l); f.appendChild(el);
+      if (help) { const sm = document.createElement("small"); sm.className = "help"; sm.textContent = help; f.appendChild(sm); }
+      ctl.appendChild(f); return el;
+    };
+    const text = (key, ph, reconvert, aria) => {
+      const i = document.createElement("input"); i.type = "text"; i.spellcheck = false; i.value = st[key]; i.placeholder = ph;
+      i.setAttribute("aria-label", `${g.name}: ${aria}`); i.dataset.anim = g.name; i.dataset.key = key;
+      i.addEventListener(reconvert ? "change" : "input", () => { st[key] = i.value; animsChanged(reconvert); });
+      return i;
+    };
+    field("順番", text("order", "1,2,3,…", false, "順番"), "この動きのコマの番号（空なら 1, 2, …）");
+    field("1 コマの時間", text("duration", String(FSPEC.duration), false, "1 コマの時間"), "ミリ秒（コマごとにも書ける）");
+    const loop = document.createElement("select");
+    for (const [v, t] of [["1", "くり返す"], ["0", "1 回で終わる"]]) { const o = document.createElement("option"); o.value = v; o.textContent = t; loop.appendChild(o); }
+    loop.value = st.loop ? "1" : "0"; loop.setAttribute("aria-label", `${g.name}: くり返すか`); loop.dataset.anim = g.name; loop.dataset.key = "loop";
+    loop.addEventListener("change", () => { st.loop = loop.value === "1"; animsChanged(false); });
+    field("くり返し", loop);
+    const ay = document.createElement("select");
+    for (const [v, t] of FSPEC.align_y.choices) { const o = document.createElement("option"); o.value = v; o.textContent = shortLabel(t); ay.appendChild(o); }
+    ay.value = st.align_y; ay.setAttribute("aria-label", `${g.name}: 縦のそろえ方`); ay.dataset.anim = g.name; ay.dataset.key = "align_y";
+    ay.addEventListener("change", () => { st.align_y = ay.value; animsChanged(true); });
+    field("縦のそろえ方", ay);
+    field("上げ下げ", text("shift_y", "なし", true, "上げ下げ"), "元のコマごと（− が上）");
+    row.appendChild(ctl);
+    box.appendChild(row);
+  }
+  animsCheck();
+}
+function animsLayout() {
+  const on = animsOn();
+  document.body.classList.toggle("anims-mode", on);
+  $("anims-play-label").hidden = !on;
+  $("dl-anims-config").hidden = !on;
+  if (on && $("swap-mode").checked) { $("swap-mode").checked = false; $("swap-mode").dispatchEvent(new Event("change")); }
+  animsRenderSettings();
+}
+$("anims-on").addEventListener("change", () => {
+  if (animsOn()) for (const f of join.files) if (f.anim === undefined) f.anim = animGuess(f.file.name);
+  if (frames.token) { join.stale = true; }
+  joinRender();
+  animsLayout();
+  if (frames.token && !busy) setStatus(animsOn() ? "動きの名前を入れて「② 変換する」を押すと、動きをまとめたシートを作ります。"
+    : "「② 変換する」を押すと、今までと同じ 1 つの動きのシートに戻します。", false);
+});
+function animsRequest() {
+  return { settings: currentSettings(), anims: animsConfig() };
+}
+async function runAnimsSheets() {
+  if (frames.inFlight) { frames.again = true; return; }
+  let req;
+  try { req = { token: frames.token, base: outBase, anims: animsSheetConfig(), settings: currentSettings() }; } catch (e) {
+    clearMotion("設定を直すと、ここで動きを再生します");
+    revokeFrameFiles();
+    showMotionError(e.message);
+    return;
+  }
+  const token = frames.token;
+  frames.inFlight = true;
+  try {
+    const { result } = await call({ type: "anims-sheets", request: req });
+    if (frames.again || token !== frames.token || !animsOn()) return;
+    await showAnimsSheets(result);
+  } catch (e) {
+    clearMotion("シートを作れませんでした");
+    showMotionError("思いがけないエラーでシートを作れませんでした。", failureDetail(e));
+  } finally {
+    frames.inFlight = false;
+    if (frames.again) { frames.again = false; runSheets(); }
+  }
+}
+// 1 つの動きの再生用の情報（まとめたシートの中の、その動きのフレームだけ）
+function animsPlayInfo(info, name) {
+  const a = info.animations[name];
+  const fr = a.frames.map((i) => info.frames[i]);
+  return { frame_width: info.frame_width, frame_height: info.frame_height, frame_count: fr.length, frames: fr,
+           total_duration_ms: fr.reduce((s, f) => s + f.duration_ms, 0), loop: a.loop };
+}
+async function showAnimsSheets(result) {
+  const keepFrame = motion.frame;
+  clearMotion("");
+  revokeFrameFiles();
+  if (!result.ok) {
+    $("motion-empty").textContent = "シートを作れませんでした";
+    showMotionError(result.error, result.detail ? result.detail + "\nブラウザ: " + navigator.userAgent : "");
+    return;
+  }
+  anims.result = result;
+  const [main, mirror] = result.sheets;
+  frames.sheets = result.sheets;
+  const png = decodeBase64(main.png_base64);
+  motion.sheetUrl = URL.createObjectURL(new Blob([png], { type: "image/png" }));
+  motion.jsonUrl = URL.createObjectURL(new Blob([main.json], { type: "application/json" }));
+  anims.info = JSON.parse(main.json);
+  motion.sheetImg = await loadImage(motion.sheetUrl);
+  motion.sheetPng = png;
+  motion.sheetJson = main.json;
+  $("dl-sheet").href = motion.sheetUrl; $("dl-sheet").download = main.name;
+  $("dl-json").href = motion.jsonUrl; $("dl-json").download = main.name.replace(/\.png$/, ".json");
+  for (const id of ["dl-sheet", "dl-json"]) $(id).setAttribute("aria-disabled", "false");
+  $("dl-gif").disabled = false;
+  frames.mirrorPng = decodeBase64(mirror.png_base64);
+  frames.mirrorJson = mirror.json;
+  $("dl-mirror").href = blobUrl(frames.mirrorPng, "image/png"); $("dl-mirror").download = mirror.name;
+  $("dl-mirror-json").href = blobUrl(mirror.json, "application/json"); $("dl-mirror-json").download = mirror.name.replace(/\.png$/, ".json");
+  for (const id of ["dl-mirror", "dl-mirror-json"]) $(id).setAttribute("aria-disabled", "false");
+  $("dl-mirror-gif").disabled = false;
+  if (anims.configUrl) URL.revokeObjectURL(anims.configUrl);
+  anims.configUrl = URL.createObjectURL(new Blob([result.config_json], { type: "application/json" }));
+  $("dl-anims-config").href = anims.configUrl; $("dl-anims-config").download = result.config_name;
+  $("dl-anims-config").setAttribute("aria-disabled", "false");
+  // 再生する動きの選び方
+  const sel = $("anims-play"), names = Object.keys(anims.info.animations);
+  const prev = anims.play && names.includes(anims.play) ? anims.play : names[0];
+  sel.innerHTML = "";
+  for (const n of names) { const o = document.createElement("option"); o.value = n; o.textContent = n; sel.appendChild(o); }
+  sel.value = prev;
+  anims.play = prev;
+  if (result.flip_warning) showMotionWarnings([result.flip_warning]);
+  $("motion-empty").hidden = true;
+  $("motion-wrap").hidden = false;
+  animsShowPlay(keepFrame);
+  $("cli-equiv").textContent = framesCli(null);
+}
+function animsShowPlay(keepFrame = 0) {
+  const info = anims.info, name = anims.play;
+  if (!info || !name) return;
+  motion.info = animsPlayInfo(info, name);
+  const pk = anims.result.piskels.find((p) => p.anim === name);
+  $("dl-piskel").href = blobUrl(pk.text, "application/json");
+  $("dl-piskel").download = pk.name;
+  $("dl-piskel").setAttribute("aria-disabled", "false");
+  $("dl-piskel").textContent = `Piskel で直す用（${name} の .piskel）を保存`;
+  $("dl-gif").textContent = `⑥ GIF を保存（${name}）`;
+  $("dl-mirror-gif").textContent = `⑨ 左右反転の GIF（${name}）`;
+  const rows = Object.entries(info.animations).map(([n, a]) => `${a.row + 1} 行目 ${n}: ${a.frames.length} フレーム・${a.duration_ms} ミリ秒・${a.loop ? "くり返す" : "1 回で終わる"}`);
+  const air = motion.info.frames.map((f) => f.air).join("/");
+  $("motion-meta").textContent = `まとめたシート: 1 コマ ${info.frame_width}×${info.frame_height} ドット・${info.columns} 列 × ${info.rows} 行・`
+    + `地面の線 ground_y ${info.ground_y}（${rows.join("／")}）。再生中: ${name}（足元の高さ ${air} ドット。${motion.info.loop ? "くり返す" : "1 回で終わる。最後のコマで止めるのはゲームの側"}）`;
+  motion.frame = keepFrame < motion.info.frame_count ? keepFrame : 0;
+  const h = $("piskel-hint");
+  h.innerHTML = "";
+  const b = document.createElement("b"); b.textContent = "Piskel で直すときの手順（動きをまとめたとき）";
+  const p = document.createElement("div"); p.className = "help";
+  p.textContent = `直したい動きを「再生する動き」で選んで「Piskel で直す用（.piskel）を保存」→ Piskel の Import → Load .piskel file。`
+    + `直したら .piskel を保存し、このページの下の「直したシートを読み戻す」で A に .piskel、B にまとめたシートの JSON、C にまとめたシートの PNG（直す前）を選びます。`
+    + "どの動きかはファイルの名前（<出力名>_walk.piskel など）から決めます。";
+  h.appendChild(b); h.appendChild(p); h.hidden = false;
+  updatePlayer();
+  showFrame(motion.frame);
+  if (motion.playing) schedule();
+}
+$("anims-play").addEventListener("change", () => { anims.play = $("anims-play").value; animsShowPlay(0); });
+async function saveAnimsGif(sheetPng, sheetJson, button) {
+  if (!sheetPng || !sheetJson || !anims.play) return;
+  button.disabled = true;
+  $("gif-status").textContent = "GIF を作っています…";
+  try {
+    const { result } = await call({ type: "anims-gif", bytes: sheetPng.slice().buffer, sheetJson, anim: anims.play, options: gifOptions() });
+    if (!result.ok) { $("gif-status").textContent = result.error; return; }
+    saveBlob(decodeBase64(result.gif_base64), result.name, "image/gif");
+    $("gif-status").textContent = `「${result.name}」を保存しました（${result.durations.length} フレーム、${result.scale} 倍、`
+      + `${result.background ? "背景 " + result.background : "透明"}、${result.colors} 色、${result.durations.join("/")} ミリ秒、`
+      + `${result.loop ? "ずっと繰り返す" : "1 回だけ再生"}）。` + (result.warnings || []).map((w) => w + "。").join("");
+  } finally {
+    button.disabled = !sheetPng;
+  }
+}
+$("dl-anims-config").addEventListener("click", (ev) => { if ($("dl-anims-config").getAttribute("aria-disabled") === "true") ev.preventDefault(); });
 layoutFrames();
 
 // ---- 直したシートの読み戻し（CLI の --readback） ----
@@ -5753,8 +6117,26 @@ function editClear(text) {
 }
 function editUrl(bytes, type) { const u = URL.createObjectURL(new Blob([bytes], { type })); edit.urls.push(u); return u; }
 function editOptions() {
-  return { gif: true, gif_scale: Number($("edit-gif-scale").value), gif_background: null, mirror: true, piskel: true,
-           same_frames: $("edit-same").value, fix_colors: $("edit-fix").checked };
+  const o = { gif: true, gif_scale: Number($("edit-gif-scale").value), gif_background: null, mirror: true, piskel: true,
+              same_frames: $("edit-same").value, fix_colors: $("edit-fix").checked };
+  if (edit.anims && $("edit-anim").value) o.anim = $("edit-anim").value;   // まとめたシートで、直した動きを選んだとき
+  return o;
+}
+// B の JSON が動きをまとめたシートなら、「D. 直した動き」を出す（空 = ファイルの名前から決める）
+async function editAnimsCheck() {
+  edit.anims = null;
+  if (edit.json) {
+    try { const info = JSON.parse(await edit.json.text()); if (info && info.animations && typeof info.animations === "object") edit.anims = Object.keys(info.animations); }
+    catch (e) { edit.anims = null; }
+  }
+  const sel = $("edit-anim"), keep = sel.value;
+  sel.innerHTML = "";
+  if (edit.anims) {
+    const o = document.createElement("option"); o.value = ""; o.textContent = "ファイルの名前から決める"; sel.appendChild(o);
+    for (const n of edit.anims) { const x = document.createElement("option"); x.value = n; x.textContent = n; sel.appendChild(x); }
+    sel.value = edit.anims.includes(keep) ? keep : "";
+  }
+  $("edit-anim-field").hidden = !edit.anims;
 }
 function editCli(o) {
   const parts = [`python -m apps.sprite ${edit.file ? edit.file.name : "直した.piskel"} --readback ${edit.json ? edit.json.name : "元.json"}`];
@@ -5764,6 +6146,7 @@ function editCli(o) {
   parts.push("--mirror", "--piskel");
   if (o.same_frames !== "keep") parts.push(`--same-frames ${o.same_frames}`);
   if (o.fix_colors) parts.push("--fix-colors");
+  if (o.anim) parts.push(`--anim ${o.anim}`);
   return parts.join(" ");
 }
 async function runReadback() {
@@ -5818,7 +6201,7 @@ async function showReadback(result, options) {
     if (!name || !files[name]) continue;
     const a = document.createElement("a");
     a.className = "button" + (["sheet", "json", "gif", "piskel"].includes(kind) ? "" : " secondary");
-    a.textContent = label;
+    a.textContent = kind === "sheet" && result.animation ? `まとめたシート（${result.animation} の行を直したもの。PNG）` : label;
     a.title = name;
     a.href = editUrl(files[name], EDIT_TYPES[name.split(".").pop()] || "application/octet-stream");
     a.download = name;
@@ -5827,7 +6210,7 @@ async function showReadback(result, options) {
   }
   // 結果のまとめ
   const r = result.report;
-  const lines = [`${r.frame_count} コマ（1 コマ ${r.frame_width}×${r.frame_height}）を読み戻しました。`
+  const lines = [`${r.animation ? `動き ${r.animation} の ` : ""}${r.frame_count} コマ（1 コマ ${r.frame_width}×${r.frame_height}）を読み戻しました。`
     + `時間 ${result.durations.join("/")} ミリ秒・順番・足元は元の JSON のままです。`];
   lines.push(r.palette_source ? `新しい色: ${r.new_colors.length} 色 ／ 半透明: ${r.semi_transparent.dots} ドット`
     : `半透明: ${r.semi_transparent.dots} ドット（元の色の一覧が無いので、新しい色は調べていません。C も選ぶと調べます）`);
@@ -5864,6 +6247,7 @@ async function showReadback(result, options) {
   edit.img = await loadImage(editUrl(files[byKind.sheet], "image/png"));
   edit.durations = result.durations;
   edit.fw = result.frame_width; edit.fh = result.frame_height;
+  edit.rects = result.rects || null;   // まとめたシート: 直した動きのフレームのシートの中の位置
   edit.frame = 0;
   $("edit-body").hidden = false;
   $("edit-status").textContent = "";
@@ -5883,7 +6267,8 @@ function editDraw() {
     ctx.fillStyle = (x + y) % 2 ? "#dedede" : "#ececec";
     ctx.fillRect(x * k, y * k, k, k);
   }
-  ctx.drawImage(edit.img, edit.frame * edit.fw, 0, edit.fw, edit.fh, 0, 0, c.width, c.height);
+  const at = edit.rects ? edit.rects[edit.frame] : [edit.frame * edit.fw, 0];
+  ctx.drawImage(edit.img, at[0], at[1], edit.fw, edit.fh, 0, 0, c.width, c.height);
   $("edit-frame-label").textContent = `${edit.frame + 1} / ${edit.durations.length} コマ（${edit.durations[edit.frame]} ミリ秒）`;
 }
 function editShow(i) { const n = edit.durations.length; edit.frame = ((i % n) + n) % n; editDraw(); }
@@ -5905,13 +6290,14 @@ for (const [id, d] of [["edit-prev", -1], ["edit-next", 1]]) {
   });
 }
 for (const [id, key] of [["edit-file", "file"], ["edit-json", "json"], ["edit-orig", "orig"]]) {
-  $(id).addEventListener("change", (ev) => {
+  $(id).addEventListener("change", async (ev) => {
     edit[key] = ev.target.files[0] || null;
     $(id + "-name").textContent = edit[key] ? "選んだファイル: " + edit[key].name : "";
+    if (key === "json") await editAnimsCheck();
     runReadback();
   });
 }
-for (const id of ["edit-same", "edit-fix", "edit-gif-scale"]) $(id).addEventListener("change", () => runReadback());
+for (const id of ["edit-same", "edit-fix", "edit-gif-scale", "edit-anim"]) $(id).addEventListener("change", () => runReadback());
 editClear("A と B を選ぶと、すぐに確かめて作り直します。");
 
 boot();
