@@ -144,8 +144,12 @@ def _binary_alpha(frames: list[np.ndarray]) -> tuple[list[np.ndarray], list[str]
     return out, warnings
 
 
-def make_gif(frames: list[np.ndarray], durations, scale: int = DEFAULT_SCALE, background=None) -> GifResult:
-    """フレーム（RGBA の配列。シートのフレームと同じもの）と表示時間（ミリ秒）から GIF アニメを作る。"""
+def make_gif(frames: list[np.ndarray], durations, scale: int = DEFAULT_SCALE, background=None,
+             loop: bool = True) -> GifResult:
+    """フレーム（RGBA の配列。シートのフレームと同じもの）と表示時間（ミリ秒）から GIF アニメを作る。
+
+    `loop` が False なら 1 回だけ再生する GIF にする（くり返しの印を書かない。動きをまとめたときの「1 回で終わる」動き）。
+    """
     scale = check_scale(scale)
     bg = check_background(background)
     if not frames:
@@ -202,6 +206,8 @@ def make_gif(frames: list[np.ndarray], durations, scale: int = DEFAULT_SCALE, ba
     gif_ms = [sum(tick[i] for i in g) for g in groups]
     params = {"format": "GIF", "save_all": True, "append_images": images[1:], "duration": gif_ms,
               "loop": 0, "optimize": False, "disposal": 2 if bg is None else 1, "background": fill}
+    if not loop:
+        del params["loop"]   # くり返しの印（NETSCAPE2.0）を書かない: 1 回だけ再生する
     if bg is None:
         params["transparency"] = 0
     buf = io.BytesIO()

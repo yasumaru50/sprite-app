@@ -206,6 +206,8 @@ class FramesResult:
     joins: list | None = None        # ファイルの境目の記録（join.join_report()。ファイルが 2 つ以上のときだけ）
     shift_y: list | None = None      # 元のコマごとの上げ下げ（ドット。− が上。`FrameSettings.shift_y`。無ければ None）
     flipped: dict | None = None      # 裏返したコマだけの直しを当てた、裏返したコマ（元のコマの番号 → 絵）。直しが無ければ None
+    # 動きに名前を付けてまとめたとき（`anims.convert_anims()`）: 動きごとの {"name", "first", "count", "files"}（コマの番号は 1 から）
+    anims: list | None = None
 
     @property
     def joined(self) -> bool:

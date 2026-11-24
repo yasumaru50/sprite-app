@@ -126,7 +126,32 @@ def convert_frame_files(images: list, settings=None, frame_settings=None,
     names = file_keys([n for n, _ in images])
     if len(images) == 1:
         return _single(names[0], images[0][1], s, fs, on_step)
+    p = prepare_files(images, s, fs, on_step, match_height)
+    return F._finish_convert(p.raw, p.pos, p.boxes, p.grids, p.files[0].dot_size, fs, p.steps, p.emit, p.notes,
+                             p.warnings, p.skipped, files=p.files, sources=p.sources)
 
+
+@dataclass
+class Prepared:
+    """ファイルごとの変換（背景除去〜グリッド・高さ合わせ）と、全部のコマでの単純化・パレットなどを済ませたコマ（そろえる前）。"""
+
+    raw: list            # 切り詰めたコマ（並べた順）
+    pos: list            # 各コマの元の絵での位置（ドット単位。frames._source_pos()）
+    boxes: list
+    grids: list
+    files: list          # JoinFile の並び
+    sources: list        # コマごとの (ファイルの名前, 何コマ目か)
+    steps: list
+    emit: Callable
+    notes: list
+    warnings: list
+    skipped: list
+
+
+def prepare_files(images: list, s, fs, on_step=None, match_height: bool = False) -> Prepared:
+    """`convert_frame_files()` のうち、そろえる前まで（ファイルが 1 つでもこの流れで通す。動きをまとめる `anims.py` も使う）。"""
+    from . import frames as F
+    names = file_keys([n for n, _ in images])
     F._check_settings(s, fs)
     steps: list[StepResult] = []
 
@@ -253,8 +278,8 @@ def convert_frame_files(images: list, settings=None, frame_settings=None,
     sources = [(f.name, j + 1) for f in files for j in range(f.frame_count)]
     boxes_all = [b for p in per for b in p[2]]
     grids_all = [g for p in per for g in p[4][1]]
-    return F._finish_convert(raw_all, pos, boxes_all, grids_all, files[0].dot_size, fs, steps, emit, notes, warnings,
-                             skipped, files=files, sources=sources)
+    return Prepared(raw=raw_all, pos=pos, boxes=boxes_all, grids=grids_all, files=files, sources=sources, steps=steps,
+                    emit=emit, notes=notes, warnings=warnings, skipped=skipped)
 
 
 def _size(period) -> str:

@@ -345,6 +345,86 @@ python -m apps.sprite spin.png --frames --frame-count 3 --frame-order 1,2,3,2r -
   ファイルが 1 つでも、縦のそろえ方 `keep` か上げ下げを使ったときは `origin`（そのコマの絵を置いた位置）を書く（版は変えない）。
   前の形（版 1・2。`mirrored` が無い）もそのまま読める。つなげたときの裏返したコマの `origin` は、裏返した絵の中でそのコマの絵を置いた位置
 
+## 動きに名前を付けてまとめる（`--anims`）
+
+「立ち」「歩き」「走り」「ジャンプ」などを **1 つのシート（1 つの動き = 1 行）** にまとめ、JSON の `animations` に動きの名前とフレームの範囲を書く。
+ゲームのエンジン（Godot の SpriteFrames など）で、1 つのキャラに idle・walk・run などのアニメーションを持たせて切り替えるとき用。
+「つなげる（`--join`）」を広げたもの（処理は `retrocore/sprite/anims.py`）。画面では「コマが並んだ絵」の「つなげるファイル」の **動きに名前を付けてまとめる** に印を付ける。
+
+```bash
+python -m apps.sprite --anims hero.anims.json -o out/sprite/hero.png --gif --piskel
+python -m apps.sprite idle.png walk.png jump.png --anims hero_sprite_anims.anims.json --gif --piskel   # 画面で保存した設定と同じ画像
+python -m apps.sprite hero_walk.piskel --readback hero_anims_62x94_12f.json --original hero_anims_62x94_12f.png --gif --mirror --piskel
+```
+
+設定のファイル（画面の「CLI 用の設定を保存（.anims.json）」で保存できる。自分で書いてもよい。まとめたシートの情報（`animations` の入った JSON）は「⑤ まとめたシートの情報を保存」の方）:
+
+```json
+{"version": 1, "kind": "sprite_anims", "name": "anims",
+ "settings": {"colors": 16, "cleanup": "normal", "outline": "auto"},
+ "common": {"align": "match", "grid": "auto", "match_height": false, "mirror": true},
+ "anims": [{"name": "idle", "files": ["idle.png"]},
+           {"name": "walk", "files": ["walk1.png", "walk2.png"], "order": "1,2,3,4,3,2", "duration_ms": 150},
+           {"name": "jump", "files": ["jump.png"], "align_y": "keep", "shift_y": null, "loop": false}]}
+```
+
+| 項目 | 内容 |
+| --- | --- |
+| `anims[]` | 動きの並び（シートの行の順）。`name` は英小文字で始まり、英小文字・数字・_ だけ（32 文字まで。重ならないこと）。`files` はその動きのファイル（並べた順につなげる）。**1 つのファイルは 1 つの動きにだけ**使える |
+| `order` | その動きの中での順番（その動きのファイルの左のコマから 1, 2, …。`1,2,3,2` や `1,2,3,2r`）。無ければ 1, 2, … |
+| `duration_ms` | 1 コマの時間（ミリ秒。既定 150）。1 つか、順番と同じ数の並び |
+| `loop` | くり返す（既定 true）。false は 1 回で終わる（GIF も 1 回だけ再生。最後のコマで止めるのはゲームの側） |
+| `align_y` / `shift_y` | 縦のそろえ方（`foot` 既定・`match`・`keep`・`none`）と、元のコマごとの上げ下げ（数はその動きのコマの数） |
+| `common` | 全部の動きで共通: 横のそろえ方（`--align`）、グリッドの線の並び（`--frame-grid`）、高さ合わせ（`--join-match-height`）、左右反転（`--mirror`）。CLI で付けたものが優先 |
+| `settings` | 変換の設定（色数など。画面で保存したときに入る）。あるときは変換の引数（`--colors` など）は使えない（エラー）。無ければ引数 |
+| `name` | シートのファイル名と JSON の `motion`（既定 `anims`） |
+
+- 入力の画像は、引数に書けば名前で探す（設定に無い画像があればエラー）。書かなければ設定のファイルのあるフォルダから探す。出力名は 1 つ目のファイルの名前（`-o` で変えられる）
+- **全部の動きで共通**: パレット（全部のコマから 1 つ）、コマの大きさ（いちばん大きいものに合わせて透明で広げる。拡大・縮小はしない）、
+  地面の線 `ground_y`（全部の動きでフレームの下端）。グリッドは今までどおりファイルごとに見つける
+- 動きごとにそろえてから、そろえた基準（pivot の横の位置）と下端が全部の動きで同じ所に来るように透明の列・行を足す。
+  基準が半ドットの所にある動きと整数の所にある動きが混ざると、半ドットはそろえない（ドットを動かさないため）
+- 出力: `<出力名>.png`（そろえたコマをファイルの順に並べた絵）、`<出力名>_<名前>_<幅>x<高さ>_<N>f.png / .json`（まとめたシート。N は全部の動きのフレームの数）、
+  `--mirror`（か `common.mirror`）で `<出力名>_<名前>_mirror_…`、`--gif` で動きごとの `<出力名>_<動き>.gif`（反転は `<出力名>_<動き>_mirror.gif`）、
+  `--piskel` で動きごとの `<出力名>_<動き>.piskel`（直す用）
+- シートの PNG は 1 つの動き = 1 行。横はいちばんコマの多い動きに合わせ、余りは透明。JSON の `columns`・`rows` に列と行の数
+- 直しの一覧（`--edits`）は今までどおり「どのファイルの何コマ目か」と置いた位置（`origin`）で書く。動きの並び・順番を変えても、直したドットは同じ絵の同じ所に付く
+- **使えないもの**（警告して無視する）: まばたき・口パク（`--swaps`）、重ね（`--fx`）、1 コマ目と同じにする範囲（`--same-as-first`・`--same-band`）、
+  ちらつきを減らす（`--steady on`）、`--flicker`、`--frame-root-y`。動きごとの設定の引数（`--frame-order`・`--frame-duration`・`--frame-count`・`--align-y`・
+  `--frame-shift-y`・`--frame-name`・`--join`）は使えない（エラー。設定のファイルに書く）
+- 「1 枚の絵」の動き（呼吸など）は入れられない。idle は 1 コマのファイルで作る
+- 画面と CLI の出力は、同じ画像・同じ設定のファイルならバイト単位で同じ（`tests/test_sprite_anims.py`）
+
+### まとめたシートの JSON
+
+コマのシートの JSON（下の「シートの JSON」）と同じ項目に、次を足す:
+
+```json
+"animations": {"walk": {"frames": [0, 1, 2, 3], "duration_ms": 150, "loop": true, "row": 0},
+               "jump": {"frames": [4, 5, 6, 7], "duration_ms": 150, "loop": false, "row": 1}},
+"frames": [{"index": 0, "x": 0, "y": 0, …, "source_frame": 1, "air": 0, "animation": "walk"}, …],
+"source": {…, "anims": [{"name": "walk", "files": ["walk.png"], "first_frame": 1, "frame_count": 4, "order": "1,2,3,4",
+                         "align_y": "foot", "shift_y": null}, …]}
+```
+
+- `animations.<名前>.frames` はシート全体での通し番号（`frames[]` の `index`）。`duration_ms` はその動きでいちばん多い時間（コマごとの時間は `frames[].duration_ms`）。
+  `row` はシートの行（0 から）
+- `ground_y`・`frames[].air` はいつも書く（足元でそろえた動きは `air` が 0）。`source.frame_count` は全部のファイルのコマの数、`source_frame` は全部のファイルを通した番号
+- **Godot**: AnimatedSprite2D の SpriteFrames で、`animations` の名前ごとにアニメーションを足し、「スプライトシートから追加」で横 `columns`・縦 `rows` に分けて、
+  その動きの `frames` の番号のコマを選ぶ（行 `row` のコマ）。速さ（FPS）は `1000 / duration_ms`、ループは `loop`。コマごとの時間が違うときは、
+  各フレームの「長さ」を `frames[].duration_ms / duration_ms` にする。`offset.y` を `-ground_y`（`centered` を切）にすると地面の線がノードの位置に来る
+
+### まとめたシートの読み戻し（`--readback`・`--anim`）
+
+Piskel では動きごとの `.piskel` を直す。読み戻しは 1 つの動きずつ:
+
+- 入力は直した `.piskel`（か PNG。その動きだけのシート）、`--readback` はまとめたシートの JSON、`--original` は**直す前のまとめたシート（要る）**
+- どの動きかは、直したファイルの名前（`<出力名>_<動き>.piskel`。`_edited` や「 (1)」が付いていてもよい）から決める。分からなければ `--anim walk` で選ぶ（画面は「D. 直した動き」）
+- 作るもの: まとめたシート（その動きの行を直したもの）と JSON（`<元の名前>_edited.png / .json`。`edited.animation` に動きの名前）、
+  `--mirror` で反転のまとめたシート、その動きの GIF・.piskel・確かめた結果（`<出力名>_<動き>_edited.gif` など）。続けて別の動きを直すときは、
+  `_edited` のシートと JSON を元にすればよい（名前は `_edited` のまま）
+- 確かめること・作らないときは、ふつうの読み戻しと同じ
+
 ## 差し替え（まばたき。`--swaps`）
 
 目を閉じた顔を 1 回描くだけで、動きの中にまばたきを入れる。`--motion`・`--motion-spec`・`--frames` と一緒に使う。
@@ -483,8 +563,9 @@ python -m apps.sprite 書き出した.png --readback walk_walk_53x91_4f.json --o
 | `--original PNG` | 直す前のシート。直したドットに印を付けた画像も書く（古い JSON で `palette` が無いときは、この色と比べる） |
 | `--fix-colors` | 元のパレットに無い色をいちばん近い元の色に、半透明を透明か不透明（α 128 が境）に直す（既定は直さない） |
 | `--same-frames keep\|first` | 同じ元のコマを何度も使う順番で、後のコマを先のコマと同じにする（既定 `keep`） |
+| `--anim NAME` | （動きをまとめたシートのとき）直した動きの名前。省くと直したファイルの名前から決める（下の「まとめたシートの読み戻し」は上の `--anims` の節） |
 
-- 一緒に使えるのは `--gif`（`--gif-scale`・`--gif-background`）・`--mirror`・`--piskel`・`--original`・`--same-frames`・`--fix-colors`・`-o`（書くフォルダ。既定 `out/sprite`）・`-q` だけ
+- 一緒に使えるのは `--gif`（`--gif-scale`・`--gif-background`）・`--mirror`・`--piskel`・`--original`・`--same-frames`・`--fix-colors`・`--anim`・`-o`（書くフォルダ。既定 `out/sprite`）・`-q` だけ
 - ファイルの名前は元の JSON の `image` に `_edited` を付けたもの（反転は `_mirror` を足すか除く）。確認の画像・記録は `<…>_edited_check.png` / `.json`
 - シートの並びは 1 コマの大きさから読む（格子状の書き出しでも左から右・上から下。余ったマスは透明だけなら捨てる。整数倍に拡大されていても 1 倍に戻す）
 - **作らないとき**（終了コード 1）: JSON がシートの情報でない、大きさが 1 コマの大きさで割り切れない、コマの数が違う、透明だけのコマがある、.piskel の大きさ・コマの数が違う
@@ -522,6 +603,7 @@ python -m apps.sprite 書き出した.png --readback walk_walk_53x91_4f.json --o
 | `source.files` | （`--join` で 2 つ以上のファイル）ファイルごとの `name`・`frame_count`・`first_frame`・`dot_size`（使った大きさ）・`detected_dot_size`・`grid_scale`（格子を何倍にしたか）・`height`・`height_used`・`height_match`（`base` いちばん小さい / `same` / `adjusted` 合わせた / `off` 高さが違うが合わせていない（既定）/ `too_far` 違いが 1 割より大きくて合わせない） |
 | `source.joins` | （`--join` で 2 つ以上のファイル）境目ごとの `from_file`・`to_file`・`from_frame`・`to_frame`・`loop`（くり返すときの最後 → 最初）・`shift`（`x`・`foot`・`top`。ドット）・`large`（警告したか） |
 | `swaps` / `frames[].swap` | （`--swaps` のとき）まばたきの記録（上の「差し替え」）。しゃべりのシートでは口パクとまばたきの記録（上の「口パク」）。1 枚の絵の動きでは `skipped` の前に入る |
+| `animations` / `frames[].animation` / `source.anims` | （`--anims`）動きの名前ごとのフレームの番号・時間・くり返すか・行と、動きごとの設定（上の「まとめたシートの JSON」） |
 | `palette` | （`--frames`、PR #40 から）シートで使った色（`"#rrggbb"`、小さい順）。読み戻しで新しい色を見つけるのに使う |
 | `skipped` | 作らなかった理由・警告の記録（いちばん外の最後。何もなければ `[]`） |
 

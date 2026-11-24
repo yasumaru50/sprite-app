@@ -61,6 +61,7 @@ from retrocore.sprite.motion import sway as sway_mod
 from retrocore.sprite.motion.report import skipped_json
 from retrocore.sprite import frames as frames_mod
 from retrocore.sprite import join as join_mod
+from retrocore.sprite import anims as anims_mod
 from retrocore.sprite import same as same_mod
 from retrocore.sprite import steady as steady_mod
 from retrocore.sprite import edit as edit_mod
@@ -100,7 +101,7 @@ FRAME_OPTIONS = ("frame_count", "align", "align_y", "frame_grid", "frame_order",
                  "mirror", "flicker", "flicker_rows", "steady", "steady_size", "steady_rows",
                  "same_ranges", "same_search", "same_from", "edits", "join", "join_match_height")
 # 手直しの読み戻し（--readback）だけのオプション
-READBACK_OPTIONS = ("original", "same_frames", "fix_colors")
+READBACK_OPTIONS = ("original", "same_frames", "fix_colors", "anim")
 # 読み戻しで使えるほかのオプション（ほかの変換・動きのオプションは使えない）
 READBACK_ALLOWED = ("readback", "output", "gif", "gif_scale", "gif_background", "mirror", "piskel", "quiet", "inputs")
 
@@ -439,7 +440,8 @@ def build_parser() -> argparse.ArgumentParser:
         prog="python -m apps.sprite",
         description="画像をドット絵スプライトに変換する（現在は背景除去、グリッド検出または縮小、単純化、クリーンアップ、縁取り、"
                     "パレットに合わせる・パレットの保存）。")
-    p.add_argument("inputs", nargs="+", type=Path, help="入力画像またはフォルダ")
+    p.add_argument("inputs", nargs="*", type=Path,
+                   help="入力画像またはフォルダ（--anims では省ける。そのときは設定のファイルのあるフォルダから探す）")
     p.add_argument("-o", "--output", type=Path,
                    help=f"出力先。.png で終わればファイル（入力が 1 枚のとき）、それ以外はフォルダ（既定 {DEFAULT_OUT}）")
     p.add_argument("--input-type", choices=list(INPUT_TYPES), default=DEFAULT_INPUT_TYPE,
@@ -738,6 +740,16 @@ def build_parser() -> argparse.ArgumentParser:
     fr.add_argument("--piskel", action="store_const", const=True, default=None,
                     help="シートと同じ名前の .piskel（ブラウザのドット絵エディタ Piskel の「Open」で開ける形。コマ・大きさ・速さが入る）も書く。"
                          "Piskel は速さを 1 つしか持てないので、いちばん多い時間から決める（1〜24 FPS）。--frames か --readback と一緒に使う")
+    am = p.add_argument_group(
+        "動きに名前を付けてまとめる（--anims。「立ち」「歩き」「走り」「ジャンプ」などを 1 つのシート（1 つの動き = 1 行）にまとめ、"
+        "JSON の animations に動きの名前とフレームの範囲を書く。ゲームのエンジンで 1 つのキャラに idle・walk などを持たせるとき）")
+    am.add_argument("--anims", type=Path, default=None, metavar="JSON",
+                    help="動きをまとめる設定のファイル（ブラウザ版で保存した <出力名>_<名前>.anims.json か、自分で書いたもの。"
+                         "ファイル名・動きの名前・動きごとの順番・時間・くり返すか・縦のそろえ方・上げ下げと、共通の設定が入る）。"
+                         "入力の画像は名前で探す（入力を書かなければ設定のファイルのあるフォルダから）。"
+                         "<出力名>_<名前>_<幅>x<高さ>_<N>f.png / .json にまとめたシートを書く（--gif なら動きごとの GIF "
+                         "<出力名>_<動き>.gif、--piskel なら動きごとの <出力名>_<動き>.piskel も）。"
+                         "まばたき・口パク（--swaps）・重ね（--fx）・範囲・ちらつきを減らす・--flicker・--frame-root-y は警告して無視する")
     rb = p.add_argument_group(
         "手直しの読み戻し（--readback。Piskel などで直したシート（PNG か .piskel）を入力にして、元の JSON から時間・順番・足元を引き継ぎ、"
         "JSON・GIF・左右反転のシート・横 1 列に並べ直したシートを作り直す。直したドットはそのまま使う）")
@@ -753,6 +765,9 @@ def build_parser() -> argparse.ArgumentParser:
     rb.add_argument("--same-frames", choices=list(edit_mod.SAME_FRAMES), default=None,
                     help="同じ元のコマを何度も使う順番（1,2,3,2 など）で、直した結果が違うときの扱い。"
                          + "、".join(f"{k} = {v}" for k, v in edit_mod.SAME_FRAMES.items()) + f"（既定 {edit_mod.DEFAULT_SAME_FRAMES}）")
+    rb.add_argument("--anim", type=str, default=None, metavar="NAME",
+                    help="（動きをまとめたシートのとき）直した動きの名前。省くと直したファイルの名前（<出力名>_<動き>.piskel など）から決める。"
+                         "まとめたシートの読み戻しには、直す前のまとめたシート（--original）も要る")
     rb.add_argument("--fix-colors", action="store_const", const=True, default=None,
                     help="おかしな色を直す: 元のパレットに無い色をいちばん近い元の色に、半透明を透明か不透明（α 128 が境）にする"
                          "（既定は直さずに警告だけ）")
@@ -1590,7 +1605,7 @@ def run_readback(args: argparse.Namespace) -> int:
     opt = edit_mod.ReadbackOptions(gif=bool(args.gif), gif_scale=args.gif_scale or gif_mod.DEFAULT_SCALE,
                                    gif_background=args.gif_background, mirror=bool(args.mirror), piskel=bool(args.piskel),
                                    same_frames=args.same_frames or edit_mod.DEFAULT_SAME_FRAMES,
-                                   fix_colors=bool(args.fix_colors))
+                                   fix_colors=bool(args.fix_colors), anim=args.anim)
     res = edit_mod.readback(edited, src.name, info_text, original, opt)
     if not args.quiet:
         print(f"{src}（直したシート）＋ {args.readback}（元の情報）"
@@ -1611,11 +1626,230 @@ def run_readback(args: argparse.Namespace) -> int:
         print(f"警告（{src.name}）: {m}", file=sys.stderr)
     if not args.quiet:
         r = res.report
-        print(f"  {r['frame_count']} コマ（1 コマ {r['frame_width']}×{r['frame_height']}）、"
-              f"{'/'.join(str(f['duration_ms']) for f in res.info['frames'])} ミリ秒（元の JSON から）、"
+        fr = res.info["frames"]
+        if r.get("animation"):   # まとめたシート: 直した動きのフレームだけ
+            fr = [fr[i] for i in res.info["animations"][r["animation"]]["frames"]]
+        print(f"  {'動き ' + r['animation'] + ': ' if r.get('animation') else ''}"
+              f"{r['frame_count']} コマ（1 コマ {r['frame_width']}×{r['frame_height']}）、"
+              f"{'/'.join(str(f['duration_ms']) for f in fr)} ミリ秒（元の JSON から）、"
               f"新しい色 {len(r['new_colors']) if r['palette_source'] else '（調べていない）'}、"
               f"半透明 {r['semi_transparent']['dots']} ドット")
     return 0
+
+
+# 変換の設定の引数（anims.json に settings があるときは使えない）
+CONVERT_OPTIONS = ("input_type", "width", "height", "scale", "background", "bg_color", "bg_tolerance", "bg_remove_enclosed",
+                   "dot_size", "dot_shape", "grid_origin", "grid_snap", "grid_tolerance", "resize_method", "mode_bin",
+                   "line_priority", "line_ratio", "line_luma", "transparent_ratio", "simplify", "colors", "merge_distance",
+                   "keep_large", "cleanup", "no_cleanup", "outline", "no_outline", "outline_color", "outline_shape",
+                   "outline_colors", "outline_pad", "palette")
+# 動きごとの設定（anims.json に書く）
+ANIMS_OWN_OPTIONS = ("frame_count", "align_y", "frame_order", "frame_duration", "frame_name", "frame_shift_y", "join")
+# 動きをまとめるときは使えないもの（警告して無視する）と、その理由（anims.UNSUPPORTED の鍵）
+ANIMS_IGNORED = {"swaps": "swaps", "fx": "fx", "fx_offset": "fx", "fx_end": "fx", "same_ranges": "same",
+                 "same_search": "same", "same_from": "same", "steady": "steady", "steady_size": "steady",
+                 "steady_rows": "steady", "flicker": "flicker", "flicker_rows": "flicker", "frame_root_y": "root_y"}
+
+
+def check_anims_args(parser: argparse.ArgumentParser, args: argparse.Namespace):
+    """--anims の設定を読んで、引数の組み合わせを確かめる。戻り値は (設定, 入力の [(名前, パス)], 無視したものの警告)。"""
+    try:
+        cfg = anims_mod.load_config(args.anims.read_bytes())
+    except OSError as e:
+        parser.error(f"--anims {args.anims} を読めません: {e}")
+    except ValueError as e:
+        parser.error(f"--anims {args.anims}: {e}")
+    if args.motion is not None or args.motion_spec is not None or args.write_motion_spec is not None:
+        parser.error("--anims は --motion / --motion-spec / --write-motion-spec と一緒に使えません")
+    given = _option_names(args, ANIMS_OWN_OPTIONS)
+    if given:
+        parser.error(f"{' / '.join(given)} は --anims では使えません（順番・時間・縦のそろえ方・上げ下げ・名前は、"
+                     f"動きごとに {args.anims.name} に書きます）")
+    defaults = build_parser().parse_args([])
+    if cfg.settings is not None:
+        given = [f"--{k.replace('_', '-')}" for k in CONVERT_OPTIONS if getattr(args, k) != getattr(defaults, k)]
+        if given:
+            parser.error(f"{' / '.join(given)} は使えません（{args.anims.name} に変換の設定（settings）が書いてあります。"
+                         "設定のファイルの settings を直すか、settings を消して引数で指定してください）")
+    ignored = []
+    for k, why in ANIMS_IGNORED.items():
+        v = getattr(args, k)
+        if v is not None and v != getattr(defaults, k) and not (k == "steady" and v == "off"):
+            msg = anims_mod.UNSUPPORTED[why]
+            if msg not in ignored:
+                ignored.append(msg)
+            setattr(args, k, getattr(defaults, k))
+    args.frames = True
+    check_args(parser, args)
+    # 入力の画像: 書いたものは名前で探す。書かなければ設定のファイルのあるフォルダから
+    try:
+        found = {p.name: p for p in collect_inputs(args.inputs)} if args.inputs else {}
+    except FileNotFoundError as e:
+        parser.error(str(e))
+    files = []
+    for f in cfg.files():
+        path = found.get(f) if args.inputs else args.anims.parent / f
+        if path is None or not path.is_file():
+            parser.error(f"{args.anims.name} の「{f}」が見つかりません"
+                         + ("（入力に書いた画像の中に、同じ名前のファイルがありません）" if args.inputs
+                            else f"（{args.anims.parent} の中を探しました。入力の画像を引数に書いても探せます）"))
+        files.append((f, path))
+    extra = [n for n in found if n not in cfg.files()]
+    if extra:
+        parser.error(f"入力の {'、'.join(extra)} は、{args.anims.name} のどの動きにも入っていません")
+    return cfg, files, ignored
+
+
+def run_anims(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
+    """--anims: 動きに名前を付けて 1 つのシートにまとめる。"""
+    cfg, files, ignored = check_anims_args(parser, args)
+    if args.mirror:
+        cfg.mirror = True
+    if args.join_match_height:
+        cfg.match_height = True
+    if args.align is not None:
+        cfg.align = args.align
+    if args.frame_grid is not None:
+        cfg.grid = args.frame_grid
+    for sp in args.save_palette or []:
+        if sp.suffix.lower() not in palette_mod.WRITE_FORMATS:
+            parser.error(f"--save-palette は {' / '.join(palette_mod.WRITE_FORMATS)} のファイルで指定してください: {sp}")
+    args.palette_colors = None
+    if args.palette is not None:
+        try:
+            args.palette_colors = load_palette(args.palette)
+        except PaletteError as e:
+            parser.error(str(e))
+    if cfg.settings is not None:
+        try:
+            settings = SpriteSettings.from_dict(dict(cfg.settings))
+            settings.validate()
+        except (ValueError, TypeError) as e:
+            parser.error(f"--anims {args.anims}: 変換の設定（settings）に問題があります: {e}")
+    else:
+        settings = settings_from_args(args)
+    try:
+        dst = output_paths([files[0][1]], args.output)[0]
+    except ValueError as e:
+        parser.error(str(e))
+    src = files[0][1]
+    for m in ignored:
+        print(f"警告（{args.anims.name}）: {m}（無視します）", file=sys.stderr)
+    images = []
+    for name, path in files:
+        try:
+            images.append((name, load_rgba(path)))
+        except OSError as e:
+            print(f"読み込めません: {path}（{e}）", file=sys.stderr)
+            return 1
+    steps_dir = dst.with_name(dst.stem + "_steps")
+
+    def on_step(res, _i=[0]):
+        _i[0] += 1
+        if not args.quiet:
+            h, w = res.image.shape[:2]
+            print(f"  {_i[0]}. {res.description}: {w}×{h}（{res.seconds:.2f} 秒）")
+        if args.save_steps:
+            save_rgba(res.image, steps_dir / f"{_i[0]:02d}_{res.name}.png")
+
+    if not args.quiet:
+        print("動きをまとめる: " + "、".join(f"{a.name}（{' ＋ '.join(a.files)}）" for a in cfg.anims)
+              + f"、{INPUT_TYPES[settings.input_type]}")
+    edits = None
+    if args.edits is not None:
+        from retrocore.sprite.touchup import load_touchup
+        try:
+            edits = load_touchup(args.edits.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as e:
+            print(f"エラー（{args.edits.name}）: 手の直しの一覧を読めません: {e}", file=sys.stderr)
+            return 1
+    try:
+        res = anims_mod.convert_anims(images, settings, cfg, edits, on_step=on_step)
+    except ValueError as e:
+        from retrocore.sprite.touchup import TouchupError
+        if isinstance(e, TouchupError):
+            print(f"エラー（{src.name}）: 手の直し（{args.edits.name}）を当てられません: {e}。"
+                  "変換の設定を直したときと同じにするか、直しを作り直してください", file=sys.stderr)
+            return 1
+        if not isinstance(e, (frames_mod.FramesError, GridNotFoundError)):
+            print(f"エラー（{src.name}）: {e}", file=sys.stderr)
+            return 1
+        print(f"コマを作りませんでした（{src.name}）: {e}", file=sys.stderr)
+        rp = skipped_path(dst, cfg.name)
+        rp.parent.mkdir(parents=True, exist_ok=True)
+        rp.write_text(frames_mod.frames_skipped_json(e, cfg.name), encoding="utf-8")
+        if not args.quiet:
+            print(f"  → {rp}（作らなかった理由）")
+        return 1
+    if not args.quiet:
+        for m in res.notes:
+            print(f"  メモ: {m}")
+        for r in res.anims:
+            last = r["first"] + r["count"] - 1
+            print(f"    {r['name']}: {' ＋ '.join(r['files'])}、{r['count']} コマ（{r['first']}"
+                  + (f"〜{last}" if last > r["first"] else "") + " コマ目）")
+        if res.touchup is not None:
+            print(f"  手の直しを当てた（直したドット {res.touchup.dot_count}）: "
+                  + "、".join(f"{f.label} コマ目 {len(f.dots)}" for f in res.touchup.frames))
+    if res.touchup is not None:
+        print_warnings(res.touchup.warnings, src)
+    strip = frames_mod.source_strip(res)
+    save_rgba(strip, dst)
+    if not args.quiet:
+        w, h = res.size
+        print(f"  → {dst}（そろえた {len(res.frames)} コマをファイルの順に並べた絵。1 コマ {w}×{h}）")
+    print_warnings(res.warnings, src)
+    for pp in palette_paths(args.save_palette, dst, False):
+        cols = save_palette(used_colors(strip), pp)
+        if not args.quiet:
+            print(f"  → {pp}（パレット {len(cols)} 色。全部のコマで共通）")
+    if args.preview_scale is not None:
+        pv = preview_path(dst, args.preview_scale)
+        save_rgba(scale_nearest(strip, args.preview_scale), pv)
+        if not args.quiet:
+            print(f"  → {pv}（プレビュー {args.preview_scale} 倍）")
+    try:
+        made = anims_mod.anims_outputs(res, cfg, dst.stem, piskel=bool(args.piskel))
+    except ValueError as e:
+        print(f"エラー（{src.name}）: {e}", file=sys.stderr)
+        return 1
+    for a in cfg.anims:
+        fw = frames_mod.flip_warning(a.order)
+        if fw:
+            print_warnings([f"{a.name}: {fw}"], src)
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    for name, data in made["files"].items():
+        (dst.parent / name).write_bytes(data)
+        if not args.quiet:
+            print(f"  → {dst.parent / name}")
+    if not args.quiet:
+        sh = made["sheets"][0]
+        w, h = sh.size
+        for a, m in zip(sh.specs, sh.anims):
+            info = sh.info["animations"][a.name]
+            print(f"    {a.name}: {info['row'] + 1} 行目、フレーム {info['frames'][0]}〜{info['frames'][-1]}、"
+                  f"{'/'.join(str(d) for d in m.durations)} ミリ秒、{'くり返す' if a.loop else '1 回で終わる'}"
+                  f"、縦 {a.align_y}" + (f"、上げ下げ {','.join(map(str, a.shift_y))}" if a.shift_y else ""))
+        print(f"    （1 コマ {w}×{h}、{sh.columns} 列 × {len(sh.anims)} 行、地面の線 ground_y {sh.info['ground_y']}）")
+    failed = 0
+    if args.gif:
+        scale = args.gif_scale or gif_mod.DEFAULT_SCALE
+        for sh in made["sheets"]:
+            img = sh.image()
+            for a in cfg.anims:
+                try:
+                    name, g = anims_mod.anim_gif(img, sh.info, a.name, scale, args.gif_background)
+                except ValueError as e:
+                    print(f"警告（{src.name}）: {a.name} の GIF を書けませんでした: {e}", file=sys.stderr)
+                    failed = 1
+                    continue
+                (dst.parent / name).write_bytes(g.data)
+                for m in g.warnings:
+                    print(f"警告（{src.name}）: {a.name}: {m}", file=sys.stderr)
+                if not args.quiet:
+                    print(f"  → {dst.parent / name}（GIF: {len(g.durations)} フレーム、{scale} 倍、"
+                          f"{'ずっと繰り返す' if a.loop else '1 回だけ再生'}）")
+    return failed
 
 
 def preview_path(output: Path, factor: int) -> Path:
@@ -1629,6 +1863,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.readback is not None:
         check_readback_args(parser, args)
         return run_readback(args)
+    if args.anims is not None:
+        return run_anims(parser, args)
+    if not args.inputs:
+        parser.error("入力の画像（またはフォルダ）を指定してください")
     check_args(parser, args)
     load_motion_spec(parser, args)
     try:

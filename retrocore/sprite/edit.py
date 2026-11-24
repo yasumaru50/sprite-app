@@ -69,6 +69,7 @@ class ReadbackOptions:
     piskel: bool = True
     same_frames: str = DEFAULT_SAME_FRAMES
     fix_colors: bool = False
+    anim: str | None = None   # まとめたシート（JSON に animations）で直した動きの名前（None はファイルの名前から決める）
 
     @classmethod
     def from_dict(cls, values: dict) -> "ReadbackOptions":
@@ -554,6 +555,12 @@ def readback(edited: bytes, edited_name: str, info_text, original: bytes | None 
     try:
         opt.validate()
         info = parse_sheet_info(info_text)
+        from .anims import is_anims_info, readback_anims
+        if is_anims_info(info):
+            # 動きをまとめたシート: 1 つの動きずつ読み戻す（anims.py）
+            return readback_anims(edited, edited_name, info, original, opt)
+        if opt.anim is not None:
+            raise EditError("bad_option", "動きの名前（--anim）は、動きをまとめたシートの JSON のときだけ使えます")
         frames, layout, notes, warnings = read_edited(edited, edited_name, info)
     except EditError as e:
         return ReadbackResult(False, errors=[str(e)], report=_failed_report(e, edited_name))
@@ -646,7 +653,8 @@ def readback(edited: bytes, edited_name: str, info_text, original: bytes | None 
         if opt.gif:
             key = "mirror_gif" if is_m else "gif"
             try:
-                g = gif_mod.make_gif(fr, durations, opt.gif_scale, opt.gif_background)
+                g = gif_mod.make_gif(fr, durations, opt.gif_scale, opt.gif_background,
+                                     loop=info.get("loop") is not False)
                 names[key] = st + ".gif"
                 files[names[key]] = g.data
                 if not is_m:
