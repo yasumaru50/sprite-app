@@ -599,7 +599,7 @@
         <a id="dl-json" class="button" aria-disabled="true" href="#">⑤ シートの情報を保存（JSON）</a>
         <button type="button" id="dl-gif" disabled>⑥ GIF を保存</button>
         <a id="dl-piskel" class="button" aria-disabled="true" href="#" hidden>Piskel で直す用（.piskel）を保存</a>
-        <a id="dl-anims-config" class="button secondary" aria-disabled="true" href="#" hidden>動きをまとめる設定を保存（.anims.json）</a>
+        <a id="dl-anims-config" class="button secondary" aria-disabled="true" href="#" hidden>CLI 用の設定を保存（.anims.json。シートの情報ではありません）</a>
       </div>
       <div class="actions" id="frames-extra" hidden>
         <a id="dl-mirror" class="button secondary" aria-disabled="true" href="#">⑦ 左右反転のシート（PNG）</a>
@@ -1836,6 +1836,7 @@ function revokeMotionFiles() {
   $("gif-status").textContent = "";
   for (const id of ["dl-sheet", "dl-json"]) { $(id).href = "#"; $(id).setAttribute("aria-disabled", "true"); }
   $("dl-json").textContent = "⑤ シートの情報を保存（JSON）";
+  if (animsOn()) animsLabels();   // 動きをまとめているときのボタンの名前に戻す
   $("piskel-hint").hidden = true;
 }
 function stopTimer() { if (motion.timer) clearTimeout(motion.timer); motion.timer = null; }
@@ -2177,7 +2178,8 @@ function drawMotion() {
   $("ruler").hidden = !rows;
   if (rows) drawRuler(h, k);
   if (info) $("frame-label").textContent = (fv ? "重ねた見た目 " : "フレーム ")
-    + `${motion.frame + 1} / ${info.frame_count}（${f.duration_ms} ミリ秒）`;
+    + `${motion.frame + 1} / ${info.frame_count}（${f.duration_ms} ミリ秒）`
+    + (info.once ? (onceEnd(info) ? "・1 回で終わる: ここで止まります（見本は少し待ってから最初に戻します）" : "・1 回で終わる") : "");
   $("motion-stage").dataset.scale = String(k);
 }
 function showFrame(i) {
@@ -2187,12 +2189,15 @@ function showFrame(i) {
   motion.frame = ((i % n) + n) % n;
   drawMotion();
 }
+// 1 回で終わる動き（動きをまとめたときの「1 回で終わる」）の見本: 最後のコマでこれだけ止めてから最初に戻す（ゲームでは最後のコマで止まる）
+const ONCE_HOLD_MS = 1200;
+function onceEnd(info) { return !!info && info.once === true && motion.frame === info.frame_count - 1; }
 function schedule() {
   stopTimer();
   const info = playInfo();
   if (!info || !motion.playing) return;
   motion.timer = setTimeout(() => { showFrame(motion.frame + 1); schedule(); },
-                            info.frames[motion.frame].duration_ms);
+                            info.frames[motion.frame].duration_ms + (onceEnd(info) ? ONCE_HOLD_MS : 0));
 }
 $("play").addEventListener("click", () => {
   motion.playing = !motion.playing;
@@ -5870,7 +5875,8 @@ function animsSheetConfig() {
 function animsChanged(reconvert) {
   if (!framesMode()) return;
   if (reconvert) {
-    if (frames.token) { join.stale = true; joinRender(); }
+    // 一覧は作り直さない（作り直すと、次に押そうとしている名前の欄が消えて、打った字が入らなくなる）。注意の文だけ変える
+    if (frames.token) { join.stale = true; $("join-note").textContent = "一覧を変えました。まだ前の並び順の結果です（「② 変換する」でつなげ直します）。"; }
     if (frames.token && !busy) setStatus("動き・ファイル・縦のそろえ方・上げ下げを変えました。「② 変換する」をもう一度押してください。", false);
   } else if (frames.token && anims.at) requestSheets();
   animsCheck();
@@ -5930,9 +5936,24 @@ function animsRenderSettings() {
   }
   animsCheck();
 }
+const ANIMS_LABELS = {
+  "dl-sheet": "④ まとめたシートを保存（PNG。1 つの動き = 1 行）",
+  "dl-json": "⑤ まとめたシートの情報を保存（JSON。animations 入り）",
+  "dl-mirror": "⑦ 左右反転のまとめたシート（PNG）",
+  "dl-mirror-json": "⑧ 左右反転の情報（JSON。animations 入り）",
+};
+function animsLabels() {
+  const on = animsOn();
+  for (const [id, label] of Object.entries(ANIMS_LABELS)) {
+    const el = $(id);
+    if (el.dataset.plain === undefined) el.dataset.plain = el.textContent;
+    el.textContent = on ? label : el.dataset.plain;
+  }
+}
 function animsLayout() {
   const on = animsOn();
   document.body.classList.toggle("anims-mode", on);
+  animsLabels();
   $("anims-play-label").hidden = !on;
   $("dl-anims-config").hidden = !on;
   if (on && $("swap-mode").checked) { $("swap-mode").checked = false; $("swap-mode").dispatchEvent(new Event("change")); }
@@ -5940,7 +5961,14 @@ function animsLayout() {
 }
 $("anims-on").addEventListener("change", () => {
   if (animsOn()) for (const f of join.files) if (f.anim === undefined) f.anim = animGuess(f.file.name);
-  if (frames.token) { join.stale = true; }
+  if (frames.token) {
+    join.stale = true;
+    // 前の変換のシート（印を変える前の形）は保存できないようにする。④⑤ で前の形の JSON を保存してしまわないように
+    clearMotion(animsOn() ? "「② 変換する」を押すと、動きをまとめたシート（JSON に animations が入る）を作ります"
+      : "「② 変換する」を押すと、1 つの動きのシートを作ります");
+    revokeFrameFiles();
+    animsConfigOff();
+  }
   joinRender();
   animsLayout();
   if (frames.token && !busy) setStatus(animsOn() ? "動きの名前を入れて「② 変換する」を押すと、動きをまとめたシートを作ります。"
@@ -5977,7 +6005,7 @@ function animsPlayInfo(info, name) {
   const a = info.animations[name];
   const fr = a.frames.map((i) => info.frames[i]);
   return { frame_width: info.frame_width, frame_height: info.frame_height, frame_count: fr.length, frames: fr,
-           total_duration_ms: fr.reduce((s, f) => s + f.duration_ms, 0), loop: a.loop };
+           total_duration_ms: fr.reduce((s, f) => s + f.duration_ms, 0), loop: a.loop, once: a.loop === false };
 }
 async function showAnimsSheets(result) {
   const keepFrame = motion.frame;
@@ -6038,7 +6066,8 @@ function animsShowPlay(keepFrame = 0) {
   $("dl-mirror-gif").textContent = `⑨ 左右反転の GIF（${name}）`;
   const rows = Object.entries(info.animations).map(([n, a]) => `${a.row + 1} 行目 ${n}: ${a.frames.length} フレーム・${a.duration_ms} ミリ秒・${a.loop ? "くり返す" : "1 回で終わる"}`);
   const air = motion.info.frames.map((f) => f.air).join("/");
-  $("motion-meta").textContent = `まとめたシート: 1 コマ ${info.frame_width}×${info.frame_height} ドット・${info.columns} 列 × ${info.rows} 行・`
+  $("motion-meta").textContent = `⑤ で保存する JSON: ${$("dl-json").download}（"animations" 入り）。`
+    + `まとめたシート: 1 コマ ${info.frame_width}×${info.frame_height} ドット・${info.columns} 列 × ${info.rows} 行・`
     + `地面の線 ground_y ${info.ground_y}（${rows.join("／")}）。再生中: ${name}（足元の高さ ${air} ドット。${motion.info.loop ? "くり返す" : "1 回で終わる。最後のコマで止めるのはゲームの側"}）`;
   motion.frame = keepFrame < motion.info.frame_count ? keepFrame : 0;
   const h = $("piskel-hint");
@@ -6068,6 +6097,13 @@ async function saveAnimsGif(sheetPng, sheetJson, button) {
   } finally {
     button.disabled = !sheetPng;
   }
+}
+function animsConfigOff() {
+  anims.result = null;
+  if (anims.configUrl) URL.revokeObjectURL(anims.configUrl);
+  anims.configUrl = null;
+  $("dl-anims-config").href = "#";
+  $("dl-anims-config").setAttribute("aria-disabled", "true");
 }
 $("dl-anims-config").addEventListener("click", (ev) => { if ($("dl-anims-config").getAttribute("aria-disabled") === "true") ev.preventDefault(); });
 layoutFrames();

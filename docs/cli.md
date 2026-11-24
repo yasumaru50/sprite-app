@@ -357,7 +357,7 @@ python -m apps.sprite idle.png walk.png jump.png --anims hero_sprite_anims.anims
 python -m apps.sprite hero_walk.piskel --readback hero_anims_62x94_12f.json --original hero_anims_62x94_12f.png --gif --mirror --piskel
 ```
 
-設定のファイル（画面の「動きをまとめる設定を保存（.anims.json）」で保存できる。自分で書いてもよい）:
+設定のファイル（画面の「CLI 用の設定を保存（.anims.json）」で保存できる。自分で書いてもよい。まとめたシートの情報（`animations` の入った JSON）は「⑤ まとめたシートの情報を保存」の方）:
 
 ```json
 {"version": 1, "kind": "sprite_anims", "name": "anims",

@@ -303,5 +303,9 @@ def test_web_html_has_anims_ui():
     from pathlib import Path
     html = (Path(__file__).resolve().parents[1] / "apps" / "sprite" / "web" / "template.html").read_text(encoding="utf-8")
     for key in ('id="anims-on"', 'id="anims-list"', 'id="anims-play"', 'id="dl-anims-config"', 'id="edit-anim"',
-                "anims_convert_files_for_web", "anims_sheets_for_web", "anims_gif_for_web"):
+                "anims_convert_files_for_web", "anims_sheets_for_web", "anims_gif_for_web",
+                # 1 回で終わる動きは、見本の再生で最後のコマに止まる（info.once）
+                "once: a.loop === false", "ONCE_HOLD_MS", "onceEnd(info)",
+                # まとめているときの ⑤ の名前（どれに animations が入るか分かるように）・印を変えたら前のシートを保存できない
+                "⑤ まとめたシートの情報を保存（JSON。animations 入り）", "animsConfigOff()"):
         assert key in html
