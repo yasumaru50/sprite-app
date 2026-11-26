@@ -14,17 +14,17 @@
 ## 最初に読むもの
 
 - **作業に要るファイルだけを読む**。文書は下の「ファイルの地図」を見て、必要な所だけを開く（全部を読み通さない）
-- 残っている作業は `docs/TODO.md`、決まりと方針は `docs/sprite-app-plan.md`。`docs/archive/` は昔の記録なので、調べ物で要るときだけ
+- やり残したこと（困ったら足す・試したいこと・作らないと決めたこと）は `docs/TODO.md`、決まりと方針は `docs/sprite-app-plan.md`。`docs/archive/` は昔の記録なので、調べ物で要るときだけ
 
 ## ファイルの地図
 
 | 知りたいこと | 場所 |
 | --- | --- |
-| 残っている作業 | `docs/TODO.md` |
+| やり残したこと（困ったら足す・試したいこと・作らないと決めたこと） | `docs/TODO.md`（区切る前の全文は `docs/archive/TODO-2026-11-26.md`） |
 | 方針・決まり・動きの表の設計・skipped の code の一覧 | `docs/sprite-app-plan.md` |
 | 工程の仕組みと値を決めた理由、処理のファイルの一覧 | `docs/how-it-works.md` |
 | CLI のオプション、出力のファイル名、シートの JSON の形 | `docs/cli.md` |
-| ブラウザ版の使い方・よく使う CLI | `apps/sprite/README.md`（全体の紹介は `README.md`） |
+| ブラウザ版の使い方・よく使う CLI・ゲーム（Godot 4）で使うときの設定 | `apps/sprite/README.md`（全体の紹介は `README.md`） |
 | Piskel での手直しと読み戻しの手順 | `docs/sprite-edit.md` |
 | これまでの PR のまとめ | `docs/history.md` |
 | 外部調査 | `docs/research-2026-11.md` |

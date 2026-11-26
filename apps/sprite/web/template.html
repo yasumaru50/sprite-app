@@ -308,7 +308,7 @@
           <span><b>動きに名前を付けてまとめる</b><small class="help" data-help-at="join-title">「立ち」「歩き」「走り」「ジャンプ」などのファイルを全部選び、上の一覧の各行に動きの名前（idle・walk・run・jump など）を入れると、
             1 つのシート（1 つの動き = 1 行）にまとめます。シートの情報（JSON）の animations に、動きの名前とフレームの番号・時間・くり返すかが入ります
             （ゲームのエンジンで 1 つのキャラに idle・walk などを持たせて切り替えるとき）。同じ名前のファイルが続けば 1 つの動きとしてつなげます。
-            色・コマの大きさ・地面の高さは全部の動きで同じにします。印を付けていないときは今までと同じです。CLI では <code>--anims 設定.anims.json</code></small></span></label>
+            色・コマの大きさ・地面の高さは全部の動きで同じにします。印を付けていないときは、1 つの動きのシートです。CLI では <code>--anims 設定.anims.json</code></small></span></label>
         <datalist id="anim-names"></datalist>
         <div id="anims-box" hidden>
           <h3 id="anims-title">動きごとの設定</h3>
@@ -359,7 +359,7 @@
     </div>
     <div id="table-load-error" class="message error" role="alert" hidden><div id="table-load-error-text" style="white-space:pre-wrap"></div></div>
     <div class="note help" id="motion-off-note" data-help-at="motion-pick-title">動きを選ぶと、変換結果から動きを作って再生し、スプライトシート（PNG と JSON）を保存できます。
-      「なし」のときは今までどおり 1 枚の PNG だけです。</div>
+      「なし」のときは変換結果の 1 枚の PNG（③）だけです。</div>
     <div id="motion-body" hidden>
       <div id="table-editor" hidden>
         <div class="table-head">
@@ -752,7 +752,7 @@
           2 コマ目以降は頭の位置を上下左右 3 ドット以内で探して当てます（合わないコマには入れずに知らせます）。
           「半分閉じた目」も描くと、開く → 半分 → 閉じる → 半分 → 開く になります。まばたきがかかるコマは時間で分けます（全体の時間は変わりません）。
           動き 1 周がまばたきの間隔より短いときは、動きを何周か繰り返したシートにして、その中に 1 回だけ入れます。
-          シート・JSON（swaps）・GIF・左右反転・.piskel に入ります。差し替えを描かなければ、出力は今までと同じです。
+          シート・JSON（swaps）・GIF・左右反転・.piskel に入ります。差し替えを描かなければ、出力は差し替えの無いときと同じです。
           <b>口パク</b>: 「描く絵」で「開いた口」を選んで口を開けた形に描くと、ふつうのシートとは別に「しゃべりのシート」ができます
           （今の動きの上で 閉じる → 開く をくり返します。「半分開いた口」も描くと 閉じる → 半分 → 開く → 半分。閉じた口は 1 コマ目のまま）。
           まばたきも入ります（目と口の四角が重なるコマには、口を優先してまばたきを入れません）。口が入らないコマが半分以上なら作りません。</div>
@@ -794,7 +794,7 @@
         <div class="note" id="touch-cursor">&nbsp;</div>
         <div id="talk-box" class="anims-hidden" hidden>
           <h3 id="talk-title">しゃべりのシート（口パク）</h3>
-          <div class="note help" data-help-at="talk-title">ふつうのシート（④⑤⑥）とは別のシートです。ふつうのシートは今までと同じです。CLI の <code>--swaps</code> でも同じファイルができます
+          <div class="note help" data-help-at="talk-title">ふつうのシート（④⑤⑥）とは別のシートです。ふつうのシートは変わりません。CLI の <code>--swaps</code> でも同じファイルができます
             （<code>&lt;出力名&gt;_&lt;動き&gt;_talk_sheet.png</code>、コマが並んだ絵は <code>&lt;出力名&gt;_&lt;名前&gt;_talk_&lt;幅&gt;x&lt;高さ&gt;_&lt;N&gt;f.png</code>）。</div>
           <div class="touch-row">
             <canvas id="talk-canvas" aria-label="しゃべりのシートの再生"></canvas>
@@ -836,7 +836,7 @@
       <button type="button" id="dl-zip" class="big" disabled>まとめて保存（ZIP）</button>
       <span class="note" id="zip-status" role="status" aria-live="polite"></span>
     </div>
-    <div class="note help" data-help-at="save-title">そのとき作れるものを全部、1 つの ZIP に入れます（シートの PNG・JSON・GIF、左右反転のシート、しゃべり・エフェクトのシート、直しの一覧 edits.json、差し替えの一覧、動きをまとめたときの .anims.json と動きごとの GIF）。中のファイルは「1 つずつ保存」で保存したものとバイト単位で同じです。.piskel は入りません（「外のエディタで直す」で保存します）。</div>
+    <div class="note help" data-help-at="save-title">そのとき作れるものを全部、1 つの ZIP に入れます（③ の PNG、シートの PNG・JSON・GIF、左右反転のシート、しゃべり・エフェクトのシート、直しの一覧 edits.json、差し替えの一覧、動きをまとめたときの .anims.json と動きごとの GIF）。中のファイルは「1 つずつ保存」で保存したものとバイト単位で同じです。.piskel は入りません（「外のエディタで直す」で保存します）。確かめ用のファイル（ちらつきの見える化・範囲の図は「細かい設定」から、コマを作れなかったときの理由は「② 変換する」の下の黄色い枠から保存します）も入りません。</div>
     <div class="motion-part">
       <div class="actions" id="gif-controls" style="margin-top:8px">
         <label for="gif-scale">GIF の拡大</label>
@@ -856,7 +856,7 @@
         ファイルの中身は CLI の <code id="cli-equiv">--motion breathe</code> と同じです。</div>
     </div>
     <details class="fold" id="fold-each">
-      <summary><span class="fold-name">1 つずつ保存</span><small class="fold-what">今までの保存のボタン</small></summary>
+      <summary><span class="fold-name">1 つずつ保存</span><small class="fold-what">ファイルを 1 つずつ保存するボタン（③〜⑨・エフェクト・しゃべり）</small></summary>
       <div class="fold-body">
       <div class="actions">
       <a id="download" class="button" aria-disabled="true" href="#">③ 結果を PNG で保存（透明つき）</a>
@@ -929,7 +929,7 @@
       <div class="field">
         <label for="edit-json">B. 元のシートの情報（JSON）</label>
         <input type="file" id="edit-json" accept=".json,application/json">
-        <small class="help">シートを保存したときの「⑤ シートの情報を保存（JSON）」のファイル</small>
+        <small class="help">シートと一緒に保存した JSON（ZIP の中のものか、「1 つずつ保存」の ⑤ で保存したもの）</small>
         <span class="file-name" id="edit-json-name"></span>
       </div>
       <div class="field">
@@ -1562,7 +1562,7 @@ function joinRender() {
     const big = (r.joins || []).filter((j) => j.large);
     notes.push(big.length ? `つなぎ目で体の位置が大きくずれる所が ${big.length} か所あります（下の注意。ちらつきの見える化の橙の線がファイルの境目です）。`
       : "つなぎ目で体の位置が大きくずれる所はありません（ちらつきの見える化の橙の線がファイルの境目です）。");
-  } else if (join.files.length === 1) notes.push("ファイルが 1 つのときは、今までと同じ変換です。別の絵をつなげるときは「＋ ファイルを足す」。");
+  } else if (join.files.length === 1) notes.push("ファイルが 1 つのときは、ふつうのコマが並んだ絵の変換です。別の絵をつなげるときは「＋ ファイルを足す」。");
   $("join-note").textContent = notes.join("");
   if (typeof animsRenderSettings === "function") animsRenderSettings();
 }
@@ -2115,9 +2115,9 @@ async function showMotion(result, ms) {
     $("frame-label").textContent = "動きなし";
     $("motion-meta").textContent = result.table
       ? `表「${result.motion}」の作れない行があるので、シートは作っていません。赤いマスを直してください`
-        + `（変換結果を動かさずに表示しています。赤い帯は分けられなかった高さ）。作らなかった理由は ⑤ で JSON に保存できます。`
+        + `（変換結果を動かさずに表示しています。赤い帯は分けられなかった高さ）。作らなかった理由は「1 つずつ保存」の ⑤ で JSON に保存できます。`
       : `${MOTION_TEXT[result.motion].what}を付けられなかったので、変換結果を動かさずに表示しています（シートは保存できません。`
-        + `作らなかった理由は ⑤ で JSON に保存できます）。`;
+        + `作らなかった理由は「1 つずつ保存」の ⑤ で JSON に保存できます）。`;
     setMotionStatus("", false);
     return;
   }
@@ -5380,7 +5380,7 @@ function swapShow(result) {
   const dots = "差し替えのドット: " + Object.keys(SWAP_KEYS).map((k) => `${SWAP_SHAPE_TEXT[k]} ${(touch.swaps.get(k) || new Map()).size}`).join("・");
   const it = result.swaps && result.swaps.items[0];
   let text;
-  if (!n) text = "差し替えはありません（今までと同じ出力です）。";
+  if (!n) text = "差し替えはありません（差し替えの無い出力です）。";
   else if (!closed || !closed.size) {
     text = swapHas("open") ? `まばたきは入れていません（「閉じた目」を描くと入ります）。${dots}`
       : (swapHas("mouth_half") ? `「開いた口」を描くと、しゃべりのシートができます（${dots}）。` : `「閉じた目」を描くと、まばたきが入ります（${dots}）。`);
@@ -5647,7 +5647,7 @@ function touchShow(result) {
   }
   const per = [...touch.edits].filter(([, m]) => m.size).sort((a, b) => Math.abs(a[0]) - Math.abs(b[0]) || b[0] - a[0])
     .map(([k, m]) => `${touchFrameName(k)} コマ目 ${m.size}`).join("、");
-  $("touch-status").textContent = n ? `直したドット: ${n}（${per}）。保存のファイルに入っています。` : "直しはありません（今までと同じ出力です）。";
+  $("touch-status").textContent = n ? `直したドット: ${n}（${per}）。保存のファイルに入っています。` : "直しはありません（直す前の出力のままです）。";
 }
 // 直しを当てられないときの確認（ボタンの文字で中身が分かるように 3 つ。Esc は「やめる」と同じ）。
 // cancel は { label, help, run }（「やめる」で戻す方法）か null（戻せないときは「やめる」を出さず、理由を書く）。
@@ -6090,7 +6090,7 @@ $("anims-on").addEventListener("change", () => {
   joinRender();
   animsLayout();
   if (frames.token && !busy) setStatus(animsOn() ? "動きの名前を入れて「② 変換する」を押すと、動きをまとめたシートを作ります。"
-    : "「② 変換する」を押すと、今までと同じ 1 つの動きのシートに戻します。", false);
+    : "「② 変換する」を押すと、1 つの動きのシートに戻します。", false);
 });
 function animsRequest() {
   return { settings: currentSettings(), anims: animsConfig() };
