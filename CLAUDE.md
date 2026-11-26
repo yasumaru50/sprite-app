@@ -38,6 +38,7 @@
 | 単純化 / クリーンアップ / 縁取り / パレット | `retrocore/sprite/simplify.py` / `cleanup.py` / `outline.py` / `palette.py` |
 | コマが並んだ絵（`--frames`）/ 別々のファイルをつなげる（`--join`）/ 動きに名前を付けてまとめる（`--anims`）/ ちらつきを減らす / 1 コマ目と同じにする範囲 / 手の直し | `retrocore/sprite/frames.py` / `join.py` / `anims.py` / `steady.py` / `same.py` / `touchup.py` |
 | 差し替え（まばたき。CLI `--swaps`、画面の「差し替えを描く」） | `retrocore/sprite/swap.py` |
+| 画面の「まとめて保存（ZIP）」（日時を固定した ZIP） | `retrocore/sprite/bundle.py` |
 | 手直しの読み戻し / .piskel | `retrocore/sprite/edit.py` / `piskel.py` |
 | 動き（表の形・表からフレーム・決まり・各プリセット・範囲・skipped・シート・GIF） | `retrocore/sprite/motion/`（`spec.py`・`timeline.py`・`base.py`・`breathe.py` ほか・`region.py`・`report.py`・`sheet.py`・`gif.py`） |
 | ブラウザ版 | `apps/sprite/web/template.html`（→ `tools/build_sprite_web.py` で `sprite-app.html` を作る。直接編集しない） |
