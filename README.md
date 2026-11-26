@@ -32,10 +32,12 @@ AI が描いた「ドット絵風の画像」から、本物のドット絵の�
 1. GitHub で [`apps/sprite/web/sprite-app.html`](apps/sprite/web/sprite-app.html) を開き、右上の「Download raw file」（下向きの矢印）を押す
 2. ダウンロードした `sprite-app.html` をダブルクリックして、ブラウザ（Chrome・Edge など）で開く
 3. 「準備ができました」と出たら（初めては 10〜30 秒。Python の実行環境 Pyodide をインターネットから読み込みます）、
-   画像を選んで「② 変換する」→「③ 結果を PNG で保存」
-4. 動きを付けるときは、いちばん下の「動き」で呼吸などを選び、「④ スプライトシートを保存（PNG）」「⑤ シートの情報を保存（JSON）」「⑥ GIF を保存」
+   画像を選んで「② 変換する」→ 下の「保存」の「まとめて保存（ZIP）」（1 つずつ保存するときは「1 つずつ保存」を開く）
+4. 動きを付けるときは、画像の選択の下の「動き」で呼吸などを選んでから保存する（ZIP にシートの PNG・JSON・GIF が入る）
 
 入力の種類を「コマが並んだ絵」にすると、歩き・走りのように横に並んだコマをそろえたシートにできます。
+色数・縁取りなどのたまに使う設定は「必要なときに開く」「細かい設定」の中に折りたたんであります（詳しくは [apps/sprite/README.md](apps/sprite/README.md)）。
+ゲーム（Godot 4）で使うときの設定も [apps/sprite/README.md](apps/sprite/README.md) の「ゲームで使うときの設定（Godot 4）」にあります。
 
 ## CLI の使い方
 
@@ -96,7 +98,7 @@ python tools/build_sprite_web.py
 | `apps/sprite/` | CLI（`cli.py`）とブラウザ版（`web/`）、動きの表の見本（`examples/`） |
 | `tools/` | ブラウザ版の HTML を作る `build_sprite_web.py`、比較画像を作る `compare_sprite_*.py` など |
 | `tests/` | pytest。テスト画像はすべてコードで合成 |
-| `docs/` | 設計（`sprite-app-plan.md`）・仕組み（`how-it-works.md`）・CLI（`cli.md`）・残っていること（`TODO.md`）・これまでのまとめ（`history.md`）。昔の記録は `archive/` |
+| `docs/` | 設計（`sprite-app-plan.md`）・仕組み（`how-it-works.md`）・CLI（`cli.md`）・やり残したこと（`TODO.md`）・これまでのまとめ（`history.md`）。昔の記録は `archive/` |
 
 ## ライセンス
 

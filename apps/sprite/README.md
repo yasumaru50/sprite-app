@@ -29,7 +29,7 @@ AI が描いた「ドット絵風の画像」（ドット 1 個が約 20px）か
 6. ② 変換する・設定を最初に戻す
 7. 元の画像・変換結果
 8. 動きの再生（コマが並んだ絵では「コマの再生」）と、ドットを直す（差し替え = まばたき・口パクもここで描く）
-9. 保存: 「**まとめて保存（ZIP）**」、GIF の拡大・背景、「**1 つずつ保存**」（折りたたみ。今までの保存のボタン）
+9. 保存: 「**まとめて保存（ZIP）**」、GIF の拡大・背景、「**1 つずつ保存**」（折りたたみ。ファイルを 1 つずつ保存するボタン）
 10. 「**外のエディタで直す**」（折りたたみ）: .piskel の保存、直したシートを読み戻す
 
 折りたたんだ欄の中に、最初の値から変えた設定があると、見出しに「**（変更あり）**」と出る
@@ -111,7 +111,7 @@ AI が描いた「ドット絵風の画像」（ドット 1 個が約 20px）か
    「直しの一覧を保存（JSON）」で `<出力名>_<名前>_edits.json` を保存でき、読み込んで戻せる。
    順番に r（例 `1,2,3,2r`。そのコマを左右に裏返して使う）があると、裏返したコマ（`2r`）も開いて、そのコマだけを直せる
 7. **差し替えを描く（まばたき。`--swaps`）**: 「ドットを直す」の「差し替えを描く」に印を付けると 1 コマ目が出るので、「描く絵: 閉じた目」で目を閉じた形に描く
-   （「半分閉じた目」も描くと 開く → 半分 → 閉じる → 半分 → 開く）。離すとすぐ再生にまばたきが入り、「動き 5 周のシートに 1 回」のように何周にしたかが出る。
+   （「半分閉じた目」も描くと 開く → 半分 → 閉じる → 半分 → 開く）。離すとすぐ再生にまばたきが入り、「まばたき: 動き 5 周に 1 回」のように何周にしたかが出る。
    「まばたきの間隔」（既定 3000 ミリ秒）・「閉じる時間」（120）・「半分の時間」（60）も変えられる。「差し替えの一覧を保存（JSON）」で
    `<出力名>_<名前>_swaps.json` を保存でき、読み込んで戻せる。**1 枚の絵**の動き（呼吸など）でも、動きを選ぶと下に「差し替えを描く」が出る。
    **口パク**: 「描く絵: 開いた口」で口を開けた形に描くと、絵の下に「しゃべりのシート（口パク）」が出る（今の動きの上で口が 閉じる → 開く をくり返し、
@@ -136,10 +136,7 @@ AI が描いた「ドット絵風の画像」（ドット 1 個が約 20px）か
    印を付けたり外したりしたら、「② 変換する」を押すまで ④⑤ は押せない（前の形のシートを保存しないように）。
    まとめている間は、まばたき・口パク・重ね・範囲・ちらつきを減らすは使えない（欄が隠れ、理由が出る）
 
-**Godot で使うとき**（まとめたシート）: AnimatedSprite2D の SpriteFrames で、JSON の `animations` の名前ごとにアニメーションを足し、
-「スプライトシートから追加」で横 `columns`・縦 `rows` に分けて、その動きの行（`row`）のコマ（`frames` の番号）を選ぶ。
-速さは `1000 / duration_ms` FPS、ループは `loop`。コマごとの時間が違うときは各フレームの長さを `frames[].duration_ms / duration_ms` にする。
-`offset.y = -ground_y`（`centered` は切）で地面の線がノードの位置に来る（詳しくは [docs/cli.md](../../docs/cli.md) の「動きに名前を付けてまとめる」）
+ゲーム（Godot 4）で読むときの設定と、まとめたシートの JSON から SpriteFrames を作る例は、下の「[ゲームで使うときの設定（Godot 4）](#ゲームで使うときの設定godot-4)」。
 
 保存したファイルは、画面の下に出る CLI（例 `--frames --frame-count 4 --frame-name walk --mirror --flicker --piskel`）と**バイト単位で同じ**。
 
@@ -150,7 +147,7 @@ AI が描いた「ドット絵風の画像」（ドット 1 個が約 20px）か
 - 「置く場所をずらす」（横・縦のドット）と、1 回で終わるもの（！・汗・電球・…）の「終わり方」（残す・消す）を変えるとすぐ作り直す
 - 保存: エフェクトのシート（PNG）・情報（JSON）・重ねた GIF（確かめ用）。コマが並んだ絵では左右反転用も。どれも「まとめて保存（ZIP）」に入る（1 つずつは「1 つずつ保存」）。
   レイヤー「キャラ」「エフェクト」に分けた .piskel は「外のエディタで直す」で保存する
-- キャラのシートは今までと同じ。ゲームでは、エフェクトをキャラの子のスプライトにして、JSON の `position`（キャラのコマの左上から見たエフェクトの左上）に置く（[docs/cli.md](../../docs/cli.md) の「重ね」）
+- キャラのシートは変わらない（エフェクトは別のシート）。ゲームでの置き方は下の「[ゲームで使うときの設定（Godot 4）](#ゲームで使うときの設定godot-4)」と [docs/cli.md](../../docs/cli.md) の「重ね」
 - 入れておく絵は `retrocore/sprite/fx/art.py` の文字の表（描き直したら `python tools/build_sprite_web.py` で画面にも入る）
 
 ### 直したシートを読み戻す（Piskel で手直ししたあと）
@@ -163,6 +160,85 @@ AI が描いた「ドット絵風の画像」（ドット 1 個が約 20px）か
 4. 「同じコマを 2 回使う順番」・「おかしな色を直す」・「GIF の拡大」を変えると、すぐ作り直す
 5. 動きをまとめたシートのときは、A に動きごとの .piskel（`<出力名>_walk.piskel` など）、B にまとめたシートの JSON、C に**直す前のまとめたシート（要る）**。
    どの動きかはファイルの名前から決まる（分からなければ「D. 直した動き」で選ぶ）。まとめたシートのその動きの行だけが直る
+
+## ゲームで使うときの設定（Godot 4）
+
+ドット絵は 1 ドット＝1 画素で作ってあるので、ゲームの側で「ぼかさない・小数の位置に置かない・整数倍で広げる」設定が要る。
+設定の名前は Godot 4 の画面の英語の表記（日本語の画面では訳が付く）。
+
+**プロジェクトの設定**（Project → Project Settings。右上の「Advanced Settings」を入にすると全部出る）
+
+| 設定 | 値 | 理由 |
+| --- | --- | --- |
+| Rendering → Textures → Canvas Textures → **Default Texture Filter** | **Nearest** | Linear のままだとドットの境目がぼやける |
+| Rendering → 2D → Snap → **Snap 2D Transforms to Pixel** | 入 | 小数の位置に置かれて 1 ドット震えるのを防ぐ（Snap 2D Vertices to Pixel も入にしてよい） |
+| Display → Window → Stretch → **Mode** | `viewport`（または `canvas_items`） | 小さな画面（例 320×180）で描いて、窓に合わせて広げる |
+| Display → Window → Stretch → **Scale Mode** | **integer** | 2 倍・3 倍など整数倍だけで広げる（Godot 4.2 から。名前は版によって違うことがあります） |
+
+Display → Window → Size の **Viewport Width / Height** にゲームの画面の大きさ（ドット）を入れ、窓の大きさ（Window Width / Height Override）はその整数倍にする。
+
+**取り込みの設定**（FileSystem で PNG を選び、Import タブで変えて「Reimport」）
+
+| 設定 | 値 | 理由 |
+| --- | --- | --- |
+| Compress → **Mode** | **Lossless** | VRAM Compressed などは色がにじむ・変わる |
+| Mipmaps → **Generate** | 切 | 縮めたときに隣のコマの色が混ざる |
+
+**キャラのシート**: AnimatedSprite2D に置き、`centered` を切って、`offset` を `(-pivot.x, -ground_y)` にすると、足元の真ん中がノードの位置に来る
+（`ground_y` が無いシートは `pivot.y`）。手で読み込むなら SpriteFrames の「Add frames from sprite sheet」（スプライトシートから追加）で、
+横 `columns`・縦 `rows` に分け、まとめたシートなら動きの行（`row`）のコマ（`frames` の番号）を選ぶ。速さ（FPS）は `1000 / duration_ms`、ループは `loop`、
+コマごとの時間が違うときは各フレームの長さ（Duration）を `frames[].duration_ms / duration_ms` にする（下の例はこれを自動でする）。
+
+**エフェクトのシート**（重ね）: キャラの AnimatedSprite2D の**子**にエフェクトの AnimatedSprite2D を置き、どちらも `centered` を切って、
+子の `position` を JSON の `position`（キャラのコマの左上から見たエフェクトの左上。ドット）にする。
+キャラの `offset` を変えたときは、子の `position` にも同じ `offset` を足す（`offset` は絵だけをずらし、子は動かさないため）。
+エフェクトのシートはキャラとは別の長さ・別の時間で、`loop` が false なら 1 回で止める。
+
+**よくある失敗**
+
+- ぼやける → Default Texture Filter が Linear のまま（ノードの Texture → Filter が Inherit 以外になっていないかも見る）
+- 動くと 1 ドット震える・線の太さが変わる → Snap 2D Transforms to Pixel が切、または Scale Mode が fractional（整数倍でない拡大）
+- 端の 1 列が欠ける・隣のコマの色がにじむ → ミップマップや圧縮（Lossless 以外）、または「Add frames from sprite sheet」の横・縦の数がシートと違う
+
+**まとめたシートの JSON から SpriteFrames を作る例**（GDScript）
+
+**本物の Godot ではまだ確かめていません。** まとめたシートの JSON（`"animations"` 入り。`<出力名>_anims_<幅>x<高さ>_<N>f.json`）と PNG を
+同じフォルダに入れ、PNG は上の取り込みの設定にしておく。AnimatedSprite2D にこのスクリプトを付けて、`sheet_json` に JSON を選ぶ。
+
+```gdscript
+# まとめたシートの JSON（"animations" 入り）から SpriteFrames を作る（Godot 4 用。本物の Godot ではまだ確かめていません）
+extends AnimatedSprite2D
+
+@export_file("*.json") var sheet_json := "res://sprites/hero_anims_22x28_8f.json"
+
+func _ready() -> void:
+	var data: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(sheet_json))
+	var tex: Texture2D = load(sheet_json.get_base_dir().path_join(data["image"]))  # PNG は JSON と同じフォルダ
+	var sf := SpriteFrames.new()
+	for anim_name in data["animations"]:
+		var a: Dictionary = data["animations"][anim_name]
+		var base_ms := float(a["duration_ms"])  # その動きでいちばん多い時間
+		if not sf.has_animation(anim_name):
+			sf.add_animation(anim_name)
+		sf.set_animation_speed(anim_name, 1000.0 / base_ms)  # FPS
+		sf.set_animation_loop(anim_name, a["loop"])  # false は最後のコマで止まる
+		for i in a["frames"]:  # シート全体での通し番号（frames[] の index）
+			var f: Dictionary = data["frames"][int(i)]
+			var atlas := AtlasTexture.new()
+			atlas.atlas = tex
+			atlas.region = Rect2(f["x"], f["y"], f["width"], f["height"])
+			sf.add_frame(anim_name, atlas, float(f["duration_ms"]) / base_ms)  # コマごとの長さ（倍率）
+	if not data["animations"].has("default"):
+		sf.remove_animation("default")  # SpriteFrames.new() に最初からある空の動き
+	sprite_frames = sf
+	centered = false
+	offset = Vector2(-float(data["pivot"]["x"]), -float(data.get("ground_y", data["pivot"]["y"])))  # 足元をノードの位置に
+	play(data["animations"].keys()[0])  # 最初の動き（idle など）を再生
+```
+
+- 動きを切り替えるときは `play("walk")` のように名前で呼ぶ。`loop` が false の動き（jump など）は最後のコマで止まり、`animation_finished` の合図が出る
+- 書き出したゲームでは .json がそのままでは入らないことがある。Export の「Resources」の「Filters to export non-resource files」に `*.json` を足す
+- 左右反転のシート（`_mirror`）を使う代わりに `flip_h` で裏返すこともできる（左右で違う物（リボン・持ち物など）は反対側に移る。左右反転のシートと同じ）
 
 ## CLI
 

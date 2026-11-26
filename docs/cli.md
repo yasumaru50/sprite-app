@@ -413,6 +413,7 @@ python -m apps.sprite hero_walk.piskel --readback hero_anims_62x94_12f.json --or
 - **Godot**: AnimatedSprite2D の SpriteFrames で、`animations` の名前ごとにアニメーションを足し、「スプライトシートから追加」で横 `columns`・縦 `rows` に分けて、
   その動きの `frames` の番号のコマを選ぶ（行 `row` のコマ）。速さ（FPS）は `1000 / duration_ms`、ループは `loop`。コマごとの時間が違うときは、
   各フレームの「長さ」を `frames[].duration_ms / duration_ms` にする。`offset.y` を `-ground_y`（`centered` を切）にすると地面の線がノードの位置に来る
+  （プロジェクト・取り込みの設定と、JSON から SpriteFrames を作る GDScript の例は [apps/sprite/README.md](../apps/sprite/README.md) の「ゲームで使うときの設定（Godot 4）」）
 
 ### まとめたシートの読み戻し（`--readback`・`--anim`）
 
@@ -547,6 +548,7 @@ Godot での使い方: キャラの `AnimatedSprite2D`（`centered` を切る）
 子の `position` を JSON の `position` にする（ドット＝画素。キャラを拡大しているなら同じ倍率が掛かる）。`centered` を入れたままなら、
 子の位置は `position + (frame_width, frame_height) / 2 − (character_frame.width, character_frame.height) / 2`。
 エフェクトの SpriteFrames は Hframes = `frame_count`、各コマの時間は `duration_ms`、`loop` が false ならループを切る。
+キャラの `offset` を変えたときは、子の `position` にも同じ `offset` を足す（`offset` は絵だけをずらし、子は動かさない）。
 
 ## 手直ししたシートの読み戻し（`--readback`）
 
@@ -611,7 +613,8 @@ python -m apps.sprite 書き出した.png --readback walk_walk_53x91_4f.json --o
 Windows の CLI は JSON の改行を CRLF、画面は LF で書く（中身は同じ）。
 
 - **Unity**: Sprite Mode = Multiple、Slice の Grid By Cell Size で `frame_width` × `frame_height`。Pivot は Custom で (pivot.x / frame_width, 1 − pivot.y / frame_height)（下端の中央なら (0.5, 0)）
-- **Godot**: AnimatedSprite2D の SpriteFrames に「スプライトシートから追加」で横 `frame_count`・縦 1。各フレームの長さは `duration_ms` から
+- **Godot**: AnimatedSprite2D の SpriteFrames に「スプライトシートから追加」で横 `frame_count`・縦 1。各フレームの長さは `duration_ms` から。
+  テクスチャのフィルターを Nearest・ミップマップなし・整数倍の拡大にする（プロジェクト・取り込みの設定と、JSON から SpriteFrames を作る GDScript の例は [apps/sprite/README.md](../apps/sprite/README.md) の「ゲームで使うときの設定（Godot 4）」）
 - 影や当たり判定は pivot のまま動かさないか、`offset_y` の分だけ動かして合わせる
 
 ### 作らなかった理由（`<出力名>_<動き>_skipped.json`）
