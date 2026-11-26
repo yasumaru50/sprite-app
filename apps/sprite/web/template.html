@@ -244,9 +244,29 @@
   #anims-list .anim-row h4 { margin: 0 0 4px; font-size: 1em; }
   #anims-list .controls { margin: 0; }
   #join-list input.anim-name { width: 7em; margin-left: 6px; }
+  /* 画面の並び: 折りたたむ欄・まとめて保存 */
+  body.motion-off .motion-part { display: none !important; }
+  details.fold { margin-top: 14px; color: var(--text); font-size: 1em; border: 1px solid var(--line); border-radius: 6px;
+                 background: var(--bg); padding: 0; }
+  details.fold.panel { background: var(--panel); border-radius: 8px; margin: 0 0 16px; }
+  details.fold > summary { cursor: pointer; padding: 8px 12px; font-weight: 600; display: flex; flex-wrap: wrap; align-items: baseline;
+                           gap: 2px 10px; list-style-position: inside; }
+  details.fold > summary::-webkit-details-marker { margin-right: 4px; }
+  details.fold > summary .fold-mark { color: var(--error-line); }
+  details.fold > summary .fold-what { color: var(--muted); font-weight: normal; font-size: 0.82em; }
+  details.fold > .fold-body { padding: 4px 12px 12px; }
+  details.fold h3 { font-size: 0.95em; margin: 12px 0 6px; }
+  details.fold .fold-body > h3:first-child { margin-top: 4px; }
+  details.fold .field small { max-width: 19em; }
+  #piskel-files a[aria-disabled=true] { display: none; }
+  #split-box:has(#split-field[hidden]) { display: none; }
+  #piskel-files a.button { font-size: 0.9em; padding: 6px 14px; }
+  #edit-panel { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line); }
+  button.big { font-size: 1.1em; padding: 12px 28px; font-weight: 700; }
+  #fold-each .actions a, #fold-each .actions button { font-size: 0.9em; padding: 6px 14px; }
 </style>
 </head>
-<body>
+<body class="motion-off">
 <main>
   <div class="top-head">
     <h1 id="app-title">Sprite App（ブラウザ版）</h1>
@@ -255,7 +275,7 @@
   <p class="lead help" data-help-at="app-title">ドット絵風の画像（AI が描いたドット絵など）を、1 ドット＝1 画素のスプライトに直します。
     画像はこのパソコンの中だけで処理され、どこにも送られません。</p>
 
-  <section class="panel">
+  <section class="panel" id="input-panel">
     <div class="drop" id="drop">
       <div>① 変換したい画像を選ぶ（ここに画像をドラッグしても選べます。「コマが並んだ絵」では何枚でも選べます）</div>
       <input type="file" id="file" accept="image/png,image/jpeg,image/webp,image/bmp,image/gif">
@@ -266,29 +286,6 @@
       <label class="check"><input type="radio" name="input-kind" value="frames" id="kind-frames">
         <span><b>コマが並んだ絵</b><small class="help" data-help-at="kind-help">歩き・走りなど、同じキャラが横に何コマも並んだ絵（コマの間に背景だけのすき間があること）</small></span></label>
       <span id="kind-help" data-help-name="入力の種類"></span>
-    </div>
-    <div class="controls" style="margin-top:14px">
-      <div class="field">
-        <label for="colors">色数</label>
-        <input type="number" id="colors" step="1">
-        <small id="colors-help" class="help"></small>
-      </div>
-      <div class="field">
-        <label for="cleanup">クリーンアップ</label>
-        <select id="cleanup"></select>
-        <small class="help" id="cleanup-help">余計なドットを片付ける強さ</small>
-      </div>
-      <div class="field">
-        <label for="outline">縁取り</label>
-        <select id="outline"></select>
-        <small class="help" id="outline-help">キャラクターの外側の輪郭（「細く」は、コマの絵などで 2 ドットの太さになった外側の輪郭を 1 ドットにします）</small>
-      </div>
-      <div class="field" style="min-width:auto">
-        <button id="convert" disabled>② 変換する</button>
-      </div>
-      <div class="field" style="min-width:auto">
-        <button id="reset" class="secondary" type="button">設定を最初に戻す</button>
-      </div>
     </div>
     <div id="frames-settings" hidden>
       <div id="join-box" hidden>
@@ -322,37 +319,6 @@
           <div class="note" id="anims-off" role="note"></div>
         </div>
       </div>
-      <h3 id="frames-cut-title">コマの切り分けとそろえ方</h3>
-      <div class="note help" data-help-at="frames-cut-title">変えたら「② 変換する」をもう一度押します。</div>
-      <div class="controls">
-        <div class="field anims-hidden">
-          <label for="frame-count">コマの数</label>
-          <input type="number" id="frame-count" step="1" placeholder="自動">
-          <small id="frame-count-help" class="help">絵に並んでいるコマの数。空なら自動で数えます（数が違えば作らずに知らせます）</small>
-        </div>
-        <div class="field">
-          <label for="frame-align">横のそろえ方</label>
-          <select id="frame-align"></select>
-          <small class="help" id="frame-align-help">コマごとの左右の位置を、何に合わせるか</small>
-        </div>
-        <div class="field anims-hidden">
-          <label for="frame-align-y">縦のそろえ方</label>
-          <select id="frame-align-y"></select>
-          <small class="help" id="frame-align-y-help">歩きは「足元」、足が地面から離れる走り・跳びは「頭の高さ」、ジャンプで宙に浮くコマがあるときは「元の絵の高さを保つ」</small>
-        </div>
-        <div class="field anims-hidden">
-          <label for="frame-shift-y">コマごとの上げ下げ</label>
-          <input type="text" id="frame-shift-y" inputmode="numeric" spellcheck="false" placeholder="なし（例 0,-3,-6,0）">
-          <small class="help" id="frame-shift-y-help">元のコマごとに、そろえた位置から何ドット上げる・下げるか（− が上）。数は元のコマの数と同じ。空ならなし。
-            ジャンプの高さが自動でうまく出ないときに使います（CLI の --frame-shift-y）。−256〜256 ドット（シートはそのぶん広がります）。
-            直したドットがあっても、上げ下げ・そろえ方だけを変えたときは、キャラの同じ所に付け直します</small>
-        </div>
-        <div class="field anims-hidden">
-          <label for="frame-steady">ちらつきを減らす</label>
-          <select id="frame-steady"></select>
-          <small class="help" id="frame-steady-help">「あり」は、上の方（頭のあたり）で 1 コマ目と違う小さな点・短い線だけを 1 コマ目の色に戻します（腕・脚・目や口の形の違いは戻しません）</small>
-        </div>
-      </div>
       <div id="frames-play-box" class="anims-hidden">
       <h3 id="frames-play-title">再生の順番と時間</h3>
       <div class="note help" data-help-at="frames-play-title">変えるとすぐ作り直します。変換はやり直しません。</div>
@@ -370,18 +336,6 @@
           <small id="frame-duration-help" class="help"></small>
         </div>
         <div class="field">
-          <label for="frame-root">体の上下</label>
-          <select id="frame-root">
-            <option value="none" selected>なし</option>
-            <option value="even">あり（0,-1,0,-1）</option>
-            <option value="odd">あり（-1,0,-1,0）</option>
-            <option value="custom">自分で入れる…</option>
-          </select>
-          <input type="text" id="frame-root-y" inputmode="numeric" spellcheck="false" placeholder="0,-1,0,-1" hidden aria-label="体の上下（ドット。− が上）">
-          <small class="help">走りで体ごと跳ねて見せるとき。− が上（ドット）。数は順番の数と同じ。
-            「あり（0,-1,0,-1）」は 2・4… コマ目で、「あり（-1,0,-1,0）」は 1・3… コマ目で 1 ドット上がります</small>
-        </div>
-        <div class="field">
           <label for="frame-name">名前</label>
           <input type="text" id="frame-name" spellcheck="false">
           <small class="help">保存するファイルの名前に入ります（walk・run など。半角英数字）</small>
@@ -389,56 +343,14 @@
       </div>
       </div>
     </div>
-    <div id="status" style="margin-top:12px" role="status" aria-live="polite"></div>
-    <div id="error" class="message error" role="alert" hidden>
-      <div id="error-text"></div>
-      <details id="error-detail-box" hidden>
-        <summary>詳細（エラーの情報。知らせるときは、これをそのまま貼り付けてください）</summary>
-        <pre id="error-detail"></pre>
-        <button type="button" class="secondary" id="error-copy">詳細をコピー</button> <span id="error-copied"></span>
-      </details>
-    </div>
-    <div id="warnings" class="message warn" hidden></div>
-    <div id="frames-skip" class="message warn" hidden>
-      <div id="frames-skip-text" style="white-space:pre-wrap;font-weight:600"></div>
-      <div class="actions" style="margin-top:8px"><a id="dl-skipped" class="button secondary" href="#">作らなかった理由を保存（JSON）</a></div>
-    </div>
-  </section>
-
-  <section class="panel">
-    <div class="views">
-      <div class="view">
-        <h2 id="src-title">元の画像</h2>
-        <div class="stage" id="stage-src"><span class="empty">まだ画像を選んでいません</span></div>
-        <div class="meta" id="meta-src"></div>
-      </div>
-      <div class="view">
-        <h2>変換結果</h2>
-        <div class="stage" id="stage-out"><span class="empty">まだ変換していません</span></div>
-        <div class="meta" id="meta-out"></div>
-      </div>
-    </div>
-    <div class="actions">
-      <label for="zoom">表示の拡大</label>
-      <select id="zoom">
-        <option value="fit" selected>枠に合わせる（整数倍）</option>
-        <option value="1">1 倍</option><option value="2">2 倍</option><option value="4">4 倍</option>
-        <option value="6">6 倍</option><option value="8">8 倍</option><option value="12">12 倍</option>
-        <option value="16">16 倍</option>
-      </select>
-      <a id="download" class="button" aria-disabled="true" href="#">③ 結果を PNG で保存（透明つき）</a>
-    </div>
-    <details id="steps-box" hidden><summary>工程の記録</summary><ol id="steps"></ol></details>
-  </section>
-
-  <section class="panel" id="motion-panel">
-    <h2 class="title" id="motion-head"><span id="motion-title">動き</span></h2>
+    <div id="motion-pick">
+    <h2 class="title" id="motion-pick-title">動き</h2>
     <div class="motion-choice" id="motion-choice" role="radiogroup" aria-label="付ける動き">
       <label class="check"><input type="radio" name="motion" value="none" id="motion-none" checked> なし</label>
       <!-- 呼吸・横揺れ・浮遊・弾む・うなずく・伸びの選択肢は、Python の動きの一覧（MOTIONS）から足す -->
       <label class="check" id="motion-table-label" hidden><input type="radio" name="motion" value="table" id="motion-table"> 表（自分で編集）</label>
     </div>
-    <div class="note help choices" id="motion-choice-help" data-help-at="motion-head"></div>
+    <div class="note help choices" id="motion-choice-help" data-help-at="motion-pick-title"></div>
     <div class="table-entry" id="table-entry">
       <button type="button" class="secondary" id="table-open" disabled>表で編集</button>
       <button type="button" class="secondary" id="table-load-btn">表を読み込む（.motion.json）</button>
@@ -446,7 +358,7 @@
       <span class="note help" id="table-entry-note" data-help-at="table-entry" data-help-name="表で編集">「表で編集」は、選んでいる動き（呼吸など）を、フレームごとの数の表にして細かく直せます（慣れてから使う機能です）。</span>
     </div>
     <div id="table-load-error" class="message error" role="alert" hidden><div id="table-load-error-text" style="white-space:pre-wrap"></div></div>
-    <div class="note help" id="motion-off-note" data-help-at="motion-head">動きを選ぶと、変換結果から動きを作って再生し、スプライトシート（PNG と JSON）を保存できます。
+    <div class="note help" id="motion-off-note" data-help-at="motion-pick-title">動きを選ぶと、変換結果から動きを作って再生し、スプライトシート（PNG と JSON）を保存できます。
       「なし」のときは今までどおり 1 枚の PNG だけです。</div>
     <div id="motion-body" hidden>
       <div id="table-editor" hidden>
@@ -519,14 +431,6 @@
         </div>
       </div>
       <div class="controls" style="margin-top:12px" id="preset-controls">
-        <div class="field" id="split-field">
-          <label for="split-mode" id="split-label">分ける高さ</label>
-          <div class="inline">
-            <select id="split-mode"><option value="auto">自動</option><option value="number">数字で指定</option></select>
-            <input type="number" id="split" min="1" step="1" disabled aria-label="分ける高さ（下から何ドット目か）">
-          </div>
-          <small id="split-help" class="help">下から何ドット目か（1 = いちばん下の行）</small>
-        </div>
         <div class="field" id="height-field" hidden>
           <label for="bounce-height">弾む高さ</label>
           <select id="bounce-height"></select>
@@ -552,14 +456,231 @@
           <select id="amount"></select>
           <small id="amount-help" class="help">ドット（2 は上ほど大きく揺れる）</small>
         </div>
-        <div class="field" id="keep-field" hidden>
-          <label class="check"><input type="checkbox" id="keep-small-parts"> 小さな部品を守る</label>
-          <small class="help">縮める・伸ばすときに、目・頬など（同じ色の塊で縦 3 ドット以下）の長さを変えない（CLI の --keep-small-parts）</small>
-        </div>
         <div class="field" style="min-width:auto">
           <button id="motion-reset" class="secondary" type="button">動きの設定を最初に戻す</button>
         </div>
       </div>
+    </div>
+    </div>
+    <div class="motion-part">
+      <div id="fx-box" class="anims-hidden">
+        <h3 id="fx-title">重ね（エフェクト）</h3>
+        <div class="controls">
+          <div class="field">
+            <label for="fx-name">エフェクト</label>
+            <select id="fx-name"></select>
+            <small class="help" id="fx-name-help">！・汗・ハート・Zzz・？・怒りマーク・キラキラなどを、頭の上・頭の横・顔の上半分・体のまわりに重ねます。キャラのシートは変わりません（エフェクトは別のシートになります）</small>
+          </div>
+          <div class="field">
+            <label for="fx-x" id="fx-offset-label">置く場所をずらす</label>
+            <div class="inline">横 <input type="number" id="fx-x" step="1" value="0" style="width:4.5em" aria-label="横にずらす（ドット。右が +）">
+              縦 <input type="number" id="fx-y" step="1" value="0" style="width:4.5em" aria-label="縦にずらす（ドット。下が +）"></div>
+            <small class="help" id="fx-offset-help">ドット。右と下が +。自動の場所（頭の上・頭の横・顔など）からずらします。顔の上半分（青ざめ）はおおよその位置なので、ここで合わせてください。左右反転のシートでは左右も反転します</small>
+          </div>
+          <div class="field" id="fx-end-field">
+            <label for="fx-end">終わり方</label>
+            <select id="fx-end"></select>
+            <small class="help" id="fx-end-help">1 回で終わるエフェクト（！・汗・電球・…）だけ</small>
+          </div>
+        </div>
+        <div class="meta" id="fx-meta"></div>
+        <div id="fx-warn" class="message warn" hidden><div id="fx-warn-text" style="white-space:pre-wrap"></div></div>
+        <div class="note help" id="fx-help" data-help-at="fx-title">エフェクトを選ぶと、上の再生がキャラとエフェクトを重ねた見た目になります（「行の番号」は出ません）。
+          ゲームでは、キャラのシートとエフェクトのシートを別々に読み、エフェクトをキャラの子のスプライトにして、JSON の
+          <code>position</code>（キャラのコマの左上から見た、エフェクトのコマの左上。ドット）に置きます。エフェクトのシートは、キャラとは別の長さ・別の時間です
+          （<code>loop</code> が false のものは 1 回で止めます）。CLI では <code id="fx-cli">--fx</code>。</div>
+      </div>
+    </div>
+    <details class="fold" id="fold-need">
+      <summary><span class="fold-name">必要なときに開く</span><span class="fold-mark" hidden>（変更あり）</span><small class="fold-what">色数・クリーンアップ・縁取り／コマの数・そろえ方・上げ下げ／分ける高さ</small></summary>
+      <div class="fold-body">
+      <h3 id="convert-settings-title">変換の設定</h3>
+      <div class="controls">
+      <div class="field">
+        <label for="colors">色数</label>
+        <input type="number" id="colors" step="1">
+        <small id="colors-help" class="help"></small>
+      </div>
+      <div class="field">
+        <label for="cleanup">クリーンアップ</label>
+        <select id="cleanup"></select>
+        <small class="help" id="cleanup-help">余計なドットを片付ける強さ</small>
+      </div>
+      <div class="field">
+        <label for="outline">縁取り</label>
+        <select id="outline"></select>
+        <small class="help" id="outline-help">キャラクターの外側の輪郭（「細く」は、コマの絵などで 2 ドットの太さになった外側の輪郭を 1 ドットにします）</small>
+      </div>
+      </div>
+      <div id="frames-cut-box" hidden>
+      <h3 id="frames-cut-title">コマの切り分けとそろえ方（コマが並んだ絵）</h3>
+      <div class="note help" data-help-at="frames-cut-title">変えたら「② 変換する」をもう一度押します。</div>
+      <div class="controls">
+        <div class="field anims-hidden">
+          <label for="frame-count">コマの数</label>
+          <input type="number" id="frame-count" step="1" placeholder="自動">
+          <small id="frame-count-help" class="help">絵に並んでいるコマの数。空なら自動で数えます（数が違えば作らずに知らせます）</small>
+        </div>
+        <div class="field">
+          <label for="frame-align">横のそろえ方</label>
+          <select id="frame-align"></select>
+          <small class="help" id="frame-align-help">コマごとの左右の位置を、何に合わせるか</small>
+        </div>
+        <div class="field anims-hidden">
+          <label for="frame-align-y">縦のそろえ方</label>
+          <select id="frame-align-y"></select>
+          <small class="help" id="frame-align-y-help">歩きは「足元」、足が地面から離れる走り・跳びは「頭の高さ」、ジャンプで宙に浮くコマがあるときは「元の絵の高さを保つ」</small>
+        </div>
+        <div class="field anims-hidden">
+          <label for="frame-shift-y">コマごとの上げ下げ</label>
+          <input type="text" id="frame-shift-y" inputmode="numeric" spellcheck="false" placeholder="なし（例 0,-3,-6,0）">
+          <small class="help" id="frame-shift-y-help">元のコマごとに、そろえた位置から何ドット上げる・下げるか（− が上）。数は元のコマの数と同じ。空ならなし。
+            ジャンプの高さが自動でうまく出ないときに使います（CLI の --frame-shift-y）。−256〜256 ドット（シートはそのぶん広がります）。
+            直したドットがあっても、上げ下げ・そろえ方だけを変えたときは、キャラの同じ所に付け直します</small>
+        </div>
+      </div>
+      </div>
+      <div class="motion-part" id="split-box">
+      <h3 id="split-title">動かす範囲（1 枚の絵の動き）</h3>
+      <div class="controls">
+        <div class="field" id="split-field">
+          <label for="split-mode" id="split-label">分ける高さ</label>
+          <div class="inline">
+            <select id="split-mode"><option value="auto">自動</option><option value="number">数字で指定</option></select>
+            <input type="number" id="split" min="1" step="1" disabled aria-label="分ける高さ（下から何ドット目か）">
+          </div>
+          <small id="split-help" class="help">下から何ドット目か（1 = いちばん下の行）</small>
+        </div>
+      </div>
+      <div class="note help" data-help-at="split-title">帯・四角の範囲は「表で編集」の中で描きます（表を開いたときに出ます）。</div>
+      </div>
+      <div class="note help" data-help-at="fold-need-help">左右反転のシートには設定がありません（コマが並んだ絵ではいつも作ります）。保存は下の「まとめて保存（ZIP）」か「1 つずつ保存」で。</div>
+      <span id="fold-need-help" data-help-name="必要なときに開く"></span>
+      </div>
+    </details>
+    <details class="fold" id="fold-fine">
+      <summary><span class="fold-name">細かい設定</span><span class="fold-mark" hidden>（変更あり）</span><small class="fold-what">体の上下／ちらつき／1 コマ目と同じにする範囲／小さな部品を守る</small></summary>
+      <div class="fold-body">
+      <div id="frames-fine-box" class="anims-hidden" hidden>
+      <div class="controls">
+        <div class="field">
+          <label for="frame-root">体の上下</label>
+          <select id="frame-root">
+            <option value="none" selected>なし</option>
+            <option value="even">あり（0,-1,0,-1）</option>
+            <option value="odd">あり（-1,0,-1,0）</option>
+            <option value="custom">自分で入れる…</option>
+          </select>
+          <input type="text" id="frame-root-y" inputmode="numeric" spellcheck="false" placeholder="0,-1,0,-1" hidden aria-label="体の上下（ドット。− が上）">
+          <small class="help">走りで体ごと跳ねて見せるとき。− が上（ドット）。数は順番の数と同じ。
+            「あり（0,-1,0,-1）」は 2・4… コマ目で、「あり（-1,0,-1,0）」は 1・3… コマ目で 1 ドット上がります</small>
+        </div>
+        <div class="field anims-hidden">
+          <label for="frame-steady">ちらつきを減らす</label>
+          <select id="frame-steady"></select>
+          <small class="help" id="frame-steady-help">「あり」は、上の方（頭のあたり）で 1 コマ目と違う小さな点・短い線だけを 1 コマ目の色に戻します（腕・脚・目や口の形の違いは戻しません）</small>
+        </div>
+      </div>
+      <div class="actions" id="flicker-row">
+        <a id="dl-flicker" class="button secondary anims-hidden" aria-disabled="true" href="#">ちらつきの見える化（PNG）</a>
+        <a id="dl-flicker-json" class="button secondary anims-hidden" aria-disabled="true" href="#">ちらつきの記録（JSON）</a>
+      </div>
+      <div class="note help" data-help-at="flicker-row" data-help-name="ちらつきの見える化">ちらつきの見える化は、上の方（頭のあたり）で 1 コマ目と違うドットを赤紫の枠で囲んだ画像です（自動では直しません。手直しの目印にしてください）。変換すると作ります。</div>
+      </div>
+      <div class="motion-part" id="keep-box">
+      <div class="controls">
+        <div class="field" id="keep-field" hidden>
+          <label class="check"><input type="checkbox" id="keep-small-parts"> 小さな部品を守る</label>
+          <small class="help">縮める・伸ばすときに、目・頬など（同じ色の塊で縦 3 ドット以下）の長さを変えない（CLI の --keep-small-parts）</small>
+        </div>
+      </div>
+      </div>
+      <div class="motion-part">
+      <div id="same-box" class="anims-hidden" hidden>
+        <h3 id="same-title">1 コマ目と同じにする範囲</h3>
+        <div class="note help" data-help-at="same-title">頭など。変えるとすぐ写し直します。変換はやり直しません。
+          下の 1 コマ目の上を<b>マウスでドラッグ</b>すると、四角い範囲を描けます（何個でも足せます）。2 コマ目以降で、
+          範囲の中身がいちばんよく合う位置（上下左右「位置を探す幅」ドット以内）を探し、そこに 1 コマ目のドットをそのまま写します。
+          目・口は 1 コマ目とまったく同じになるか、そのコマのままです（混ざりません）。合い方が低い・境目で段差や輪郭の途切れができる・
+          目や口に腕などが入ってくるコマは写さずに理由を出します。写した結果は、そのまま再生と保存（シート・JSON・GIF・反転・.piskel）に入ります。</div>
+        <div class="actions" style="margin-top:6px">
+          <label for="same-kind">描く形</label>
+          <select id="same-kind" data-fold-ignore><option value="rect" selected>四角</option><option value="band">帯（横いっぱい）</option></select>
+          <label for="same-search">位置を探す幅</label>
+          <input type="number" id="same-search" min="0" max="8" step="1" value="3" style="width:4em"> ドット
+          <button type="button" id="same-undo" class="secondary" disabled>選んだ範囲を消す</button>
+          <button type="button" id="same-clear" class="secondary" disabled>範囲を全部消す</button>
+          <button type="button" id="same-back" class="secondary" disabled>元に戻す</button>
+        </div>
+        <div class="actions">
+          <label for="same-text" id="same-text-label">数で足す</label>
+          <input type="text" id="same-text" data-fold-ignore placeholder="x,y,幅,高さ" style="width:9em" aria-describedby="same-text-help">
+          <button type="button" id="same-add" class="secondary">範囲を足す</button>
+          <small id="same-text-help" class="note help" data-help-at="same-text-label">左上が 0,0（ドット）。CLI の --same-as-first と同じ書き方</small>
+        </div>
+        <div class="note help" id="same-help" data-help-at="same-title"><b>マウス</b>: 何も無い所をドラッグ = 新しい範囲／範囲の内側をドラッグ = 動かす／
+          辺・角をドラッグ = 大きさを変える／クリックか下の一覧で選ぶ。
+          <b>キーボード</b>（絵をクリックしてから）: 矢印 = 選んだ範囲を 1 ドット動かす／Shift＋矢印 = 右下の角を動かして大きさを変える／
+          Delete = 選んだ範囲を消す／Esc = 選ぶのをやめる／Ctrl＋Z = 元に戻す。計算はマウスを離したとき・キーを止めたときだけ。</div>
+        <canvas id="same-canvas" tabindex="0" aria-label="1 コマ目。ドラッグして範囲を描く・直す。矢印キーで選んだ範囲を動かす"></canvas>
+        <div class="note" id="same-cursor">&nbsp;</div>
+        <ul id="same-list"></ul>
+        <div id="same-status" role="status" aria-live="polite"></div>
+        <div id="same-warn" class="message warn" hidden><div id="same-warn-text" style="white-space:pre-wrap"></div></div>
+        <div id="same-result"></div>
+        <img id="same-img" alt="範囲の図（緑の枠 = 写した位置、赤の枠 = 写さなかった、橙 = 境目の問題、青 = 残した部品）" hidden>
+        <div class="actions"><a id="dl-same" class="button secondary" aria-disabled="true" href="#">範囲の図（PNG）</a></div>
+      </div>
+      </div>
+      </div>
+    </details>
+    <div class="actions" id="convert-row" style="margin-top:14px">
+      <button id="convert" disabled>② 変換する</button>
+      <button id="reset" class="secondary" type="button">設定を最初に戻す</button>
+    </div>
+    <div id="status" style="margin-top:12px" role="status" aria-live="polite"></div>
+    <div id="error" class="message error" role="alert" hidden>
+      <div id="error-text"></div>
+      <details id="error-detail-box" hidden>
+        <summary>詳細（エラーの情報。知らせるときは、これをそのまま貼り付けてください）</summary>
+        <pre id="error-detail"></pre>
+        <button type="button" class="secondary" id="error-copy">詳細をコピー</button> <span id="error-copied"></span>
+      </details>
+    </div>
+    <div id="warnings" class="message warn" hidden></div>
+    <div id="frames-skip" class="message warn" hidden>
+      <div id="frames-skip-text" style="white-space:pre-wrap;font-weight:600"></div>
+      <div class="actions" style="margin-top:8px"><a id="dl-skipped" class="button secondary" href="#">作らなかった理由を保存（JSON）</a></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="views">
+      <div class="view">
+        <h2 id="src-title">元の画像</h2>
+        <div class="stage" id="stage-src"><span class="empty">まだ画像を選んでいません</span></div>
+        <div class="meta" id="meta-src"></div>
+      </div>
+      <div class="view">
+        <h2>変換結果</h2>
+        <div class="stage" id="stage-out"><span class="empty">まだ変換していません</span></div>
+        <div class="meta" id="meta-out"></div>
+      </div>
+    </div>
+    <div class="actions">
+      <label for="zoom">表示の拡大</label>
+      <select id="zoom">
+        <option value="fit" selected>枠に合わせる（整数倍）</option>
+        <option value="1">1 倍</option><option value="2">2 倍</option><option value="4">4 倍</option>
+        <option value="6">6 倍</option><option value="8">8 倍</option><option value="12">12 倍</option>
+        <option value="16">16 倍</option>
+      </select>
+    </div>
+    <details id="steps-box" hidden><summary>工程の記録</summary><ol id="steps"></ol></details>
+  </section>
+
+  <section class="panel motion-part" id="motion-panel">
+    <h2 class="title" id="motion-head"><span id="motion-title">動き</span></h2>
       <div id="motion-status" style="margin-top:10px" role="status" aria-live="polite"></div>
       <div id="motion-error" class="message error" role="alert" hidden>
         <div id="motion-error-text" style="white-space:pre-wrap"></div>
@@ -594,97 +715,6 @@
         <label id="anims-play-label" hidden>再生する動き <select id="anims-play"></select></label>
       </div>
       <div class="meta" id="motion-meta"></div>
-      <div class="actions">
-        <a id="dl-sheet" class="button" aria-disabled="true" href="#">④ スプライトシートを保存（PNG）</a>
-        <a id="dl-json" class="button" aria-disabled="true" href="#">⑤ シートの情報を保存（JSON）</a>
-        <button type="button" id="dl-gif" disabled>⑥ GIF を保存</button>
-        <a id="dl-piskel" class="button" aria-disabled="true" href="#" hidden>Piskel で直す用（.piskel）を保存</a>
-        <a id="dl-anims-config" class="button secondary" aria-disabled="true" href="#" hidden>CLI 用の設定を保存（.anims.json。シートの情報ではありません）</a>
-      </div>
-      <div class="actions" id="frames-extra" hidden>
-        <a id="dl-mirror" class="button secondary" aria-disabled="true" href="#">⑦ 左右反転のシート（PNG）</a>
-        <a id="dl-mirror-json" class="button secondary" aria-disabled="true" href="#">⑧ 左右反転の情報（JSON）</a>
-        <button type="button" class="secondary" id="dl-mirror-gif" disabled>⑨ 左右反転の GIF</button>
-        <a id="dl-mirror-piskel" class="button secondary anims-hidden" aria-disabled="true" href="#">左右反転の .piskel</a>
-        <a id="dl-flicker" class="button secondary anims-hidden" aria-disabled="true" href="#">ちらつきの見える化（PNG）</a>
-        <a id="dl-flicker-json" class="button secondary anims-hidden" aria-disabled="true" href="#">ちらつきの記録（JSON）</a>
-      </div>
-      <div class="note help" id="frames-extra-note" data-help-at="motion-head" hidden>左右反転のシートは、反対の向きに歩かせるとき用です。ちらつきの見える化は、上の方（頭のあたり）で
-        1 コマ目と違うドットを赤紫の枠で囲んだ画像です（自動では直しません。手直しの目印にしてください）。</div>
-      <div id="fx-box" class="anims-hidden">
-        <h3 id="fx-title">重ね（エフェクト）</h3>
-        <div class="controls">
-          <div class="field">
-            <label for="fx-name">エフェクト</label>
-            <select id="fx-name"></select>
-            <small class="help" id="fx-name-help">！・汗・ハート・Zzz・？・怒りマーク・キラキラなどを、頭の上・頭の横・顔の上半分・体のまわりに重ねます。キャラのシートは変わりません（エフェクトは別のシートになります）</small>
-          </div>
-          <div class="field">
-            <label for="fx-x" id="fx-offset-label">置く場所をずらす</label>
-            <div class="inline">横 <input type="number" id="fx-x" step="1" value="0" style="width:4.5em" aria-label="横にずらす（ドット。右が +）">
-              縦 <input type="number" id="fx-y" step="1" value="0" style="width:4.5em" aria-label="縦にずらす（ドット。下が +）"></div>
-            <small class="help" id="fx-offset-help">ドット。右と下が +。自動の場所（頭の上・頭の横・顔など）からずらします。顔の上半分（青ざめ）はおおよその位置なので、ここで合わせてください。左右反転のシートでは左右も反転します</small>
-          </div>
-          <div class="field" id="fx-end-field">
-            <label for="fx-end">終わり方</label>
-            <select id="fx-end"></select>
-            <small class="help" id="fx-end-help">1 回で終わるエフェクト（！・汗・電球・…）だけ</small>
-          </div>
-        </div>
-        <div class="meta" id="fx-meta"></div>
-        <div id="fx-warn" class="message warn" hidden><div id="fx-warn-text" style="white-space:pre-wrap"></div></div>
-        <div class="actions" id="fx-files" hidden>
-          <a id="dl-fx" class="button secondary" aria-disabled="true" href="#">エフェクトのシート（PNG）</a>
-          <a id="dl-fx-json" class="button secondary" aria-disabled="true" href="#">エフェクトの情報（JSON）</a>
-          <button type="button" class="secondary" id="dl-fx-gif" disabled>重ねた GIF（確かめ用）</button>
-          <a id="dl-fx-piskel" class="button secondary" aria-disabled="true" href="#" hidden>重ねた .piskel（キャラ・エフェクトの 2 レイヤー）</a>
-        </div>
-        <div class="actions" id="fx-mirror-files" hidden>
-          <a id="dl-fx-mirror" class="button secondary" aria-disabled="true" href="#">左右反転用のエフェクト（PNG）</a>
-          <a id="dl-fx-mirror-json" class="button secondary" aria-disabled="true" href="#">左右反転用の情報（JSON）</a>
-          <button type="button" class="secondary" id="dl-fx-mirror-gif" disabled>左右反転の重ねた GIF</button>
-          <a id="dl-fx-mirror-piskel" class="button secondary" aria-disabled="true" href="#">左右反転の重ねた .piskel</a>
-        </div>
-        <div class="note help" id="fx-help" data-help-at="fx-title">エフェクトを選ぶと、上の再生がキャラとエフェクトを重ねた見た目になります（「行の番号」は出ません）。
-          ゲームでは、キャラのシートとエフェクトのシートを別々に読み、エフェクトをキャラの子のスプライトにして、JSON の
-          <code>position</code>（キャラのコマの左上から見た、エフェクトのコマの左上。ドット）に置きます。エフェクトのシートは、キャラとは別の長さ・別の時間です
-          （<code>loop</code> が false のものは 1 回で止めます）。CLI では <code id="fx-cli">--fx</code>。</div>
-      </div>
-      <div id="same-box" class="anims-hidden" hidden>
-        <h3 id="same-title">1 コマ目と同じにする範囲</h3>
-        <div class="note help" data-help-at="same-title">頭など。変えるとすぐ写し直します。変換はやり直しません。
-          下の 1 コマ目の上を<b>マウスでドラッグ</b>すると、四角い範囲を描けます（何個でも足せます）。2 コマ目以降で、
-          範囲の中身がいちばんよく合う位置（上下左右「位置を探す幅」ドット以内）を探し、そこに 1 コマ目のドットをそのまま写します。
-          目・口は 1 コマ目とまったく同じになるか、そのコマのままです（混ざりません）。合い方が低い・境目で段差や輪郭の途切れができる・
-          目や口に腕などが入ってくるコマは写さずに理由を出します。写した結果は、そのまま再生と保存（シート・JSON・GIF・反転・.piskel）に入ります。</div>
-        <div class="actions" style="margin-top:6px">
-          <label for="same-kind">描く形</label>
-          <select id="same-kind"><option value="rect" selected>四角</option><option value="band">帯（横いっぱい）</option></select>
-          <label for="same-search">位置を探す幅</label>
-          <input type="number" id="same-search" min="0" max="8" step="1" value="3" style="width:4em"> ドット
-          <button type="button" id="same-undo" class="secondary" disabled>選んだ範囲を消す</button>
-          <button type="button" id="same-clear" class="secondary" disabled>範囲を全部消す</button>
-          <button type="button" id="same-back" class="secondary" disabled>元に戻す</button>
-        </div>
-        <div class="actions">
-          <label for="same-text" id="same-text-label">数で足す</label>
-          <input type="text" id="same-text" placeholder="x,y,幅,高さ" style="width:9em" aria-describedby="same-text-help">
-          <button type="button" id="same-add" class="secondary">範囲を足す</button>
-          <small id="same-text-help" class="note help" data-help-at="same-text-label">左上が 0,0（ドット）。CLI の --same-as-first と同じ書き方</small>
-        </div>
-        <div class="note help" id="same-help" data-help-at="same-title"><b>マウス</b>: 何も無い所をドラッグ = 新しい範囲／範囲の内側をドラッグ = 動かす／
-          辺・角をドラッグ = 大きさを変える／クリックか下の一覧で選ぶ。
-          <b>キーボード</b>（絵をクリックしてから）: 矢印 = 選んだ範囲を 1 ドット動かす／Shift＋矢印 = 右下の角を動かして大きさを変える／
-          Delete = 選んだ範囲を消す／Esc = 選ぶのをやめる／Ctrl＋Z = 元に戻す。計算はマウスを離したとき・キーを止めたときだけ。</div>
-        <canvas id="same-canvas" tabindex="0" aria-label="1 コマ目。ドラッグして範囲を描く・直す。矢印キーで選んだ範囲を動かす"></canvas>
-        <div class="note" id="same-cursor">&nbsp;</div>
-        <ul id="same-list"></ul>
-        <div id="same-status" role="status" aria-live="polite"></div>
-        <div id="same-warn" class="message warn" hidden><div id="same-warn-text" style="white-space:pre-wrap"></div></div>
-        <div id="same-result"></div>
-        <img id="same-img" alt="範囲の図（緑の枠 = 写した位置、赤の枠 = 写さなかった、橙 = 境目の問題、青 = 残した部品）" hidden>
-        <div class="actions"><a id="dl-same" class="button secondary" aria-disabled="true" href="#">範囲の図（PNG）</a></div>
-      </div>
       <div id="touch-box" hidden>
         <h3 id="touch-title">ドットを直す</h3>
         <div class="note help edits-only" data-help-at="touch-title">ちらつき・ゴミ・輪郭を数ドット直す所です（大きな描き直しは Piskel で）。
@@ -773,18 +803,6 @@
               <div id="talk-warn" class="message warn" hidden><div id="talk-warn-text" style="white-space:pre-wrap"></div></div>
             </div>
           </div>
-          <div class="actions">
-            <a id="dl-talk-sheet" class="button secondary" aria-disabled="true" href="#">しゃべりのシート（PNG）</a>
-            <a id="dl-talk-json" class="button secondary" aria-disabled="true" href="#">しゃべりの情報（JSON）</a>
-            <button type="button" class="secondary" id="dl-talk-gif" disabled>しゃべりの GIF</button>
-            <a id="dl-talk-piskel" class="button secondary" aria-disabled="true" href="#" hidden>しゃべりの .piskel</a>
-          </div>
-          <div class="actions" id="talk-mirror-row" hidden>
-            <a id="dl-talk-mirror" class="button secondary" aria-disabled="true" href="#">左右反転のしゃべりのシート（PNG）</a>
-            <a id="dl-talk-mirror-json" class="button secondary" aria-disabled="true" href="#">左右反転の情報（JSON）</a>
-            <button type="button" class="secondary" id="dl-talk-mirror-gif" disabled>左右反転の GIF</button>
-            <a id="dl-talk-mirror-piskel" class="button secondary" aria-disabled="true" href="#">左右反転の .piskel</a>
-          </div>
         </div>
         <div id="touch-status" role="status" aria-live="polite"></div>
         <div id="touch-warn" class="message warn" style="white-space:normal" hidden><div id="touch-warn-text" style="white-space:pre-wrap"></div><div class="actions"><button type="button" id="touch-ack" class="secondary">確かめた（印と警告を消す）</button></div></div>
@@ -810,7 +828,16 @@
         </div>
         <div class="note" id="touch-confirm-nocancel" hidden></div>
       </dialog>
-      <div class="message info" id="piskel-hint" hidden></div>
+  </section>
+
+  <section class="panel" id="save-panel">
+    <h2 class="title" id="save-title">保存</h2>
+    <div class="actions">
+      <button type="button" id="dl-zip" class="big" disabled>まとめて保存（ZIP）</button>
+      <span class="note" id="zip-status" role="status" aria-live="polite"></span>
+    </div>
+    <div class="note help" data-help-at="save-title">そのとき作れるものを全部、1 つの ZIP に入れます（シートの PNG・JSON・GIF、左右反転のシート、しゃべり・エフェクトのシート、直しの一覧 edits.json、差し替えの一覧、動きをまとめたときの .anims.json と動きごとの GIF）。中のファイルは「1 つずつ保存」で保存したものとバイト単位で同じです。.piskel は入りません（「外のエディタで直す」で保存します）。</div>
+    <div class="motion-part">
       <div class="actions" id="gif-controls" style="margin-top:8px">
         <label for="gif-scale">GIF の拡大</label>
         <select id="gif-scale"></select>
@@ -825,12 +852,69 @@
       <div class="note help" id="gif-note" data-help-at="gif-controls" data-help-name="GIF">GIF はサイトに載せたり人に見せたりする用です（ゲームにはシートの PNG と JSON を使います）。
         各フレームはシートと同じ絵で、ドットをそのまま大きくします。CLI では <code id="gif-cli">--gif</code>。</div>
       <div class="note" id="gif-status" role="status" aria-live="polite"></div>
-      <div class="note help" data-help-at="motion-head">PNG と JSON は 2 つで 1 組です。同じフォルダに置いてください（JSON の "image" に PNG の名前が書いてあります）。
+      <div class="note help" data-help-at="save-title">PNG と JSON は 2 つで 1 組です。同じフォルダに置いてください（JSON の "image" に PNG の名前が書いてあります）。
         ファイルの中身は CLI の <code id="cli-equiv">--motion breathe</code> と同じです。</div>
     </div>
+    <details class="fold" id="fold-each">
+      <summary><span class="fold-name">1 つずつ保存</span><small class="fold-what">今までの保存のボタン</small></summary>
+      <div class="fold-body">
+      <div class="actions">
+      <a id="download" class="button" aria-disabled="true" href="#">③ 結果を PNG で保存（透明つき）</a>
+      </div>
+      <div class="motion-part">
+      <div class="actions">
+        <a id="dl-sheet" class="button" aria-disabled="true" href="#">④ スプライトシートを保存（PNG）</a>
+        <a id="dl-json" class="button" aria-disabled="true" href="#">⑤ シートの情報を保存（JSON）</a>
+        <button type="button" id="dl-gif" disabled>⑥ GIF を保存</button>
+        <a id="dl-anims-config" class="button secondary" aria-disabled="true" href="#" hidden>CLI 用の設定を保存（.anims.json。シートの情報ではありません）</a>
+      </div>
+      <div class="actions" id="frames-extra" hidden>
+        <a id="dl-mirror" class="button secondary" aria-disabled="true" href="#">⑦ 左右反転のシート（PNG）</a>
+        <a id="dl-mirror-json" class="button secondary" aria-disabled="true" href="#">⑧ 左右反転の情報（JSON）</a>
+        <button type="button" class="secondary" id="dl-mirror-gif" disabled>⑨ 左右反転の GIF</button>
+      </div>
+      <div class="note help" id="frames-extra-note" data-help-at="frames-extra" hidden>左右反転のシートは、反対の向きに歩かせるとき用です。ちらつきの見える化は、上の方（頭のあたり）で
+        1 コマ目と違うドットを赤紫の枠で囲んだ画像です（自動では直しません。手直しの目印にしてください）。</div>
+        <div class="actions" id="fx-files" hidden>
+          <a id="dl-fx" class="button secondary" aria-disabled="true" href="#">エフェクトのシート（PNG）</a>
+          <a id="dl-fx-json" class="button secondary" aria-disabled="true" href="#">エフェクトの情報（JSON）</a>
+          <button type="button" class="secondary" id="dl-fx-gif" disabled>重ねた GIF（確かめ用）</button>
+        </div>
+        <div class="actions" id="fx-mirror-files" hidden>
+          <a id="dl-fx-mirror" class="button secondary" aria-disabled="true" href="#">左右反転用のエフェクト（PNG）</a>
+          <a id="dl-fx-mirror-json" class="button secondary" aria-disabled="true" href="#">左右反転用の情報（JSON）</a>
+          <button type="button" class="secondary" id="dl-fx-mirror-gif" disabled>左右反転の重ねた GIF</button>
+        </div>
+          <div class="actions anims-hidden" id="talk-files" hidden>
+            <a id="dl-talk-sheet" class="button secondary" aria-disabled="true" href="#">しゃべりのシート（PNG）</a>
+            <a id="dl-talk-json" class="button secondary" aria-disabled="true" href="#">しゃべりの情報（JSON）</a>
+            <button type="button" class="secondary" id="dl-talk-gif" disabled>しゃべりの GIF</button>
+          </div>
+          <div class="actions" id="talk-mirror-row" hidden>
+            <a id="dl-talk-mirror" class="button secondary" aria-disabled="true" href="#">左右反転のしゃべりのシート（PNG）</a>
+            <a id="dl-talk-mirror-json" class="button secondary" aria-disabled="true" href="#">左右反転の情報（JSON）</a>
+            <button type="button" class="secondary" id="dl-talk-mirror-gif" disabled>左右反転の GIF</button>
+          </div>
+      </div>
+      </div>
+    </details>
   </section>
 
-  <section class="panel" id="edit-panel">
+  <details class="fold panel" id="fold-editor">
+    <summary><span class="fold-name">外のエディタで直す</span><span class="fold-mark" hidden>（変更あり）</span><small class="fold-what">.piskel の書き出し・直したシートの読み戻し</small></summary>
+    <div class="fold-body">
+    <h2 class="title" id="piskel-title">Piskel などで直す用（.piskel）を保存</h2>
+    <div class="actions" id="piskel-files">
+      <a id="dl-piskel" class="button" aria-disabled="true" href="#" hidden>Piskel で直す用（.piskel）を保存</a>
+      <a id="dl-mirror-piskel" class="button secondary anims-hidden" aria-disabled="true" href="#">左右反転の .piskel</a>
+      <a id="dl-fx-piskel" class="button secondary" aria-disabled="true" href="#" hidden>重ねた .piskel（キャラ・エフェクトの 2 レイヤー）</a>
+      <a id="dl-fx-mirror-piskel" class="button secondary" aria-disabled="true" href="#">左右反転の重ねた .piskel</a>
+      <a id="dl-talk-piskel" class="button secondary" aria-disabled="true" href="#" hidden>しゃべりの .piskel</a>
+      <a id="dl-talk-mirror-piskel" class="button secondary" aria-disabled="true" href="#">左右反転の .piskel</a>
+    </div>
+    <div class="note" id="piskel-empty">変換して、コマの再生ができると、ここに .piskel の保存のボタンが出ます。</div>
+    <div class="message info" id="piskel-hint" hidden></div>
+  <div id="edit-panel">
     <h2 class="title" id="edit-title">直したシートを読み戻す</h2>
     <div class="note help" data-help-at="edit-title">Piskel などで手直ししたあとに使います。Piskel で直したシートと、Sprite App で保存したシートの情報（JSON）を選ぶと、時間・順番・足元は JSON のまま、
       直したドットはそのまま使って、JSON・GIF・左右反転のシート・横 1 列に並べ直したシートを作り直します。
@@ -857,7 +941,7 @@
       </div>
       <div class="field" id="edit-anim-field" hidden>
         <label for="edit-anim">D. 直した動き（まとめたシートのとき）</label>
-        <select id="edit-anim"></select>
+        <select id="edit-anim" data-fold-ignore></select>
         <small class="help">直したファイルの名前（<出力名>_walk.piskel など）から決めます。分からないときは選んでください</small>
       </div>
     </div>
@@ -893,7 +977,9 @@
       <div id="edit-images"></div>
       <div class="note help" data-help-at="edit-title">ファイルの中身は CLI の <code id="edit-cli">--readback</code> と同じです。</div>
     </div>
-  </section>
+  </div>
+    </div>
+  </details>
 
   <footer>
     <span class="help" data-help-at="build-line">処理は <a href="https://pyodide.org/">Pyodide</a>（ブラウザの中で動く Python）で、CLI（<code>python -m apps.sprite</code>）と
@@ -921,6 +1007,7 @@ let framesEditsForWeb = null;
 let framesRestoreForWeb = null;
 let readbackForWeb = null;
 let fxForWeb = null;
+let zipForWeb = null;
 let animsConvertForWeb = null, animsSheetsForWeb = null, animsGifForWeb = null;
 async function init(indexURL, sources) {
   importScripts(indexURL + "pyodide.js");
@@ -963,6 +1050,10 @@ async function init(indexURL, sources) {
     "def sprite_app_gif(js_bytes, sheet_json, options_json):",
     "    return gif_for_web(js_bytes.to_bytes(), sheet_json, options_json)",
     "from retrocore.sprite.fx import fx_for_web",
+    "from retrocore.sprite.bundle import zip_for_web",
+    "def sprite_app_zip(js_list, names_json):",
+    "    import json",
+    "    return zip_for_web([b.to_bytes() for b in js_list], json.loads(names_json))",
     "def sprite_app_fx(js_bytes, sheet_json, options_json):",
     "    return fx_for_web(js_bytes.to_bytes(), sheet_json, options_json)",
     "def sprite_app_table(request_json, js_bytes=None):",
@@ -992,6 +1083,7 @@ async function init(indexURL, sources) {
   animsSheetsForWeb = pyodide.globals.get("anims_sheets_for_web");
   animsGifForWeb = pyodide.globals.get("sprite_app_anims_gif");
   fxForWeb = pyodide.globals.get("sprite_app_fx");
+  zipForWeb = pyodide.globals.get("sprite_app_zip");
 }
 self.onmessage = async (ev) => {
   const msg = ev.data;
@@ -1057,6 +1149,10 @@ self.onmessage = async (ev) => {
       // 直したシートの読み戻し（CLI の --readback と同じ関数）
       const json = readbackForWeb(new Uint8Array(msg.edited), msg.name, msg.info,
                                   msg.original ? new Uint8Array(msg.original) : null, JSON.stringify(msg.options));
+      self.postMessage({ type: "result", id: msg.id, result: JSON.parse(json) });
+    } else if (msg.type === "zip") {
+      // まとめて保存: 画面で 1 つずつ保存できるファイル（同じバイト列）を、日時を固定した ZIP にまとめる
+      const json = zipForWeb(msg.list.map((b) => new Uint8Array(b)), JSON.stringify(msg.names));
       self.postMessage({ type: "result", id: msg.id, result: JSON.parse(json) });
     } else if (msg.type === "edges") {
       const json = edgesForWeb(new Uint8Array(msg.bytes), JSON.stringify(msg.request));
@@ -1768,6 +1864,13 @@ function resetMotionSettings() {
 }
 resetMotionSettings();
 
+// 再生・保存の欄のうち、動きが無いとき（1 枚の絵で「なし」）は隠すもの（.motion-part）も一緒に出し入れする
+// 動きの設定のうち、折りたたむ欄に移したもの（分ける高さ・小さな部品を守る）は、動きの設定の欄と一緒に出し入れする
+function presetParts() { $("split-box").hidden = $("keep-box").hidden = $("preset-controls").hidden; }
+function setMotionBody(hidden) {
+  $("motion-body").hidden = hidden;
+  document.body.classList.toggle("motion-off", hidden);
+}
 function motionOn() { return !framesMode() && currentMotion() !== "none"; }
 function setMotionStatus(text, spinning) {
   const s = $("motion-status");
@@ -2238,9 +2341,10 @@ function onMotionChange() {
   $("table-editor").hidden = !isTable;
   if (isTable) drawRegionEditor();
   $("preset-controls").hidden = isTable;
+  presetParts();
   $("table-open").disabled = !on || isTable;
   $("table-entry-note").hidden = isTable;
-  $("motion-body").hidden = !on;
+  setMotionBody(!on);
   $("motion-off-note").hidden = on;
   if (!on) { if (motion.debounce) clearTimeout(motion.debounce); clearMotion(); return; }
   if (outPng) requestMotion(0);
@@ -3527,13 +3631,18 @@ function saveBlob(bytes, name, type) {
 }
 $("dl-gif").addEventListener("click", () => (anims.at && framesMode() ? saveAnimsGif(motion.sheetPng, motion.sheetJson, $("dl-gif"))
   : saveGif(motion.sheetPng, motion.sheetJson, $("dl-gif"))));
+// GIF を作る（1 つずつ保存と、まとめて保存の ZIP で同じ頼み方にする。同じ設定なら同じバイト）
+async function makeGif(sheetPng, sheetJson, options = gifOptions()) {
+  const { result } = await call({ type: "gif", bytes: sheetPng.slice().buffer, sheetJson, options });
+  return result;
+}
 async function saveGif(sheetPng, sheetJson, button) {
   if (!sheetPng || !sheetJson) return;
   const options = gifOptions();
   button.disabled = true;
   $("gif-status").textContent = "GIF を作っています…";
   try {
-    const { result } = await call({ type: "gif", bytes: sheetPng.slice().buffer, sheetJson, options });
+    const result = await makeGif(sheetPng, sheetJson, options);
     if (!result.ok) { $("gif-status").textContent = result.error; return; }
     saveBlob(decodeBase64(result.gif_base64), result.name, "image/gif");
     const merged = (result.merged || []).map((g) => `${g.map((i) => i + 1).join("・")} 枚目は同じ絵なので 1 枚にまとめました`);
@@ -3708,6 +3817,11 @@ async function fxShow(results, o) {
   updatePlayer();
   if (motion.playing) schedule();
 }
+async function makeFxGif(item, o) {
+  const { result } = await call({ type: "fx", bytes: item.sheet.png.slice().buffer, sheetJson: item.sheet.json,
+                                   options: { ...o, gif: gifOptions() } });
+  return result;
+}
 async function saveFxGif(i, button) {
   const item = fx.results[i];
   if (!item || !item.result.ok) return;
@@ -3716,8 +3830,7 @@ async function saveFxGif(i, button) {
   button.disabled = true;
   $("gif-status").textContent = "重ねた GIF を作っています…";
   try {
-    const { result } = await call({ type: "fx", bytes: item.sheet.png.slice().buffer, sheetJson: item.sheet.json,
-                                     options: { ...o, gif: gifOptions() } });
+    const result = await makeFxGif(item, o);
     if (!result.ok) { $("gif-status").textContent = result.error; return; }
     saveBlob(decodeBase64(result.gif_base64), result.gif_name, "image/gif");
     const g = result.gif;
@@ -3780,13 +3893,16 @@ resetFrameSettings();
 $("reset").addEventListener("click", () => { resetFrameSettings(); if (frames.token) requestSheets(0); });
 
 function layoutFrames() {
-  // コマが並んだ絵のときは、動きの欄を「コマの再生と保存」にする（再生・1 コマ送り・背景・保存のボタンは同じものを使う）
+  // コマが並んだ絵のときは、再生の欄を「コマの再生」にする（再生・1 コマ送り・背景・保存のボタンは同じものを使う）
   const on = framesMode();
   $("frames-settings").hidden = !on;
+  $("frames-cut-box").hidden = !on;
+  $("frames-fine-box").hidden = !on;
+  $("motion-pick").hidden = on;
   $("file").multiple = on;
   joinRender();
   $("src-title").textContent = on ? "元の画像（赤い枠 = 見つけたコマ）" : "元の画像";
-  $("motion-title").textContent = on ? "コマの再生と保存" : "動き";
+  $("motion-title").textContent = on ? "コマの再生" : "動きの再生";
   for (const id of ["motion-choice", "table-load-error"]) if (on) $(id).hidden = true;
   $("motion-choice").hidden = on;
   $("motion-choice-help").hidden = on;
@@ -3802,8 +3918,9 @@ function layoutFrames() {
     $("show-rows").checked = false;
     $("table-editor").hidden = true;
     $("preset-controls").hidden = true;
+    presetParts();
     $("motion-off-note").hidden = true;
-    $("motion-body").hidden = false;
+    setMotionBody(false);
   }
 }
 let kindNow = framesMode() ? "frames" : "single";   // いまの入力の種類（「やめる」で戻すため）
@@ -4028,7 +4145,7 @@ async function runFramesConvert() {
     anims.at = animsMode ? request.anims : null;   // 変換に使った動きの設定（シートはこの動き・そろえ方で作る）
     await framesShowConverted(result);
     frames.lastInputs = usedInputs;
-    setStatus(`変換できました（${sec} 秒。コマ ${result.frame_count} 個）。下の「コマの再生と保存」で確かめてください。`
+    setStatus(`変換できました（${sec} 秒。コマ ${result.frame_count} 個）。下の「コマの再生」で確かめて、「保存」で保存してください。`
       + (result.steady ? `ちらつきを減らしました（1 コマ目に戻したドット: `
         + result.steady.frames.map((f) => `${f.source_frame} コマ目 ${f.restored_dots}`).join("、") + "）。" : ""), false);
     window.__framesTimings = (window.__framesTimings || []).concat([{ seconds: Number(sec), frames: result.frame_count }]);
@@ -5289,6 +5406,7 @@ function talkShow(result) {
   $("dl-talk-gif").disabled = $("dl-talk-mirror-gif").disabled = true;
   const has = result && ("talk" in result || "talk_sheets" in result || "talk_swaps" in result);
   $("talk-box").hidden = !has;
+  $("talk-files").hidden = !has;
   if (!has) return;
   const warns = [...(result.talk_error ? [`口パクを当てられません: ${result.talk_error.message}`] : []), ...(result.talk_warnings || [])];
   $("talk-warn").hidden = !warns.length;
@@ -6083,12 +6201,16 @@ function animsShowPlay(keepFrame = 0) {
   if (motion.playing) schedule();
 }
 $("anims-play").addEventListener("change", () => { anims.play = $("anims-play").value; animsShowPlay(0); });
+async function makeAnimsGif(sheetPng, sheetJson, anim) {
+  const { result } = await call({ type: "anims-gif", bytes: sheetPng.slice().buffer, sheetJson, anim, options: gifOptions() });
+  return result;
+}
 async function saveAnimsGif(sheetPng, sheetJson, button) {
   if (!sheetPng || !sheetJson || !anims.play) return;
   button.disabled = true;
   $("gif-status").textContent = "GIF を作っています…";
   try {
-    const { result } = await call({ type: "anims-gif", bytes: sheetPng.slice().buffer, sheetJson, anim: anims.play, options: gifOptions() });
+    const result = await makeAnimsGif(sheetPng, sheetJson, anims.play);
     if (!result.ok) { $("gif-status").textContent = result.error; return; }
     saveBlob(decodeBase64(result.gif_base64), result.name, "image/gif");
     $("gif-status").textContent = `「${result.name}」を保存しました（${result.durations.length} フレーム、${result.scale} 倍、`
@@ -6335,6 +6457,108 @@ for (const [id, key] of [["edit-file", "file"], ["edit-json", "json"], ["edit-or
 }
 for (const id of ["edit-same", "edit-fix", "edit-gif-scale", "edit-anim"]) $(id).addEventListener("change", () => runReadback());
 editClear("A と B を選ぶと、すぐに確かめて作り直します。");
+
+// ---- 折りたたむ欄（必要なときに開く・細かい設定・外のエディタで直す） ----
+// 閉じていても中の設定はそのまま効く。欄の中に最初の値（既定）から変えた設定があれば、見出しに「（変更あり）」を出す。
+// 既定は、このページを開いたときの値（Python から埋め込んだ CLI の既定）。隠れている欄・押せない欄（使っていない設定）と、
+// data-fold-ignore を付けたもの（描く形などの道具・アプリが自動で選ぶもの）は数えない。
+const FOLDS = ["fold-need", "fold-fine", "fold-editor"];
+const foldDefaults = new Map();
+function ctlValue(el) { return el.type === "checkbox" || el.type === "radio" ? el.checked : el.value; }
+function foldControls(box) {
+  return [...box.querySelectorAll("input, select, textarea")]
+    .filter((el) => el.type !== "file" && el.type !== "button" && !el.closest("[data-fold-ignore]"));
+}
+// 閉じた欄の中でも、使っている（隠れていない）ものか
+function inUse(el) {
+  if (el.closest("[hidden]")) return false;
+  const b = document.body.classList;
+  if (b.contains("anims-mode") && el.closest(".anims-hidden")) return false;
+  if (b.contains("motion-off") && el.closest(".motion-part")) return false;
+  return true;
+}
+function foldChanged(box) {
+  for (const el of foldControls(box)) {
+    if (!foldDefaults.has(el) || el.disabled || !inUse(el)) continue;
+    if (ctlValue(el) !== foldDefaults.get(el)) return true;
+  }
+  // 1 コマ目と同じにする範囲（描いた範囲がある）
+  if (box.id === "fold-fine" && same.ranges.length && inUse($("same-box"))) return true;
+  return false;
+}
+for (const id of FOLDS) for (const el of foldControls($(id))) foldDefaults.set(el, ctlValue(el));
+let foldTimer = null;
+function foldRefresh() {
+  foldTimer = null;
+  for (const id of FOLDS) $(id).querySelector(".fold-mark").hidden = !foldChanged($(id));
+  $("piskel-empty").hidden = [...$("piskel-files").querySelectorAll("a")].some((a) => a.getAttribute("aria-disabled") !== "true" && inUse(a));
+  $("dl-zip").disabled = zip.busy || !zipLinks().length;
+}
+function foldLater() { if (!foldTimer) foldTimer = requestAnimationFrame(foldRefresh); }
+document.addEventListener("input", foldLater, true);
+document.addEventListener("change", foldLater, true);
+new MutationObserver(foldLater).observe(document.body, { subtree: true, childList: true, attributes: true,
+  attributeFilter: ["hidden", "class", "aria-disabled", "disabled", "href"] });
+
+// ---- まとめて保存（ZIP） ----
+// 中身は、いま「1 つずつ保存」で保存できるもの全部（.piskel と、ちらつき・範囲の図などの確かめ用のファイルは入れない）。
+// PNG・JSON は保存のボタン（リンク）が指しているものと同じバイト列、GIF は GIF のボタンと同じ頼み方で作る。
+// ZIP は Python の zip_files（日時を固定・圧縮しない）で作るので、同じ入力なら同じ ZIP になる。
+const zip = { busy: false };
+const ZIP_LINKS = ["download", "dl-sheet", "dl-json", "dl-anims-config", "dl-mirror", "dl-mirror-json",
+                   "dl-talk-sheet", "dl-talk-json", "dl-talk-mirror", "dl-talk-mirror-json",
+                   "dl-fx", "dl-fx-json", "dl-fx-mirror", "dl-fx-mirror-json", "touch-save", "swap-save"];
+function zipLinks() {
+  return ZIP_LINKS.map((id) => $(id)).filter((a) => a.getAttribute("aria-disabled") !== "true" && a.download
+    && a.href.startsWith("blob:") && inUse(a));
+}
+async function linkBytes(a) { return new Uint8Array(await (await fetch(a.href)).arrayBuffer()); }
+function zipFileName() { return `${outBase}_all.zip`; }
+async function zipCollect() {
+  const files = [];
+  const add = (name, bytes) => { if (name && bytes && !files.some((f) => f.name === name)) files.push({ name, bytes }); };
+  // 重ねた GIF の名前は gif_name（name はエフェクトのシートの名前）
+  const gif = (result, key = "name") => { if (!result.ok) throw new Error(result.error); add(result[key], decodeBase64(result.gif_base64)); };
+  const animNames = anims.at && framesMode() && anims.info ? Object.keys(anims.info.animations) : null;
+  const sheetGif = async (png, json) => {
+    if (animNames) { for (const n of animNames) gif(await makeAnimsGif(png, json, n)); }
+    else gif(await makeGif(png, json));
+  };
+  for (const a of zipLinks()) {
+    add(a.download, await linkBytes(a));
+    // シートの PNG のすぐ後に、そのシートの GIF を入れる
+    if (a.id === "dl-sheet" && motion.sheetPng && motion.sheetJson && !$("dl-gif").hidden) await sheetGif(motion.sheetPng, motion.sheetJson);
+    if (a.id === "dl-mirror" && frames.mirrorPng && frames.mirrorJson) await sheetGif(frames.mirrorPng, frames.mirrorJson);
+    if (a.id === "dl-talk-sheet" && talk.sheets[0]) gif(await makeGif(talk.sheets[0].png, talk.sheets[0].json));
+    if (a.id === "dl-talk-mirror" && talk.sheets[1]) gif(await makeGif(talk.sheets[1].png, talk.sheets[1].json));
+    if ((a.id === "dl-fx" || a.id === "dl-fx-mirror") && fx.results[a.id === "dl-fx" ? 0 : 1]) {
+      const item = fx.results[a.id === "dl-fx" ? 0 : 1];
+      if (item.result.ok) gif(await makeFxGif(item, fxOptions()), "gif_name");
+    }
+  }
+  return files;
+}
+$("dl-zip").addEventListener("click", async () => {
+  if (zip.busy) return;
+  zip.busy = true;
+  $("dl-zip").disabled = true;
+  $("zip-status").textContent = "ZIP を作っています…";
+  try {
+    const files = await zipCollect();
+    if (!files.length) { $("zip-status").textContent = "まだ保存できるものがありません。"; return; }
+    const { result } = await call({ type: "zip", list: files.map((f) => f.bytes.slice().buffer), names: files.map((f) => f.name) });
+    if (!result.ok) { $("zip-status").textContent = result.error; return; }
+    const name = zipFileName();
+    saveBlob(decodeBase64(result.zip_base64), name, "application/zip");
+    $("zip-status").textContent = `「${name}」を保存しました（${result.names.length} 個: ${result.names.join("、")}）。`;
+  } catch (e) {
+    $("zip-status").textContent = "ZIP を作れませんでした: " + (e && (e.message || e.detail) || e);
+  } finally {
+    zip.busy = false;
+    foldRefresh();
+  }
+});
+foldRefresh();
 
 boot();
 </script>
