@@ -235,7 +235,7 @@ func _ready() -> void:
 		sf.remove_animation("default")  # SpriteFrames.new() に最初からある空の動き
 	sprite_frames = sf
 	centered = false
-	offset = Vector2(-float(data["pivot"]["x"]), -float(data.get("ground_y", data["pivot"]["y"])))  # 足元をノードの位置に
+	offset = Vector2(-floor(float(data["pivot"]["x"])), -floor(float(data.get("ground_y", data["pivot"]["y"]))))  # 足元をノードの位置に（半ドットは先に切り捨てる）
 	play(data["animations"].keys()[0])  # 最初の動き（idle など）を再生
 ```
 
