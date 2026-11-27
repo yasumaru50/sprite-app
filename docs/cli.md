@@ -4,7 +4,8 @@
 工程の仕組みと値を決めた理由は [how-it-works.md](how-it-works.md)。リポジトリのルートで実行する（依存は `requirements.txt`。NumPy と Pillow だけ）。
 
 目次: [変換](#変換のオプション) / [パレット](#パレット) / [動き](#動き1-枚の絵) / [GIF](#gif-アニメ---gif) / [動きの表](#動きの表---motion-spec----write-motion-spec) /
-[コマが並んだ絵](#コマが並んだ絵---frames) / [差し替え](#差し替えまばたき---swaps) / [読み戻し](#手直ししたシートの読み戻し---readback) / [シートの JSON](#シートの-json)
+[コマが並んだ絵](#コマが並んだ絵---frames) / [差し替え](#差し替えまばたき---swaps) / [読み戻し](#手直ししたシートの読み戻し---readback) /
+[キャンバスを倍数にそろえる](#キャンバスを倍数にそろえる---canvas-multiple) / [シートの JSON](#シートの-json)
 
 ## 変換のオプション
 
@@ -375,7 +376,7 @@ python -m apps.sprite hero_walk.piskel --readback hero_anims_62x94_12f.json --or
 | `duration_ms` | 1 コマの時間（ミリ秒。既定 150）。1 つか、順番と同じ数の並び |
 | `loop` | くり返す（既定 true）。false は 1 回で終わる（GIF も 1 回だけ再生。最後のコマで止めるのはゲームの側） |
 | `align_y` / `shift_y` | 縦のそろえ方（`foot` 既定・`match`・`keep`・`none`）と、元のコマごとの上げ下げ（数はその動きのコマの数） |
-| `common` | 全部の動きで共通: 横のそろえ方（`--align`）、グリッドの線の並び（`--frame-grid`）、高さ合わせ（`--join-match-height`）、左右反転（`--mirror`）。CLI で付けたものが優先 |
+| `common` | 全部の動きで共通: 横のそろえ方（`--align`）、グリッドの線の並び（`--frame-grid`）、高さ合わせ（`--join-match-height`）、左右反転（`--mirror`）、キャンバスを倍数にそろえる（`canvas_multiple`・`canvas_align`。そろえるときだけ書く。`--canvas-multiple`）。CLI で付けたものが優先 |
 | `settings` | 変換の設定（色数など。画面で保存したときに入る）。あるときは変換の引数（`--colors` など）は使えない（エラー）。無ければ引数 |
 | `name` | シートのファイル名と JSON の `motion`（既定 `anims`） |
 
@@ -574,6 +575,35 @@ python -m apps.sprite 書き出した.png --readback walk_walk_53x91_4f.json --o
 - **作って警告するもの**: 元のパレットに無い色（赤紫の枠）、半透明のドット（橙）、同じ元のコマから作ったコマが直したあとで違う（青）
 - `.piskel` の読み込み: 見えるレイヤー（不透明度 > 0）を下から重ねる。飛ばす設定のコマもそのまま入れる（警告だけ）。FPS は使わず JSON の時間を使う
 
+## キャンバスを倍数にそろえる（`--canvas-multiple`）
+
+保存する絵の幅と高さを、決まった数の倍数にする（ゲームのエンジンで扱いやすい 8・16・32 など）。**絵は拡大・縮小せず、透明な余白を足すだけ**（`retrocore/sprite/canvas.py`）。
+
+```bash
+python -m apps.sprite chara.png -o out/sprite/chara.png --canvas-multiple 16                        # 1 枚の絵（chara.png と chara.json）
+python -m apps.sprite walk.png --frames --frame-count 4 --canvas-multiple 16 --gif --piskel        # コマの大きさを 16 の倍数に
+python -m apps.sprite jump.png --frames --align-y keep --canvas-multiple 32 --canvas-align center
+```
+
+| オプション | 内容 |
+| --- | --- |
+| `--canvas-multiple N` | 幅と高さを N の倍数にする（1〜256。縦横同じ倍数）。0 か指定なしでそろえない（出力は前とバイト単位で同じ） |
+| `--canvas-align bottom\|center` | `bottom`（既定）= 下ぞろえ・左右中央（足元の高さが変わらない）、`center` = 上下左右中央。`--canvas-multiple` と一緒に使う |
+
+- 余りが奇数のときは、右（`center` では下も）に 1 ドット多く足す。例: 45×37・倍数 16・`bottom` → 48×48（左 1・右 2・上 11・下 0）
+- 対象: 1 枚の絵（`<出力名>.png`。一緒に `<出力名>.json` を書く）、動きのシート・コマのシート（**1 コマの大きさ**。全部のコマに同じ余白なので、コマどうしの足元はそろったまま）・
+  左右反転・しゃべりのシート・まとめたシート（`--anims`。設定のファイルの `common.canvas_multiple`・`canvas_align` でも。引数が優先）。GIF・.piskel もシートと同じ絵になる。
+  コマが並んだ絵の `<出力名>.png`（そろえたコマを元の順に並べた絵）は変えない
+- 余白は**最後（保存の直前）**に足す。動きはそろえる前の絵で作り、直し（edits.json）・差し替え（swaps.json）は余白を足す前の座標のまま（意味は変わらない）
+- JSON: `pivot` は余白の分ずらす（左に足した列を x に、上に足した行を y に足す）。`pivot.y` と同じ `ground_y` を pivot のすぐ後に、足した余白をいちばん外の `canvas` に書く:
+  `"canvas": {"multiple": 16, "align": "bottom", "width": 45, "height": 37, "left": 1, "right": 2, "top": 11, "bottom": 0}`（`width`・`height` は足す前の大きさ）。
+  シートのファイル名の大きさ（`_48x48_4f`）は足した後の大きさ
+- 1 枚の絵の JSON: `{"version": 1, "kind": "sprite_image", "image": "chara.png", "width": 48, "height": 48, "pivot": {"x": 23.5, "y": 48}, "ground_y": 48, "canvas": {…}}`
+  （pivot は足す前の絵の下端の中央）
+- エフェクトのシート（`--fx`）は大きさを変えず、JSON の `position` を余白の分ずらす（`character_frame` は足した後のキャラのコマの大きさ）
+- 画面では「保存」の欄の「キャンバスを倍数にそろえる」（そろえない／8／16／32／任意の数）と「並べ方」。同じ設定なら CLI と出力はバイト単位で同じ（`tests/test_sprite_canvas.py`）
+- 読み戻し（`--readback`）では使えない（読み戻すシートの大きさのまま作る）
+
 ## シートの JSON
 
 フレームを左から順にすき間なく横 1 列に並べた透明 PNG（拡大しない）と、同じ名前の JSON。今の版は 2。
@@ -589,7 +619,8 @@ python -m apps.sprite 書き出した.png --readback walk_walk_53x91_4f.json --o
 
 | 項目 | 意味 |
 | --- | --- |
-| `pivot` | 足元（左上が原点、下向きが +y の画素）。動きのシートは (幅 / 2, 高さ − 下に足した行)。`--frames` はそろえた基準の横の位置 |
+| `pivot` | 足元（左上が原点、下向きが +y の画素）。動きのシートは (幅 / 2, 高さ − 下に足した行)。`--frames` はそろえた基準の横の位置。キャンバスを倍数にそろえたときは余白の分ずれる |
+| `canvas` | （`--canvas-multiple` のとき）倍数・並べ方・足す前の大きさ（`width`・`height`）・足した余白（`left`・`right`・`top`・`bottom`）。このときは `ground_y`（= `pivot.y`）も書く |
 | `padding` | 足した透明の行・列（`{"left", "right", "top", "bottom"}`）。横の位置・体全体のずれ・伸ばすを使ったときだけ |
 | `frames[].offset_y` | そのフレームの絵が 1 枚目からどれだけ上下にずれたか（下が +）。体全体のずれ（浮遊・弾む・`root_y`・`--frame-root-y`）のときだけ |
 | `regions_used` | `--motion-spec` で実際に使った範囲（上の「動きの表」） |

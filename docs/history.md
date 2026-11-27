@@ -246,3 +246,9 @@ PR ごとの詳しい記録（数・試したこと）は [archive/TODO-full.md]
   「今までと同じ」の言い回し、作らなかった理由の保存の場所、ZIP に入らない確かめ用のファイル）。`apps/sprite/README.md` に「ゲームで使うときの設定（Godot 4）」
   （プロジェクト・取り込みの設定、エフェクトの置き方、よくある失敗、まとめたシートの JSON から SpriteFrames を作る GDScript の例。本物の Godot ではまだ確かめていない）。
   `docs/TODO.md` を「困ったら足す」「試したいこと」「作らないと決めたこと」に書き直した（前の全文は `docs/archive/TODO-2026-11-26.md`）
+- キャンバスを倍数にそろえる（`retrocore/sprite/canvas.py`、CLI の `--canvas-multiple N`・`--canvas-align bottom|center`、画面の保存の欄、`.anims.json` の
+  `common.canvas_multiple`・`canvas_align`）: 1 枚の絵・動き・コマ・まとめたシート・しゃべりのシートの 1 コマを N の倍数に（透明な余白を足すだけ。余りが奇数なら右・下に 1 多く）。
+  余白は保存の直前に足し、直し・差し替えは足す前の座標のまま。JSON の `pivot` を余白の分ずらし、`ground_y` と `canvas`（足した余白）を足す。1 枚の絵は `<出力名>.json` も書く。
+  エフェクトのシートは大きさを変えず `position` をずらす。そろえないときの出力（JSON も）は前とバイト単位で同じ（`tests/test_sprite_canvas.py`）。
+  案では pivot を「キャンバスの左右中央（切り捨て）」にしていたが、前からある `pivot`（そろえた基準の横の位置。半ドットのこともある）の意味を変えると
+  そろえないときの JSON・左右反転・まとめたシートの基準・読み戻しが変わるので、前の pivot を余白の分ずらす形にした

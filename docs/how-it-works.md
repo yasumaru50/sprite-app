@@ -346,6 +346,7 @@ AI が描いたドット絵風の画像は、ドット 1 個が約 20px で、�
 | `same.py` | 1 コマ目と同じにする範囲 `same_frames()`（位置を探して写す・境目の確かめ）、範囲の図 `same_image()` |
 | `swap.py` | 差し替え（まばたき・口パク）`swaps_from_dict()` / `swaps_json()`（一覧の読み書き）、`swap_from_image()`（描いた絵から違うドット）、`apply_swaps()`（周の数・位置・時間で分けて入れる）、`apply_talk()`（しゃべりのシート）、`mirror_swapped()` |
 | `touchup.py` | 手の直し `touchup_from_dict()` / `touchup_json()`（直しの一覧の読み書き）、`apply_touchup()`（当てる・下の色が変わったドットを数える）、`touchup_result()` |
+| `canvas.py` | キャンバスを倍数にそろえる `pads()`（足す余白）・`pad_result()`（シートの全部のコマ）・`pad_still()`（1 枚の絵と JSON）。保存の直前に透明な余白を足すだけ |
 | `edit.py` / `piskel.py` | 手直しの読み戻し / .piskel の読み書き（`piskel_layers_text()` は重ねの 2 レイヤー） |
 | `fx/` | 重ね（漫画的エフェクト）。`art.py`（絵と動きの文字の表）、`__init__.py`（`make_fx()`・置く場所・`composite()`・`fx_json()`・`fx_for_web()`） |
 | `motion/` | 動き。`make_motion()`、`spec.py`（表の形）・`timeline.py`（表からフレーム）・`base.py`（`check_rules()`・`split_limits()`）・`breathe.py`・`sway.py`・`floating.py`・`bouncing.py`・`nod.py`・`stretch.py`・`region.py`・`report.py`（skipped）・`sheet.py`（`save_sheet()`）・`gif.py` |
