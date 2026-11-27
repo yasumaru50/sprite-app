@@ -735,6 +735,9 @@
           <select id="touch-zoom"><option value="4">4 倍</option><option value="8">8 倍</option><option value="12" selected>12 倍</option><option value="16">16 倍</option></select>
           <label class="check"><input type="checkbox" id="touch-grid" checked> 格子線</label>
           <label class="check edits-only"><input type="checkbox" id="touch-onion"> 前のコマを薄く重ねる（O）</label>
+          <span class="edits-only"><label for="touch-onion-of">重ねるコマ</label>
+            <select id="touch-onion-of"><option value="prev1" selected>1 つ前</option><option value="prev2">2 つ前</option><option value="first">1 コマ目</option><option value="pick">番号で選ぶ</option></select>
+            <select id="touch-onion-pick" aria-label="重ねるコマの番号" hidden></select></span>
           <button type="button" id="touch-undo" class="secondary" disabled>元に戻す（Ctrl＋Z）</button>
           <button type="button" id="touch-redo" class="secondary" disabled>やり直し（Ctrl＋Y）</button>
           <button type="button" id="touch-clear" class="secondary edits-only" disabled>直しを全部消す</button>
@@ -742,7 +745,9 @@
         <div id="touch-palette" role="group" aria-label="パレット（クリックで色を選ぶ）"></div>
         <div class="note help" id="touch-help" data-help-at="touch-title"><b>マウス</b>: 左ドラッグ = 描く（ペン・消しゴム）／右クリック・右ドラッグ = 消しゴム／Alt＋クリック = スポイト（色を拾ってペンに戻る）。
           <b>キー</b>（カーソルが絵の上にあるとき・この欄を選んでいるとき）: B ペン／E 消しゴム／I スポイト／「,」「.」前後のコマ／O 前のコマを薄く重ねる・やめる／
-          Ctrl＋Z 元に戻す／Ctrl＋Y か Ctrl＋Shift＋Z やり直し。元に戻すは 1 回のドラッグを 1 つと数えて 50 回まで。前のコマの重ね（再生の順番で 1 つ前。1 コマ目は最後のコマ）は見るためだけで、保存には入りません。</div>
+          Ctrl＋Z 元に戻す／Ctrl＋Y か Ctrl＋Shift＋Z やり直し。元に戻すは 1 回のドラッグを 1 つと数えて 50 回まで。前のコマの重ね（再生の順番で 1 つ前。1 コマ目は最後のコマ）は見るためだけで、保存には入りません。
+          「重ねるコマ」で 2 つ前・1 コマ目・番号で選んだコマにもできます。歩き・走りは 1 と 3、2 と 4 が同じ足の形になることが多いので「2 つ前」が向いています
+          （前が無いときは最後から数えて戻ります。動きをまとめているときは同じ動きの中で数えます。今のコマと同じになるときは重ねません）。</div>
         <div class="actions edits-only anims-hidden" id="swap-mode-row">
           <label class="check" id="swap-mode-label"><input type="checkbox" id="swap-mode"> 差し替えを描く（まばたき・口パク）</label>
         </div>
@@ -1004,7 +1009,7 @@
   <footer>
     <span class="help" data-help-at="build-line">処理は <a href="https://pyodide.org/">Pyodide</a>（ブラウザの中で動く Python）で、CLI（<code>python -m apps.sprite</code>）と
     同じ Python のコードを使います。初回は Pyodide をインターネットから読み込むので、つながった状態で開いてください。</span>
-    <span id="build-line" data-help-name="このページ">Pyodide 0.27.7 ／ ビルド d120badcaba0</span>
+    <span id="build-line" data-help-name="このページ">Pyodide 0.27.7 ／ ビルド 7b33f190d0b9</span>
   </footer>
 </main>
 
@@ -1343,7 +1348,7 @@ function failureDetail(e) {
   if (e && e.stage) lines.push(`段階: ${e.stage}`);
   lines.push(e && e.detail ? e.detail : String(e && e.stack || e));
   lines.push(`ブラウザ: ${navigator.userAgent}`);
-  lines.push(`Pyodide: 0.27.7 ／ ビルド d120badcaba0`);
+  lines.push(`Pyodide: 0.27.7 ／ ビルド 7b33f190d0b9`);
   return lines.join("\n");
 }
 function showWarnings(list) {
@@ -3972,7 +3977,7 @@ const same = { ranges: [], img: null, scale: 8, drag: null, edit: null, sel: -1,
                inFlight: false, again: false, result: null };
 // ドットを直す（手の直し）の状態（下の「ドットを直す」）。直しの一覧 edits は変換し直しても残す
 const touch = { edits: new Map(), base: null, W: 0, fw: 0, fh: 0, n: 0, palette: [], frame: 1, tool: "pen", color: null,
-                zoom: 12, grid: true, onion: false, undo: [], redo: [], stroke: null, hover: null, over: false,
+                zoom: 12, grid: true, onion: false, onionOf: "prev1", onionPick: null, undo: [], redo: [], stroke: null, hover: null, over: false,
                 changed: new Map(), dims: null, inFlight: false, again: false, saveUrl: null, previewTimer: null, previewPos: 0,
                 // 差し替え（まばたき）: mode が "swap" のときは 1 コマ目の上に描く。swaps: 絵の名前 "closed"・"half" → Map(y*幅+x → {c, was})。
                 // single は「1 枚の絵」の動き（変換したスプライトの上に描く。直しは無い）
@@ -4947,11 +4952,46 @@ function touchFrames() {
   return [...Array.from({ length: touch.n }, (_, i) => i + 1), ...[...neg].sort((a, b) => b - a)];
 }
 function touchFrameName(k) { return k < 0 ? `${-k}r` : `${k}`; }
-function touchPrevFrame(k) {
-  // 再生の順番で 1 つ前のコマ（1 コマ目のときは最後のコマ）
-  const order = touchOrder(), p = order.indexOf(k);
-  if (p < 0) return k > 1 ? k - 1 : touch.n;
-  return order[(p - 1 + order.length) % order.length];
+// 薄く重ねるコマを決める（見るためだけ。出力には入らない）。null なら重ねない。
+// how: "prev1"（今までと同じ: 再生の順番で 1 つ前）／"prev2"（再生の順番で 2 つ前）／"first"（1 コマ目）／"pick"（o.pick のコマ）。
+// o.order: 再生の順番（裏返したコマは −番号）、o.list: 選べるコマの並び、o.groups: 動きをまとめたときの各動きの [最初, 最後] のコマ（無ければ null）、o.n: コマの数
+function onionFrame(k, how, o) {
+  let t;
+  if (how === "pick") t = o.list.includes(o.pick) ? o.pick : null;
+  else if (how === "prev1") {   // 今までの作り（変えない）
+    const p = o.order.indexOf(k);
+    return p < 0 ? (k > 1 ? k - 1 : o.n) : o.order[(p - 1 + o.order.length) % o.order.length];
+  } else {
+    const a = Math.abs(k), g = (o.groups || []).find(([lo, hi]) => a >= lo && a <= hi) || null;
+    const inG = (v) => !g || (Math.abs(v) >= g[0] && Math.abs(v) <= g[1]);
+    if (how === "first") t = g ? g[0] : 1;
+    else {
+      const steps = how === "prev2" ? 2 : 1;
+      let seq = o.order.filter(inG);
+      if (!seq.includes(k)) seq = o.list.filter(inG);   // 再生に使っていないコマは、選べるコマの並びで数える
+      const p = seq.indexOf(k);
+      t = p < 0 ? null : seq[(((p - steps) % seq.length) + seq.length) % seq.length];
+    }
+  }
+  return t === k ? null : t;
+}
+function touchOnionFrame() {
+  const groups = anims.at && framesMode() && frames.result && frames.result.anims
+    ? frames.result.anims.map((r) => [r.first, r.first + r.count - 1]) : null;
+  return onionFrame(touch.frame, touch.onionOf, { order: touchOrder(), list: touchFrames(), groups, pick: touch.onionPick, n: touch.n });
+}
+function touchOnionPicks() {
+  // 「番号で選ぶ」の欄を、選べるコマの並びに合わせる
+  const sel = $("touch-onion-pick"), list = touchFrames();
+  sel.hidden = touch.onionOf !== "pick";
+  if (!list.includes(touch.onionPick)) touch.onionPick = list[0];
+  const want = list.join(",");
+  if (sel.dataset.list !== want) {
+    sel.textContent = "";
+    for (const k of list) { const op = document.createElement("option"); op.value = String(k); op.textContent = `${touchFrameName(k)} コマ目`; sel.appendChild(op); }
+    sel.dataset.list = want;
+  }
+  sel.value = String(touch.onionPick);
 }
 function touchFrameImage(k) {
   if (typeof k === "string") return touchApply(touchFrameImage(1), touch.swaps.get(k));
@@ -4999,9 +5039,10 @@ function touchDraw() {
   g.fillStyle = cb; g.fillRect(0, 0, c.width, c.height);
   g.fillStyle = ca;
   for (let y = 0; y < c.height; y += q) for (let x = (y / q) % 2 ? q : 0; x < c.width; x += 2 * q) g.fillRect(x, y, q, q);
-  if (touch.onion && touch.n > 1 && touch.mode !== "swap") {
+  const onionK = touch.onion && touch.n > 1 && touch.mode !== "swap" ? touchOnionFrame() : null;
+  if (onionK !== null) {
     g.globalAlpha = 0.35;
-    g.drawImage(touchFrameCanvas(touchPrevFrame(touch.frame)), 0, 0, fw * z, fh * z);
+    g.drawImage(touchFrameCanvas(onionK), 0, 0, fw * z, fh * z);
     g.globalAlpha = 1;
   }
   g.drawImage(touchFrameCanvas(touchKey()), 0, 0, fw * z, fh * z);
@@ -5045,6 +5086,7 @@ function touchLabel() {
       + `・直したドット ${m ? m.size : 0}`;
   }
   $("touch-prev").disabled = $("touch-next").disabled = touch.mode === "swap";
+  touchOnionPicks();
   const sm = touch.swaps.get($("swap-shape").value);
   $("swap-clear").disabled = !(sm && sm.size);
   $("touch-undo").disabled = !touch.undo.length;
@@ -5252,6 +5294,8 @@ $("touch-next").addEventListener("click", () => touchGo(1));
 $("touch-zoom").addEventListener("change", () => { touch.zoom = Number($("touch-zoom").value); touchRefresh(); });
 $("touch-grid").addEventListener("change", () => { touch.grid = $("touch-grid").checked; touchDraw(); });
 $("touch-onion").addEventListener("change", () => { touch.onion = $("touch-onion").checked; touchDraw(); });
+$("touch-onion-of").addEventListener("change", () => { touch.onionOf = $("touch-onion-of").value; touchRefresh(); });
+$("touch-onion-pick").addEventListener("change", () => { touch.onionPick = Number($("touch-onion-pick").value); touchDraw(); });
 $("touch-undo").addEventListener("click", touchUndo);
 $("touch-redo").addEventListener("click", touchRedo);
 $("touch-clear").addEventListener("click", () => {
