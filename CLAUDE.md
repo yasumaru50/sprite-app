@@ -23,7 +23,7 @@
 | やり残したこと（困ったら足す・試したいこと・作らないと決めたこと） | `docs/TODO.md`（区切る前の全文は `docs/archive/TODO-2026-11-26.md`） |
 | 方針・決まり・動きの表の設計・skipped の code の一覧 | `docs/sprite-app-plan.md` |
 | 工程の仕組みと値を決めた理由、処理のファイルの一覧 | `docs/how-it-works.md` |
-| CLI のオプション、出力のファイル名、シートの JSON の形 | `docs/cli.md` |
+| CLI のオプション、出力のファイル名、シートの JSON の形（1 枚絵のアプリ `python -m apps.still` の節も） | `docs/cli.md` |
 | ブラウザ版の使い方・よく使う CLI・ゲーム（Godot 4）で使うときの設定 | `apps/sprite/README.md`（全体の紹介は `README.md`） |
 | Piskel での手直しと読み戻しの手順 | `docs/sprite-edit.md` |
 | これまでの PR のまとめ | `docs/history.md` |
@@ -43,6 +43,7 @@
 | 手直しの読み戻し / .piskel | `retrocore/sprite/edit.py` / `piskel.py` |
 | 動き（表の形・表からフレーム・決まり・各プリセット・範囲・skipped・シート・GIF） | `retrocore/sprite/motion/`（`spec.py`・`timeline.py`・`base.py`・`breathe.py` ほか・`region.py`・`report.py`・`sheet.py`・`gif.py`） |
 | ブラウザ版 | `apps/sprite/web/template.html`（→ `tools/build_sprite_web.py` で `sprite-app.html` を作る。直接編集しない） |
+| 1 枚絵のアプリ（Still App。ドット絵風の 1 枚絵を決まった色数・格子にそろえる） | CLI `apps/still/cli.py`、処理 `retrocore/still/`（`dots.py` ドットに戻す・`colors.py` 減色・`convert.py` 入口）、ブラウザ版 `apps/still/web/template.html`（→ `tools/build_still_web.py` で `still-app.html`）、使い方 `apps/still/README.md`、テスト `tests/test_still*.py` |
 | 動きの表の見本 | `apps/sprite/examples/*.motion.json`、テスト用は `tests/motion_specs/` |
 | 比較画像を作る道具 | `tools/compare_sprite_*.py`（背景・グリッド・縮小・単純化・クリーンアップ・縁取り・動き・コマ・ちらつき・範囲） |
 | テスト | `tests/`（テスト画像は `tests/synth_sprite.py`・`tests/synth_cg.py` で合成。`web_region/` は画面で保存した表・シート） |
@@ -68,6 +69,8 @@ pip install -r requirements-dev.txt
 python -m pytest
 python -m apps.sprite 入力.png -o out/sprite/出力.png   # 例はほかに apps/sprite/README.md、オプションは docs/cli.md
 python tools/build_sprite_web.py                        # ブラウザ版の HTML を作り直す（--check で古くないか確かめる）
+python -m apps.still 入力.png --mode pc98 --out out/still/出力   # 1 枚絵のアプリ（apps/still/README.md）
+python tools/build_still_web.py                         # 1 枚絵のアプリのブラウザ版の HTML を作り直す
 ```
 
 ## 開発ルール
@@ -83,7 +86,8 @@ python tools/build_sprite_web.py                        # ブラウザ版の HTM
   - 作れなかった理由は新しい判定を足さずに記録だけする（`report.py`。code は表の問題の `rule` と同じ名前。code を足したら `docs/sprite-app-plan.md` の一覧にも書く。
     `tests/test_sprite_skipped.py` がこのファイルを読んで確かめる）。前のハッシュと比べるテストは、版 2 で足した分（`skipped`・`_skipped.json`）を `tests/legacy_output.py` で除いて比べる
 - Sprite App の新しい処理は `retrocore/sprite/` に置く。工程は `retrocore/sprite/convert.py` の `build_pipeline()` に足す（CLI と画面で共通）。
-  retrocore を変えたら `python tools/build_sprite_web.py` でブラウザ版の HTML も作り直す（テストで検出される）。既存の関数の挙動は変えない（ゴールデンは既存分を再生成しない）
+  retrocore を変えたら `python tools/build_sprite_web.py` と `python tools/build_still_web.py` でブラウザ版の HTML も作り直す（テストで検出される。
+  Sprite App の HTML には `retrocore/still/` を入れない）。既存の関数の挙動は変えない（ゴールデンは既存分を再生成しない）
 - アプリ内の手の直し（`touchup.py`、CLI `--edits`、画面の「ドットを直す」）は変換・範囲・ちらつきの後に当て、パレットに無い色は作らない。
   直しが無いときの出力は前とバイト単位で同じ（`tests/test_sprite_touchup.py`）
 - `retrocore/` は NumPy と Pillow だけに依存させる（Pyodide で動かすため。PySide6・SciPy・OpenCV も不可。`tests/test_retrocore_deps.py` が確かめる）

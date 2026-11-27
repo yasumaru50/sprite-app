@@ -1,0 +1,558 @@
+<!doctype html>
+<!--
+  Still App（ブラウザ版）のひな形。このファイルを直接開いても動かない。
+  `python tools/build_still_web.py` で retrocore の Python ファイルと設定の既定値を埋め込み、
+  1 枚で動く apps/still/web/still-app.html を作る（そちらはダウンロードしてダブルクリックで開ける）。
+-->
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Still App（ブラウザ版）</title>
+<style>
+  :root {
+    --bg: #f4f2ee; --panel: #ffffff; --text: #22201c; --muted: #6b665d; --line: #d8d3c8;
+    --accent: #3b6ea8; --accent-text: #ffffff; --error-bg: #fbe9e7; --error-line: #d9534f; --error-text: #7a1f1a;
+    --warn-bg: #fff6dc; --warn-line: #d8a500; --stage: #e9e6df;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1b19; --panel: #262522; --text: #ece9e2; --muted: #a7a197; --line: #3c3a35;
+      --accent: #6f9fd8; --accent-text: #111111; --error-bg: #3a1f1d; --error-line: #d9534f; --error-text: #ffd6d2;
+      --warn-bg: #3a3218; --warn-line: #b38a00; --stage: #151412;
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font-family: system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Yu Gothic UI", Meiryo, sans-serif;
+         font-size: 15px; line-height: 1.6; }
+  main { max-width: 1200px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 1.4em; margin: 0; }
+  .top-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-bottom: 8px; }
+  .lead { color: var(--muted); margin: 0 0 16px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: flex-end; }
+  .field { display: flex; flex-direction: column; gap: 4px; min-width: 140px; }
+  .field label, .field .label { font-weight: 600; font-size: 0.92em; }
+  .field small { color: var(--muted); font-size: 0.82em; max-width: 22em; }
+  input[type=number], select { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px;
+                               background: var(--panel); color: var(--text); }
+  input[type=number] { width: 6.5em; }
+  .pair { display: flex; align-items: center; gap: 6px; }
+  .check { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 600; font-size: 0.92em; }
+  .check input { width: 18px; height: 18px; }
+  button, .button { font: inherit; padding: 8px 18px; border-radius: 6px; border: 1px solid var(--accent);
+                    background: var(--accent); color: var(--accent-text); cursor: pointer; text-decoration: none; display: inline-block; }
+  button.secondary, .button.secondary { background: transparent; color: var(--accent); }
+  button:disabled, .button[aria-disabled=true] { opacity: 0.45; cursor: not-allowed; pointer-events: none; }
+  .drop { border: 2px dashed var(--line); border-radius: 8px; padding: 18px; text-align: center; color: var(--muted); }
+  .drop.over { border-color: var(--accent); color: var(--text); }
+  .drop input { display: block; margin: 8px auto 0; max-width: 100%; }
+  #status { display: flex; align-items: center; gap: 10px; min-height: 2em; margin-top: 8px; }
+  .spinner { width: 18px; height: 18px; border: 3px solid var(--line); border-top-color: var(--accent);
+             border-radius: 50%; animation: spin 0.9s linear infinite; flex: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .message { border-radius: 6px; padding: 10px 12px; margin-top: 10px; white-space: pre-wrap; }
+  .message.error { background: var(--error-bg); border: 1px solid var(--error-line); color: var(--error-text); }
+  .message.error pre { white-space: pre-wrap; word-break: break-all; font-size: 0.82em; max-height: 280px; overflow: auto;
+                       background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 8px; }
+  .message.warn { background: var(--warn-bg); border: 1px solid var(--warn-line); }
+  .candidates { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; white-space: normal; }
+  .candidates button { font-size: 0.88em; padding: 4px 12px; }
+  .views { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 760px) { .views { grid-template-columns: 1fr; } }
+  .view h2 { font-size: 1em; margin: 0 0 6px; }
+  .stage { height: 460px; border: 1px solid var(--line); border-radius: 6px; overflow: auto; background: var(--stage);
+           display: flex; }
+  .stage > * { margin: auto; flex: none; display: block; image-rendering: pixelated; image-rendering: crisp-edges; }
+  .stage .empty { color: var(--muted); background: var(--panel); padding: 4px 10px; border-radius: 4px; image-rendering: auto; }
+  .meta { color: var(--muted); font-size: 0.88em; margin-top: 6px; min-height: 1.5em; }
+  .actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 12px; }
+  .swatches { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .swatch { display: flex; flex-direction: column; align-items: center; width: 74px; font-size: 0.75em; color: var(--muted);
+            font-variant-numeric: tabular-nums; }
+  .swatch span.chip { width: 40px; height: 28px; border: 1px solid var(--line); border-radius: 4px; display: block; }
+  .swatch b { color: var(--text); font-weight: 600; }
+  footer { color: var(--muted); font-size: 0.82em; }
+  /* 説明の文（「？」を押したときだけ出す。Sprite App と同じしくみ） */
+  .help:not(.open) { display: none !important; }
+  .help-row { display: inline-flex; align-items: center; gap: 6px; }
+  button.help-btn { width: 1.6em; height: 1.6em; padding: 0 !important; margin: 0 0 0 6px; border-radius: 50%;
+                    font-size: 0.8em !important; font-weight: 700; line-height: 1; vertical-align: middle;
+                    background: transparent; color: var(--accent); border: 1px solid var(--accent); flex: none; }
+  .help-row button.help-btn { margin-left: 0; }
+  button.help-btn[aria-expanded=true] { background: var(--accent); color: var(--accent-text); }
+  #help-all { padding: 4px 14px; font-size: 0.9em; }
+  .lead.help { margin-top: -6px; }
+  /* 折りたたむ欄（Sprite App と同じ） */
+  details.fold { margin-top: 14px; color: var(--text); border: 1px solid var(--line); border-radius: 6px; background: var(--bg); }
+  details.fold > summary { cursor: pointer; padding: 8px 12px; font-weight: 600; display: flex; flex-wrap: wrap; align-items: baseline;
+                           gap: 2px 10px; list-style-position: inside; }
+  details.fold > summary .fold-mark { color: var(--error-line); }
+  details.fold > summary .fold-what { color: var(--muted); font-weight: normal; font-size: 0.82em; }
+  details.fold > .fold-body { padding: 4px 12px 12px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="top-head">
+    <h1>Still App（1 枚絵）</h1>
+    <button type="button" id="help-all" class="secondary" aria-pressed="false">説明をすべて表示</button>
+  </div>
+  <p class="lead" id="lead">AI が描いた「ドット絵風の 1 枚絵」を、決まった色数・格子の本物のドット絵にそろえます。</p>
+  <p class="lead help" data-help-at="lead">ドットのマス目を見つけて 1 ドット＝1 画素にし、いちばん多い色でマスを塗り、決まった色数のパレットにそろえます。
+    透明な所は黒で埋めます。出力は正方形のドットです（98 の縦長のドットは再現しません）。ディザは使いません。</p>
+
+  <section class="panel">
+    <div class="drop" id="drop">
+      <b>① 画像を選ぶ</b>（PNG・JPG。ここにドラッグしても OK）
+      <input type="file" id="file" accept="image/png,image/jpeg">
+    </div>
+    <div class="controls" style="margin-top:12px">
+      <div class="field">
+        <label for="mode">初めの設定</label>
+        <select id="mode"></select>
+        <small class="help">設定の組み合わせ（プリセット）です。決まりではないので、下の「必要なときに開く」で 1 つずつ変えられます</small>
+      </div>
+      <div class="field">
+        <button type="button" id="run" disabled>② 変換する</button>
+      </div>
+    </div>
+
+    <details class="fold" id="fold-need">
+      <summary><span class="fold-name">必要なときに開く</span><span class="fold-mark" hidden>（変更あり）</span><small class="fold-what">色数・横のマス数・大きさの上限・キャンバス・4096 色に丸める・いちばん暗い色</small></summary>
+      <div class="fold-body">
+        <div class="controls">
+          <div class="field">
+            <label for="colors">色数</label>
+            <input type="number" id="colors" step="1">
+            <small class="help" id="colors-help"></small>
+          </div>
+          <div class="field">
+            <label for="width">横のマス数</label>
+            <input type="number" id="width" min="1" step="1" placeholder="自動">
+            <small class="help">空ならドットのマス目を自動で探します。数を入れると、マス目を探さずに横をその数のマスに分けます（縦は縦横の比から）。CLI の --width</small>
+          </div>
+          <div class="field">
+            <span class="label" id="max-label">大きさの上限</span>
+            <span class="pair"><input type="number" id="max-w" min="1" step="1" aria-label="上限の幅">×<input type="number" id="max-h" min="1" step="1" aria-label="上限の高さ"></span>
+            <small class="help" data-help-at="max-label">ドット数（幅×高さ）。超えたら出力せずに、収まる「横のマス数」の候補を出します。CLI の --max-size</small>
+          </div>
+          <div class="field">
+            <span class="label" id="canvas-label">キャンバス</span>
+            <span class="pair"><input type="number" id="canvas-w" min="1" step="1" placeholder="なし" aria-label="キャンバスの幅">×<input type="number" id="canvas-h" min="1" step="1" placeholder="なし" aria-label="キャンバスの高さ"></span>
+            <small class="help" data-help-at="canvas-label">空ならなし。入れると、絵を真ん中に置いて余白を足し、この大きさにします。余白はパレットのいちばん暗い色。CLI の --canvas</small>
+          </div>
+        </div>
+        <div class="controls" style="margin-top:10px">
+          <div class="field">
+            <label class="check"><input type="checkbox" id="four-bit"> 4096 色に丸める</label>
+            <small class="help">パレットの色を RGB 各 16 段階（4 ビット）の 4096 色の中から選びます。切ると丸めません（CLI の --no-4bit）</small>
+          </div>
+          <div class="field">
+            <label class="check"><input type="checkbox" id="keep-darkest"> いちばん暗い色を取っておく</label>
+            <small class="help">パレットの 1 色を絵の中のいちばん暗い色にして、暗い線が中間の色に吸われて消えないようにします（CLI の --no-keep-darkest で切）</small>
+          </div>
+        </div>
+      </div>
+    </details>
+
+    <div id="status"></div>
+    <div id="error" class="message error" hidden>
+      <div id="error-text"></div>
+      <div id="candidates" class="candidates" hidden></div>
+      <details id="error-detail-box" hidden><summary>詳細（知らせるときに貼り付けてください）</summary><pre id="error-detail"></pre></details>
+    </div>
+    <div id="warn" class="message warn" hidden></div>
+  </section>
+
+  <section class="panel">
+    <div class="controls">
+      <div class="field">
+        <label for="zoom">拡大</label>
+        <select id="zoom"></select>
+        <small class="help">結果を何倍で見るか（ニアレストネイバー）。元の絵は結果と同じ大きさに合わせて並べます</small>
+      </div>
+    </div>
+    <div class="views" style="margin-top:12px">
+      <div class="view"><h2>元の絵</h2><div class="stage" id="src-stage"><span class="empty">画像を選んでください</span></div>
+        <div class="meta" id="src-meta"></div></div>
+      <div class="view"><h2>結果</h2><div class="stage" id="out-stage"><span class="empty">まだ変換していません</span></div>
+        <div class="meta" id="out-meta"></div></div>
+    </div>
+    <h2 style="font-size:1em;margin:14px 0 0" id="pal-title">パレット</h2>
+    <div class="note help" data-help-at="pal-title">左から暗い順（0 番がいちばん暗い色）。上が番号と色、下が RGB 各 0〜15（4096 色に丸めたとき）と使ったドット数</div>
+    <div class="swatches" id="swatches"></div>
+    <div class="actions">
+      <a class="button" id="dl-png" aria-disabled="true">PNG を保存</a>
+      <a class="button secondary" id="dl-json" aria-disabled="true">JSON を保存</a>
+    </div>
+  </section>
+
+  <footer>
+    <span class="help" data-help-at="build-line">処理は <a href="https://pyodide.org/">Pyodide</a>（ブラウザの中で動く Python）で、CLI（<code>python -m apps.still</code>）と
+    同じ Python のコードを使います。初回は Pyodide をインターネットから読み込むので、つながった状態で開いてください。</span>
+    <span id="build-line" data-help-name="このページ">Pyodide __PYODIDE_VERSION__ ／ ビルド __BUILD_ID__</span>
+  </footer>
+</main>
+
+<script type="application/json" id="settings-spec">__SETTINGS_SPEC__</script>
+<script type="application/json" id="py-sources">__PY_SOURCES__</script>
+
+<script id="worker-src" type="text/plain">
+// ---- Web Worker（変換中も画面が固まらないよう、Python は別のスレッドで動かす） ----
+let pyodide = null;
+let stillForWeb = null;
+async function init(indexURL, sources) {
+  importScripts(indexURL + "pyodide.js");
+  pyodide = await loadPyodide({ indexURL });
+  await pyodide.loadPackage(["numpy", "pillow"]);
+  const root = "/home/pyodide/app";
+  for (const [path, text] of Object.entries(sources)) {
+    const full = root + "/" + path;
+    pyodide.FS.mkdirTree(full.slice(0, full.lastIndexOf("/")));
+    pyodide.FS.writeFile(full, text);
+  }
+  pyodide.runPython([
+    "import sys",
+    `sys.path.insert(0, "${root}")`,
+    "from retrocore.still.convert import still_for_web",
+    "def still_app_convert(js_bytes, name, settings_json):",
+    "    return still_for_web(js_bytes.to_bytes(), name, settings_json)",
+  ].join("\n"));
+  stillForWeb = pyodide.globals.get("still_app_convert");
+}
+self.onmessage = async (ev) => {
+  const msg = ev.data;
+  try {
+    if (msg.type === "init") {
+      await init(msg.indexURL, msg.sources);
+      self.postMessage({ type: "ready", id: msg.id });
+    } else if (msg.type === "convert") {
+      const json = stillForWeb(new Uint8Array(msg.bytes), msg.name, JSON.stringify(msg.settings));
+      self.postMessage({ type: "result", id: msg.id, result: JSON.parse(json) });
+    }
+  } catch (e) {
+    self.postMessage({ type: "failed", id: msg.id, detail: String(e && e.message || e) });
+  }
+};
+</script>
+
+<script>
+"use strict";
+const PYODIDE_URL = "https://cdn.jsdelivr.net/pyodide/v__PYODIDE_VERSION__/full/";
+const SPEC = JSON.parse(document.getElementById("settings-spec").textContent);
+const $ = (id) => document.getElementById(id);
+
+// ---- 説明の文（ふだんは隠し、「？」を押したときだけ出す。Sprite App と同じしくみ） ----
+const HELP = { all: false, seq: 0, buttons: [] };
+function helpAnchor(el) {
+  if (el.dataset.helpAt) return $(el.dataset.helpAt);
+  const field = el.closest(".field");
+  return field ? field.querySelector("label, .label") : null;
+}
+function helpTargets(btn) { return btn.getAttribute("aria-controls").split(" ").map((id) => $(id)).filter(Boolean); }
+function setHelpOpen(btn, open) {
+  btn.setAttribute("aria-expanded", String(open));
+  for (const el of helpTargets(btn)) el.classList.toggle("open", open);
+}
+function addHelp(el, anchor) {
+  if (!el.id) el.id = `help-${++HELP.seq}`;
+  let btn = anchor.helpButton;
+  if (!btn) {
+    const name = (el.dataset.helpName || anchor.dataset.helpName || anchor.textContent).replace(/\s+/g, " ").trim();
+    btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "help-btn";
+    btn.textContent = "？";
+    btn.title = "説明を出す・隠す";
+    btn.setAttribute("aria-label", `「${name}」の説明`);
+    btn.setAttribute("aria-controls", "");
+    btn.addEventListener("click", () => setHelpOpen(btn, btn.getAttribute("aria-expanded") !== "true"));
+    if (anchor.tagName === "LABEL") {   // label の中に置くと入力欄の名前に混ざるので、横に並べる
+      const row = document.createElement("span");
+      row.className = "help-row";
+      anchor.replaceWith(row);
+      row.append(anchor, btn);
+    } else {
+      anchor.appendChild(btn);
+    }
+    anchor.helpButton = btn;
+    HELP.buttons.push(btn);
+  }
+  btn.setAttribute("aria-controls", `${btn.getAttribute("aria-controls")} ${el.id}`.trim());
+  setHelpOpen(btn, HELP.all);
+}
+function setHelpAll(open) {
+  HELP.all = open;
+  for (const b of HELP.buttons) setHelpOpen(b, open);
+  $("help-all").textContent = open ? "説明をすべて隠す" : "説明をすべて表示";
+  $("help-all").setAttribute("aria-pressed", String(open));
+}
+
+// ---- 設定の欄（既定は Python から埋め込んだ CLI の既定 = --mode のプリセット） ----
+for (const [key, m] of Object.entries(SPEC.modes)) $("mode").add(new Option(m.label, key));
+$("mode").value = SPEC.default_mode;
+$("colors").min = SPEC.colors.min;
+$("colors").max = SPEC.colors.max;
+$("colors-help").textContent = `パレットの色数の上限（${SPEC.colors.min}〜${SPEC.colors.max}）。似た色が多いときは、これより少なくなることがあります。CLI の --colors`;
+for (const z of [1, 2, 3, 4, 6, 8]) $("zoom").add(new Option(`${z} 倍`, String(z)));
+$("zoom").value = "3";
+function applyMode(key) {
+  const m = SPEC.modes[key];
+  $("colors").value = m.colors;
+  $("max-w").value = m.max_size[0];
+  $("max-h").value = m.max_size[1];
+  $("four-bit").checked = m.four_bit;
+  $("keep-darkest").checked = m.keep_darkest;
+  $("width").value = "";
+  $("canvas-w").value = "";
+  $("canvas-h").value = "";
+  for (const el of foldControls()) foldDefaults.set(el, ctlValue(el));
+  foldRefresh();
+}
+
+// ---- 折りたたむ欄: 最初の値（選んだプリセットの値）から変えた設定があれば、見出しに「（変更あり）」 ----
+const foldDefaults = new Map();
+function ctlValue(el) { return el.type === "checkbox" ? el.checked : el.value; }
+function foldControls() { return [...$("fold-need").querySelectorAll("input, select")]; }
+function foldRefresh() {
+  const changed = foldControls().some((el) => foldDefaults.has(el) && ctlValue(el) !== foldDefaults.get(el));
+  $("fold-need").querySelector(".fold-mark").hidden = !changed;
+}
+$("fold-need").addEventListener("input", foldRefresh);
+$("fold-need").addEventListener("change", foldRefresh);
+$("mode").addEventListener("change", () => applyMode($("mode").value));
+
+for (const el of document.querySelectorAll(".help")) {
+  const anchor = helpAnchor(el);
+  if (anchor) addHelp(el, anchor); else el.classList.add("open");
+}
+$("help-all").addEventListener("click", () => setHelpAll(!HELP.all));
+applyMode(SPEC.default_mode);
+
+function intField(id, name, { min = 1, max = SPEC.max_side, optional = false } = {}) {
+  const text = $(id).value.trim();
+  if (text === "" && optional) return null;
+  const v = Number(text);
+  if (!Number.isInteger(v) || v < min || v > max) throw new Error(`${name}は ${min}〜${max} の整数で入れてください（いまは「${text}」）。`);
+  return v;
+}
+function currentSettings() {
+  const cw = $("canvas-w").value.trim(), ch = $("canvas-h").value.trim();
+  if ((cw === "") !== (ch === "")) throw new Error("キャンバスは幅と高さの両方を入れてください（なしにするときは両方とも空に）。");
+  return {
+    mode: $("mode").value,
+    colors: intField("colors", "色数", { min: SPEC.colors.min, max: SPEC.colors.max }),
+    width: intField("width", "横のマス数", { optional: true }),
+    max_size: [intField("max-w", "上限の幅"), intField("max-h", "上限の高さ")],
+    canvas: cw === "" ? null : [intField("canvas-w", "キャンバスの幅"), intField("canvas-h", "キャンバスの高さ")],
+    four_bit: $("four-bit").checked,
+    keep_darkest: $("keep-darkest").checked,
+  };
+}
+
+// ---- 画面の表示 ----
+let worker = null, nextId = 1, ready = false, busy = false;
+const pending = new Map();
+let srcFile = null, srcBytes = null, srcUrl = null, srcImg = null, outImg = null, outPngUrl = null, outJsonUrl = null;
+function setStatus(text, spin) {
+  $("status").innerHTML = "";
+  if (spin) { const s = document.createElement("span"); s.className = "spinner"; $("status").appendChild(s); }
+  if (text) $("status").appendChild(document.createTextNode(text));
+}
+function showError(text, detail = "", candidates = []) {
+  $("error").hidden = !text;
+  $("error-text").textContent = text || "";
+  $("error-detail").textContent = detail || "";
+  $("error-detail-box").hidden = !detail;
+  const box = $("candidates");
+  box.innerHTML = "";
+  box.hidden = !candidates.length;
+  if (candidates.length) {
+    box.appendChild(document.createTextNode("横のマス数の候補（押すとその数で変換します）:"));
+    for (const c of candidates) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "secondary";
+      b.textContent = `${c.width}（${c.width}×${c.height} ドット。${c.note}）`;
+      b.addEventListener("click", () => { $("width").value = String(c.width); foldRefresh(); runConvert(); });
+      box.appendChild(b);
+    }
+  }
+}
+function showWarnings(list) {
+  $("warn").hidden = !list.length;
+  $("warn").textContent = list.map((w) => `警告: ${w}`).join("\n");
+}
+function updateButtons() { $("run").disabled = !ready || busy || !srcBytes; }
+function setLink(id, url, name) {
+  const a = $(id);
+  if (url) { a.href = url; a.download = name; a.setAttribute("aria-disabled", "false"); }
+  else { a.removeAttribute("href"); a.removeAttribute("download"); a.setAttribute("aria-disabled", "true"); }
+}
+function loadImage(url) {
+  return new Promise((resolve, reject) => { const im = new Image(); im.onload = () => resolve(im); im.onerror = reject; im.src = url; });
+}
+// 結果は倍率どおり、元の絵は結果と同じ表示の大きさに合わせる（どちらもニアレストネイバー）
+function render() {
+  const z = Number($("zoom").value);
+  const put = (stage, img, w, h) => {
+    stage.innerHTML = "";
+    img.style.width = `${w}px`;
+    img.style.height = `${h}px`;
+    stage.appendChild(img);
+  };
+  if (outImg) {
+    const w = outImg.naturalWidth * z, h = outImg.naturalHeight * z;
+    put($("out-stage"), outImg, w, h);
+    if (srcImg) {
+      // キャンバスで余白を足したときは、元の絵を余白の内側（絵の部分）に合わせる
+      const pic = outImg.picture || { width: outImg.naturalWidth, height: outImg.naturalHeight };
+      put($("src-stage"), srcImg, pic.width * z, pic.height * z);
+    }
+  } else if (srcImg) {
+    put($("src-stage"), srcImg, srcImg.naturalWidth, srcImg.naturalHeight);
+  }
+}
+$("zoom").addEventListener("change", render);
+
+function clearResult(text) {
+  outImg = null;
+  for (const u of [outPngUrl, outJsonUrl]) if (u) URL.revokeObjectURL(u);
+  outPngUrl = outJsonUrl = null;
+  $("out-stage").innerHTML = `<span class="empty">${text}</span>`;
+  $("out-meta").textContent = "";
+  $("swatches").innerHTML = "";
+  setLink("dl-png", null);
+  setLink("dl-json", null);
+  showWarnings([]);
+  render();
+}
+
+async function useFile(file) {
+  if (!file) return;
+  srcFile = file;
+  srcBytes = new Uint8Array(await file.arrayBuffer());
+  if (srcUrl) URL.revokeObjectURL(srcUrl);
+  srcUrl = URL.createObjectURL(file);
+  try { srcImg = await loadImage(srcUrl); } catch (e) { srcImg = null; }
+  $("src-meta").textContent = srcImg ? `${file.name}（${srcImg.naturalWidth}×${srcImg.naturalHeight}px）` : file.name;
+  showError("");
+  clearResult("まだ変換していません");
+  updateButtons();
+  if (ready) runConvert();
+}
+$("file").addEventListener("change", () => useFile($("file").files[0]));
+const drop = $("drop");
+drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
+drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("over"); useFile(e.dataTransfer.files[0]); });
+
+function decodeBase64(text) {
+  const bin = atob(text);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+function call(msg) {
+  return new Promise((resolve, reject) => {
+    const id = nextId++;
+    pending.set(id, { resolve, reject });
+    worker.postMessage({ ...msg, id });
+  });
+}
+function startWorker() {
+  const blob = new Blob([$("worker-src").textContent], { type: "text/javascript" });
+  worker = new Worker(URL.createObjectURL(blob));
+  worker.onmessage = (ev) => {
+    const m = ev.data, p = pending.get(m.id);
+    if (!p) return;
+    pending.delete(m.id);
+    if (m.type === "failed") p.reject(m); else p.resolve(m);
+  };
+  worker.onerror = (ev) => {
+    ev.preventDefault();
+    for (const p of pending.values()) p.reject({ detail: ev.message || "Worker のエラー" });
+    pending.clear();
+  };
+}
+
+function outName() { return srcFile && srcFile.name ? srcFile.name.replace(/\.[^.]+$/, "") : "still"; }
+
+async function runConvert() {
+  if (busy || !ready || !srcBytes) return;
+  let settings;
+  try { settings = currentSettings(); } catch (e) { showError(e.message); return; }
+  showError("");
+  busy = true;
+  updateButtons();
+  clearResult("変換しています…");
+  setStatus("変換しています…（大きな画像では数十秒かかることがあります）", true);
+  const t0 = performance.now();
+  try {
+    const { result } = await call({ type: "convert", bytes: srcBytes.slice().buffer, name: srcFile.name, settings });
+    if (!result.ok) {
+      clearResult("変換できませんでした");
+      showError(result.error, result.detail ? result.detail + "\nブラウザ: " + navigator.userAgent : "", result.candidates || []);
+      setStatus("", false);
+      return;
+    }
+    const png = decodeBase64(result.png_base64);
+    outPngUrl = URL.createObjectURL(new Blob([png], { type: "image/png" }));
+    outJsonUrl = URL.createObjectURL(new Blob([result.json_text], { type: "application/json" }));
+    outImg = await loadImage(outPngUrl);
+    const info = JSON.parse(result.json_text);
+    outImg.picture = info.picture;
+    setLink("dl-png", outPngUrl, `${outName()}.png`);
+    setLink("dl-json", outJsonUrl, `${outName()}.json`);
+    const d = result.dots;
+    const how = d.method === "grid" ? `グリッド検出（1 ドット ${d.dot_size.toFixed(1)}px）`
+                                    : `横 ${d.width} マス（1 マス ${d.cell_size[0].toFixed(1)}×${d.cell_size[1].toFixed(1)}px）`;
+    $("out-meta").textContent = `${how} → ${info.picture.width}×${info.picture.height} ドット、${result.colors.used} 色`
+      + (result.canvas ? `、キャンバス ${result.width}×${result.height}` : "");
+    for (const p of result.palette) {
+      const el = document.createElement("div");
+      el.className = "swatch";
+      el.innerHTML = `<span class="chip"></span><b></b><span></span>`;
+      el.querySelector(".chip").style.background = p.hex;
+      el.querySelector("b").textContent = `${p.index} ${p.hex}`;
+      el.querySelector("span:last-child").textContent = `${p.rgb4 ? p.rgb4.join(",") : p.rgb.join(",")} ・${p.count}`;
+      el.title = `${p.index} 番 ${p.hex}（RGB ${p.rgb.join(", ")}${p.rgb4 ? ` ／ 各 0〜15: ${p.rgb4.join(", ")}` : ""}）${p.count} ドット`;
+      $("swatches").appendChild(el);
+    }
+    showWarnings(result.warnings);
+    render();
+    setStatus(`変換しました（${((performance.now() - t0) / 1000).toFixed(1)} 秒）。`, false);
+  } catch (e) {
+    clearResult("変換できませんでした");
+    showError("思いがけないエラーで変換できませんでした。", (e && e.detail) || String(e));
+    setStatus("", false);
+  } finally {
+    busy = false;
+    updateButtons();
+  }
+}
+$("run").addEventListener("click", runConvert);
+
+async function boot() {
+  setStatus("準備中です。Python（Pyodide）を読み込んでいます（初回は 10〜30 秒ほどかかります）…", true);
+  try {
+    startWorker();
+    const sources = JSON.parse($("py-sources").textContent);
+    await call({ type: "init", indexURL: PYODIDE_URL, sources });
+    ready = true;
+    setStatus(srcBytes ? "準備ができました。「② 変換する」を押してください。" : "準備ができました。画像を選んでください。", false);
+  } catch (e) {
+    setStatus("", false);
+    showError("変換の準備ができませんでした。Python（Pyodide）をインターネットから読み込めなかった可能性があります。\n"
+      + "インターネットにつながっているか確かめてから、ページを再読み込みしてください。", (e && e.detail) || String(e));
+  } finally {
+    updateButtons();
+  }
+}
+boot();
+</script>
+</body>
+</html>

@@ -80,7 +80,15 @@
 - Aseprite 形式の JSON（時間・タグ・pivot つきのスライス）と、Godot の SpriteFrames（.tres）を直接書き出す（今は [apps/sprite/README.md](../apps/sprite/README.md) の GDScript の例で読む）
 - 公開する場所（GitHub Pages など）と自動の公開、オフライン版、複数の画像のまとめての変換
 
+### 1 枚絵のアプリ（Still App。最初の版でやらなかったこと）
+
+- ディザ・スタイルの表・アプリの中でのドットの手直し（大きな絵は Pixelorama などで直す想定）・今風のモード・写真の下書きのモード
+- 98 の縦長のドット（約 1：1.2）の再現（今は正方形のドットで出す）
+- ai16 のように、Sprite App と同じグリッド検出ではマス目が見つからない絵（縦の境目の推定は約 10.6px）。今は `--width` の候補を出して止める
+
 ## 試したいこと
+
+- 1 枚絵のアプリのしきい値（いちばん暗い色に要る割合 1%・大きな面を守る割合 0.5%・端のマスを落とす半ドット）を、ai15・ai16 以外の絵で
 
 - [apps/sprite/README.md](../apps/sprite/README.md) の「ゲームで使うときの設定（Godot 4）」と GDScript の例を、本物の Godot 4 で 1 回確かめる（設定の名前・`remove_animation("default")`・書き出したゲームで JSON を読めるか）
 - 重ねのエフェクト（`position`）を本物の Godot で読む・.piskel を本物の Piskel（piskelapp.com）で開く確かめを、利用者の手元で 1 回ずつ

@@ -38,8 +38,12 @@ PYODIDE_VERSION = "0.27.7"
 
 
 def python_sources() -> dict[str, str]:
-    """retrocore の .py ファイル（パッケージからの相対パス → 中身）。改行は LF にそろえる。"""
-    files = sorted(p for p in (ROOT / "retrocore").rglob("*.py") if "__pycache__" not in p.parts)
+    """retrocore の .py ファイル（パッケージからの相対パス → 中身）。改行は LF にそろえる。
+
+    1 枚絵のアプリ（Still App）だけが使う retrocore/still/ は入れない（Sprite App の HTML を変えないため）。
+    """
+    files = sorted(p for p in (ROOT / "retrocore").rglob("*.py")
+                   if "__pycache__" not in p.parts and p.relative_to(ROOT / "retrocore").parts[0] != "still")
     return {p.relative_to(ROOT).as_posix(): p.read_text(encoding="utf-8").replace("\r\n", "\n") for p in files}
 
 

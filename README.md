@@ -96,6 +96,7 @@ python tools/build_sprite_web.py
 | `retrocore/sprite/` | Sprite App の処理（NumPy と Pillow だけ。ブラウザの Pyodide でも動く） |
 | `retrocore/` のほかのファイル | 古いパソコン風の CG 変換（減色・ディザ・解析）。Sprite App からは使っていない |
 | `apps/sprite/` | CLI（`cli.py`）とブラウザ版（`web/`）、動きの表の見本（`examples/`） |
+| `retrocore/still/`・`apps/still/` | 1 枚絵のアプリ（Still App。ドット絵風の 1 枚絵を決まった色数・格子にそろえる）の処理と、CLI・ブラウザ版（[使い方](apps/still/README.md)） |
 | `tools/` | ブラウザ版の HTML を作る `build_sprite_web.py`、比較画像を作る `compare_sprite_*.py` など |
 | `tests/` | pytest。テスト画像はすべてコードで合成 |
 | `docs/` | 設計（`sprite-app-plan.md`）・仕組み（`how-it-works.md`）・CLI（`cli.md`）・やり残したこと（`TODO.md`）・これまでのまとめ（`history.md`）。昔の記録は `archive/` |
