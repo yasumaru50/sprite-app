@@ -28,6 +28,7 @@ from retrocore.sprite.cleanup import LEVEL_HELP  # noqa: E402
 from retrocore.sprite.convert import MAX_COLORS, SpriteSettings, motion_spec  # noqa: E402
 from retrocore.sprite.motion import gif as gif_mod  # noqa: E402
 from retrocore.sprite.fx import fx_spec  # noqa: E402
+from retrocore.sprite import compare as compare_mod  # noqa: E402
 
 WEB = ROOT / "apps" / "sprite" / "web"
 TEMPLATE = WEB / "template.html"
@@ -51,6 +52,7 @@ def settings_spec() -> dict:
         "outline": {"default": d.outline, "choices": [[k, v] for k, v in outline_mod.MODES.items()]},
         "motion": motion_spec(),   # 動き（呼吸）の欄。既定は CLI の --motion-frames などと同じ
         "fx": fx_spec(),   # 重ね（--fx）の選択肢
+        "compare": compare_mod.spec(),   # 大きさをくらべる（CLI の compare の --scale・--grid・--gap）
         "gif": {"default": gif_mod.DEFAULT_SCALE, "min": gif_mod.MIN_SCALE, "max": gif_mod.MAX_SCALE},   # GIF の拡大（--gif-scale）
         # コマが並んだ絵（--frames）。画面に出すそろえ方は初心者向け（CLI の center・none は出さない）
         "frames": {"align": {"default": frames_mod.DEFAULT_ALIGN, "choices": [

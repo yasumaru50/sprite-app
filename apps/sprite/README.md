@@ -161,6 +161,16 @@ AI が描いた「ドット絵風の画像」（ドット 1 個が約 20px）か
 5. 動きをまとめたシートのときは、A に動きごとの .piskel（`<出力名>_walk.piskel` など）、B にまとめたシートの JSON、C に**直す前のまとめたシート（要る）**。
    どの動きかはファイルの名前から決まる（分からなければ「D. 直した動き」で選ぶ）。まとめたシートのその動きの行だけが直る
 
+### 大きさをくらべる
+
+AI は絵ごとに格子の細かさを決めるので、変換した素材どうしの大きさや線の太さがそろっているかを確かめる（CLI の `compare`）。
+
+1. いちばん下の「**大きさをくらべる**」を開き、くらべる PNG を選ぶ（いくつでも。シートは同じ名前の JSON も選ぶと 1 コマ目だけを使う）。
+   「今の結果を足す」で、いま変換した絵（コマが並んだ絵ならシートの 1 コマ目）も足せる。▲▼で並べ替え、「外す」で外す
+2. 1 枚目に主人公などの基準のキャラを置くと、その頭の高さに青い点線が引かれる
+3. 倍率（既定 4）・マス目の大きさ（既定 16 ドット）を決めて「作る」。足元を赤い地面の線にそろえて並べた画像と、それぞれの大きさ（幅x高さ）が出る。
+   日本語の名前は画像の中では「#2」のような番号になる（対応は画像の下に出る）
+
 ## ゲームで使うときの設定（Godot 4）
 
 ドット絵は 1 ドット＝1 画素で作ってあるので、ゲームの側で「ぼかさない・小数の位置に置かない・整数倍で広げる」設定が要る。
@@ -264,6 +274,7 @@ python -m apps.sprite 歩き.png --frames --frame-count 4 --steady on --same-as-
 python -m apps.sprite dance1.png dance2.png --frames --join -o out/sprite/dance.png --gif # 別々のファイルの絵をつなげる
 python -m apps.sprite 入力.png --motion breathe --fx surprise --gif                     # ！（驚き）を重ねる（別のシート）
 python -m apps.sprite 直した.piskel --readback 元.json --gif --mirror --piskel           # 手直しを読み戻す
+python -m apps.sprite compare hero.png slime.png walk.png walk.json --out compare.png   # 大きさをくらべる画像
 ```
 
 ほかのオプションは `python -m apps.sprite --help` と [docs/cli.md](../../docs/cli.md)。

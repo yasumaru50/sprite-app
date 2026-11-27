@@ -169,6 +169,12 @@
   table.same-table th, table.same-table td { border: 1px solid var(--line); padding: 2px 8px; text-align: left; }
   ol#join-list { margin: 6px 0; padding-left: 1.6em; }
   ol#join-list li { margin: 3px 0; }
+  ol#cmp-list { margin: 6px 0; padding-left: 1.6em; }
+  ol#cmp-list li { margin: 3px 0; }
+  ol#cmp-list button { padding: 1px 8px; font-size: 0.85em; margin-left: 4px; }
+  ol#cmp-list .cmp-info { color: var(--muted); font-size: 0.9em; margin-left: 6px; }
+  #cmp-stage { height: auto; max-height: 520px; display: block; }
+  #cmp-stage img { image-rendering: pixelated; display: block; max-width: none; }
   ol#join-list button { padding: 1px 8px; font-size: 0.85em; margin-left: 4px; }
   ol#join-list button.join-pick { margin-left: 0; background: transparent; color: inherit; border: 1px solid transparent; text-align: left; }
   ol#join-list li.selected button.join-pick { border-color: currentColor; font-weight: 700; }
@@ -1007,6 +1013,48 @@
     </div>
   </details>
 
+  <details class="fold panel" id="fold-compare">
+    <summary><span class="fold-name">大きさをくらべる</span><small class="fold-what">変換した素材を足元をそろえて並べ、大きさ・線の太さを 1 枚の画像で確かめる</small></summary>
+    <div class="fold-body">
+    <h2 class="title" id="cmp-title">大きさをくらべる</h2>
+    <div class="note help" data-help-at="cmp-title">AI は絵ごとに格子の細かさを決めるので、変換した素材どうしの大きさや線の太さがそろっているかを確かめます。
+      透明な余白を切り詰め、足元を同じ地面の線（赤）にそろえて、同じ倍率で横に並べます（絵そのものは拡大・縮小しません）。
+      マス目は地面の線から数えるので、高さが何マス分か読めます。シートの PNG は、同じ名前の JSON も選ぶと 1 コマ目だけを使います。</div>
+    <div class="note help" data-help-at="cmp-title">1 枚目に主人公などの基準のキャラを置くと、その頭の高さに青い点線が引かれ、ほかの絵と比べやすくなります。</div>
+    <div class="controls" style="margin-top:10px">
+      <div class="field">
+        <label for="cmp-file">くらべるファイル（PNG と、シートの JSON。いくつでも）</label>
+        <input type="file" id="cmp-file" accept=".png,image/png,.json,application/json" multiple>
+        <small class="help">選んだ順に一覧の最後に足します。上の作業とは別です</small>
+      </div>
+      <div class="field">
+        <label for="cmp-scale">倍率</label>
+        <input type="number" id="cmp-scale" step="1">
+        <small class="help" id="cmp-scale-help"></small>
+      </div>
+      <div class="field">
+        <label for="cmp-grid">マス目の大きさ</label>
+        <input type="number" id="cmp-grid" step="1">
+        <small class="help" id="cmp-grid-help"></small>
+      </div>
+    </div>
+    <ol id="cmp-list"></ol>
+    <div class="actions">
+      <button id="cmp-add-current" type="button" class="secondary" disabled>今の結果を足す</button>
+      <button id="cmp-run" type="button" disabled>作る</button>
+      <a id="cmp-save" class="button" aria-disabled="true" href="#" hidden>くらべた画像を保存（compare.png）</a>
+    </div>
+    <div id="cmp-status" class="note" role="status" aria-live="polite">ファイルを選ぶか「今の結果を足す」を押してください。</div>
+    <div id="cmp-error" class="message error" role="alert" hidden></div>
+    <div id="cmp-warn" class="message warn" hidden></div>
+    <div id="cmp-body" hidden>
+      <div class="stage" id="cmp-stage" style="margin-top:12px"><img id="cmp-img" alt="大きさをくらべた画像"></div>
+      <ul id="cmp-lines"></ul>
+      <div class="note help" data-help-at="cmp-title">画像は CLI の <code id="cmp-cli">compare</code> と同じです。</div>
+    </div>
+    </div>
+  </details>
+
   <footer>
     <span class="help" data-help-at="build-line">処理は <a href="https://pyodide.org/">Pyodide</a>（ブラウザの中で動く Python）で、CLI（<code>python -m apps.sprite</code>）と
     同じ Python のコードを使います。初回は Pyodide をインターネットから読み込むので、つながった状態で開いてください。</span>
@@ -1035,6 +1083,7 @@ let framesRestoreForWeb = null;
 let readbackForWeb = null;
 let fxForWeb = null;
 let zipForWeb = null;
+let compareForWeb = null;
 let animsConvertForWeb = null, animsSheetsForWeb = null, animsGifForWeb = null;
 async function init(indexURL, sources) {
   importScripts(indexURL + "pyodide.js");
@@ -1081,6 +1130,10 @@ async function init(indexURL, sources) {
     "    return gif_for_web(js_bytes.to_bytes(), sheet_json, options_json)",
     "from retrocore.sprite.fx import fx_for_web",
     "from retrocore.sprite.bundle import zip_for_web",
+    "from retrocore.sprite.compare import compare_for_web",
+    "def sprite_app_compare(js_list, names_json, options_json):",
+    "    import json",
+    "    return compare_for_web([b.to_bytes() for b in js_list], json.loads(names_json), options_json)",
     "def sprite_app_zip(js_list, names_json):",
     "    import json",
     "    return zip_for_web([b.to_bytes() for b in js_list], json.loads(names_json))",
@@ -1115,6 +1168,7 @@ async function init(indexURL, sources) {
   animsGifForWeb = pyodide.globals.get("sprite_app_anims_gif");
   fxForWeb = pyodide.globals.get("sprite_app_fx");
   zipForWeb = pyodide.globals.get("sprite_app_zip");
+  compareForWeb = pyodide.globals.get("sprite_app_compare");
 }
 self.onmessage = async (ev) => {
   const msg = ev.data;
@@ -1184,6 +1238,10 @@ self.onmessage = async (ev) => {
       // 直したシートの読み戻し（CLI の --readback と同じ関数）
       const json = readbackForWeb(new Uint8Array(msg.edited), msg.name, msg.info,
                                   msg.original ? new Uint8Array(msg.original) : null, JSON.stringify(msg.options));
+      self.postMessage({ type: "result", id: msg.id, result: JSON.parse(json) });
+    } else if (msg.type === "compare") {
+      // 大きさをくらべる: 選んだ順のファイル（PNG と JSON）を CLI の compare と同じ関数で並べる
+      const json = compareForWeb(msg.list.map((b) => new Uint8Array(b)), JSON.stringify(msg.names), JSON.stringify(msg.options));
       self.postMessage({ type: "result", id: msg.id, result: JSON.parse(json) });
     } else if (msg.type === "zip") {
       // まとめて保存: 画面で 1 つずつ保存できるファイル（同じバイト列）を、日時を固定した ZIP にまとめる
@@ -1363,6 +1421,7 @@ function updateButtons() {
   for (const b of document.querySelectorAll("#join-list button.secondary")) b.disabled = busy || b.dataset.off === "1";
   if ($("join-add-button")) $("join-add-button").disabled = busy;
   $("download").setAttribute("aria-disabled", outUrl && !busy ? "false" : "true");
+  if (typeof cmpButtons === "function") cmpButtons();
 }
 function zoomFor(img, stage) {
   const z = $("zoom").value;
@@ -6719,6 +6778,132 @@ $("dl-zip").addEventListener("click", async () => {
   }
 });
 foldRefresh();
+
+// ---- 大きさをくらべる（CLI の compare と同じ retrocore/sprite/compare.py で、同じ PNG を作る） ----
+// 一覧の 1 行 = 並べる絵 1 枚（PNG と、組になるシートの JSON。JSON は拡張子を除いた名前が同じ PNG と組にする）
+var cmp = { items: [], running: false, url: null };   // var: 上の updateButtons() から先に呼ばれても困らないように
+for (const [id, key] of [["cmp-scale", "scale"], ["cmp-grid", "grid"]]) {
+  const sp = SPEC.compare[key];
+  $(id).min = sp.min; $(id).max = sp.max; $(id).value = sp.default;
+  $(`${id}-help`).textContent = key === "scale"
+    ? `全体を何倍で表示するか（${sp.min}〜${sp.max}。絵そのものは拡大しません）`
+    : `ドット（${sp.min}〜${sp.max}）。横の線は地面の線から数えます`;
+}
+function cmpStem(name) { const i = name.lastIndexOf("."); return i > 0 ? name.slice(0, i) : name; }
+function cmpButtons() {
+  if (!cmp) return;
+  $("cmp-run").disabled = cmp.running || !ready || !cmp.items.length;
+  $("cmp-add-current").disabled = cmp.running || !(outPng || (motion.sheetPng && motion.sheetJson));
+  for (const b of document.querySelectorAll("#cmp-list button")) b.disabled = cmp.running || b.dataset.off === "1";
+}
+function cmpRender(note) {
+  const ul = $("cmp-list");
+  ul.innerHTML = "";
+  cmp.items.forEach((it, i) => {
+    const li = document.createElement("li");
+    li.appendChild(document.createTextNode(it.name));
+    const btn = (label, title, off, run) => {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "secondary"; b.textContent = label; b.title = title;
+      b.setAttribute("aria-label", `${it.name}: ${title}`); b.dataset.off = off ? "1" : "0";
+      b.addEventListener("click", run); li.appendChild(b);
+    };
+    btn("▲", "1 つ上へ", i === 0, () => { cmp.items.splice(i - 1, 0, cmp.items.splice(i, 1)[0]); cmpRender(`「${it.name}」を上へ動かしました。`); });
+    btn("▼", "1 つ下へ", i === cmp.items.length - 1, () => { cmp.items.splice(i + 1, 0, cmp.items.splice(i, 1)[0]); cmpRender(`「${it.name}」を下へ動かしました。`); });
+    btn("外す", "一覧から外す", false, () => { cmp.items.splice(i, 1); cmpRender(`「${it.name}」を一覧から外しました。`); });
+    const span = document.createElement("span");
+    span.className = "cmp-info";
+    span.textContent = (i === 0 ? "基準・" : "") + (it.json ? `シートの 1 コマ目（${it.jsonName}）` : "PNG 全体");
+    li.appendChild(span);
+    ul.appendChild(li);
+  });
+  if (note) $("cmp-status").textContent = note + (cmp.items.length ? "「作る」を押すと画像を作ります。" : "");
+  cmpButtons();
+}
+async function cmpAddFiles(files) {
+  const pngs = [], jsons = [];
+  for (const f of files) (/\.json$/i.test(f.name) ? jsons : pngs).push(f);
+  const added = [], lost = [];
+  for (const f of pngs) cmp.items.push({ name: f.name, png: new Uint8Array(await f.arrayBuffer()), json: null, jsonName: "" });
+  for (const f of jsons) {
+    // 今回選んだ PNG か、一覧にある PNG のうち、名前が同じもの（後ろから探す）と組にする
+    const it = cmp.items.slice().reverse().find((v) => cmpStem(v.name) === cmpStem(f.name));
+    if (!it) { lost.push(f.name); continue; }
+    it.json = new Uint8Array(await f.arrayBuffer()); it.jsonName = f.name;
+  }
+  for (const f of pngs) added.push(`「${f.name}」`);
+  cmpRender((added.length ? `${added.join("")}を一覧の最後に足しました。` : "")
+    + (lost.length ? `同じ名前の PNG が無いので使わなかった JSON: ${lost.join("、")}。` : ""));
+}
+$("cmp-file").addEventListener("change", async () => {
+  const files = Array.from($("cmp-file").files || []);
+  $("cmp-file").value = "";
+  if (files.length) await cmpAddFiles(files);
+});
+$("cmp-add-current").addEventListener("click", () => {
+  const enc = new TextEncoder();
+  const name = `${outBase}.png`;
+  if (framesMode() && motion.sheetPng && motion.sheetJson) {
+    const text = typeof motion.sheetJson === "string" ? motion.sheetJson : JSON.stringify(motion.sheetJson);
+    cmp.items.push({ name, png: motion.sheetPng.slice(), json: enc.encode(text), jsonName: `${outBase}.json` });
+  } else if (outPng) {
+    cmp.items.push({ name, png: outPng.slice(), json: null, jsonName: "" });
+  } else return;
+  cmpRender(`いまの結果（${name}）を一覧の最後に足しました。`);
+});
+function cmpOptions() {
+  const o = {};
+  for (const [id, key, label] of [["cmp-scale", "scale", "倍率"], ["cmp-grid", "grid", "マス目の大きさ"]]) {
+    const sp = SPEC.compare[key], v = Number($(id).value);
+    if (!Number.isInteger(v) || v < sp.min || v > sp.max) throw new Error(`${label}は ${sp.min}〜${sp.max} の整数で入れてください（いまは「${$(id).value}」）。`);
+    o[key] = v;
+  }
+  o.gap = SPEC.compare.gap.default;
+  return o;
+}
+function cmpCli(o) {
+  const parts = ["compare", ...cmp.items.flatMap((it) => (it.json ? [it.name, it.jsonName] : [it.name]))];
+  if (o.scale !== SPEC.compare.scale.default) parts.push(`--scale ${o.scale}`);
+  if (o.grid !== SPEC.compare.grid.default) parts.push(`--grid ${o.grid}`);
+  return parts.join(" ");
+}
+$("cmp-run").addEventListener("click", async () => {
+  if (cmp.running || !ready || !cmp.items.length) return;
+  $("cmp-error").hidden = true; $("cmp-warn").hidden = true;
+  let options;
+  try { options = cmpOptions(); } catch (e) { $("cmp-error").textContent = e.message; $("cmp-error").hidden = false; return; }
+  const list = [], names = [];
+  cmp.items.forEach((it) => {
+    list.push(it.png.slice().buffer); names.push(it.name);
+    // JSON は PNG と同じ名前（拡張子だけ違う）で渡す（Python で組にする）
+    if (it.json) { list.push(it.json.slice().buffer); names.push(`${cmpStem(it.name)}.json`); }
+  });
+  cmp.running = true; cmpButtons();
+  $("cmp-status").textContent = "くらべる画像を作っています…";
+  try {
+    const { result } = await call({ type: "compare", list, names, options });
+    if (!result.ok) { $("cmp-error").textContent = result.error; $("cmp-error").hidden = false; $("cmp-status").textContent = ""; return; }
+    const png = decodeBase64(result.png_base64);
+    if (cmp.url) URL.revokeObjectURL(cmp.url);
+    cmp.url = URL.createObjectURL(new Blob([png], { type: "image/png" }));
+    $("cmp-img").src = cmp.url;
+    $("cmp-save").href = cmp.url; $("cmp-save").download = result.name;
+    $("cmp-save").hidden = false; $("cmp-save").setAttribute("aria-disabled", "false");
+    const ul = $("cmp-lines");
+    ul.innerHTML = "";
+    for (const line of result.lines) { const li = document.createElement("li"); li.textContent = line; ul.appendChild(li); }
+    if (result.warnings.length) { $("cmp-warn").textContent = result.warnings.join("\n"); $("cmp-warn").hidden = false; }
+    $("cmp-cli").textContent = cmpCli(options);
+    $("cmp-body").hidden = false;
+    $("cmp-status").textContent = `できました（${result.width}×${result.height} 画素）。赤い線が地面、青い点線が 1 枚目のいちばん上の高さです。`;
+  } catch (e) {
+    $("cmp-error").textContent = "くらべる画像を作れませんでした。" + (e && e.detail ? `（${e.detail}）` : "");
+    $("cmp-error").hidden = false; $("cmp-status").textContent = "";
+  } finally {
+    cmp.running = false; cmpButtons();
+  }
+});
+cmpRender();
 
 boot();
 </script>
