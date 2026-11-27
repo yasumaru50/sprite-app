@@ -24,6 +24,7 @@
     python -m apps.sprite dance1.png dance2.png --frames --join -o out/sprite/dance.png   # 別々のファイルの絵を並べた順につなげて 1 つの動きにする
     python -m apps.sprite 入力 --motion breathe --fx surprise --gif   # ！（驚き）を別のシート（<出力名>_breathe_fx_surprise.png / .json）にして重ねる
     python -m apps.sprite 直した.piskel --readback 元.json --gif --mirror --piskel   # 手直ししたシート（PNG か .piskel）を読み戻して作り直す
+    python -m apps.sprite compare hero.png slime.png walk.png walk.json -o out/sprite/compare.png   # 大きさをくらべる画像を作る
 
 入力にはファイルかフォルダ（中の画像をすべて処理）を指定する。工程は `build_pipeline()` で組み立てる。
 入力の種類（`--input-type`）は利用者が選ぶ。既定はドット絵風（`pixel`）で、出力の大きさはグリッド検出で決まる。
@@ -68,6 +69,7 @@ from retrocore.sprite import steady as steady_mod
 from retrocore.sprite import edit as edit_mod
 from retrocore.sprite import canvas as canvas_mod
 from retrocore.sprite import fx as fx_mod
+from retrocore.sprite import compare as compare_mod
 
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tif", ".tiff"}
 DEFAULT_OUT = Path("out") / "sprite"
@@ -1901,7 +1903,56 @@ def preview_path(output: Path, factor: int) -> Path:
     return output.with_name(f"{output.stem}_x{factor}.png")
 
 
+def build_compare_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        prog="python -m apps.sprite compare",
+        description="変換した素材の大きさをくらべる画像を作る（余白を切り詰め、足元をそろえて同じ倍率で横に並べる）。"
+                    "シートの PNG と同じ名前の JSON も渡すと 1 コマ目だけを使う")
+    p.add_argument("files", nargs="+", type=Path, help="くらべる PNG（並べる順）と、シートの JSON")
+    p.add_argument("--scale", type=int, default=compare_mod.DEFAULT_SCALE,
+                   help=f"全体の拡大（{compare_mod.MIN_SCALE}〜{compare_mod.MAX_SCALE}。既定 {compare_mod.DEFAULT_SCALE}）")
+    p.add_argument("--grid", type=int, default=compare_mod.DEFAULT_GRID,
+                   help=f"マス目の大きさ（ドット。{compare_mod.MIN_GRID}〜{compare_mod.MAX_GRID}。既定 {compare_mod.DEFAULT_GRID}）")
+    p.add_argument("--gap", type=int, default=compare_mod.DEFAULT_GAP,
+                   help=f"絵と絵の間（ドット。{compare_mod.MIN_GAP}〜{compare_mod.MAX_GAP}。既定 {compare_mod.DEFAULT_GAP}）")
+    p.add_argument("-o", "--output", "--out", type=Path, default=DEFAULT_OUT / compare_mod.OUTPUT_NAME,
+                   help=f"保存先の PNG（既定 {DEFAULT_OUT / compare_mod.OUTPUT_NAME}）")
+    p.add_argument("-q", "--quiet", action="store_true", help="進み具合を表示しない")
+    return p
+
+
+def run_compare(argv: list[str]) -> int:
+    """大きさをくらべる（compare）。画面の「大きさをくらべる」と同じ retrocore の関数で、同じ PNG を作る。"""
+    parser = build_compare_parser()
+    args = parser.parse_args(argv)
+    names = [str(f) for f in args.files]
+    try:
+        pairs = compare_mod.pair_files(names)
+        if not pairs:
+            parser.error("くらべる PNG を指定してください")
+        entries = []
+        for i, j in pairs:
+            text = None if j is None else args.files[j].read_bytes().decode("utf-8-sig")
+            entries.append((args.files[i].name, args.files[i].read_bytes(), text))
+        res = compare_mod.compare_entries(entries, args.scale, args.grid, args.gap)
+    except (OSError, ValueError, UnicodeDecodeError) as e:
+        parser.error(str(e))
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_bytes(res["png"])
+    for w in res["warnings"]:
+        print(f"警告: {w}", file=sys.stderr)
+    if not args.quiet:
+        for line in compare_mod.summary_lines(res):
+            print(f"  {line}")
+        print(f"  → {args.output}（{res['width']}x{res['height']} 画素。{args.scale} 倍、マス目 {args.grid} ドット）")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
+    if argv is None:
+        argv = sys.argv[1:]
+    if argv and argv[0] == "compare":   # サブコマンド（ファイル名が compare のときは ./compare と書く）
+        return run_compare(list(argv[1:]))
     parser = build_parser()
     args = parser.parse_args(argv)
     if args.readback is not None:

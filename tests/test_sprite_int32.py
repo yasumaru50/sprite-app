@@ -342,6 +342,12 @@ REVIEWED = [
     ("cleanup.py", "_outline_color", "bincount", "lab[edge].astype(np.intp)"),
     ("cleanup.py", "_between_runs", "bincount", "lab[lab >= 0].astype(np.intp)"),
     ("downscale.py", "_pick_mode", "bincount", "bi"),                                  # np.nonzero
+    ("compare.py", "compare_images", "repeat", "scale"),                               # Python の int（倍率）
+    ("compare.py", "compare_images", "repeat", "scale"),                               # Python の int（倍率）
+    ("compare.py", "compare_images", "repeat", "scale"),                               # Python の int（倍率）
+    ("compare.py", "compare_images", "repeat", "scale"),                               # Python の int（倍率）
+    ("compare.py", "draw_text", "repeat", "t"),                                        # Python の int（文字の大きさ）
+    ("compare.py", "draw_text", "repeat", "t"),                                        # Python の int（文字の大きさ）
     ("edit.py", "_unscale", "repeat", "s"),                                            # Python の int（range の倍率）
     ("edit.py", "_unscale", "repeat", "s"),
     ("downscale.py", "_pick_mode", "bincount", "inv"),                                 # np.unique の番号
