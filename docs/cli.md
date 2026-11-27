@@ -5,7 +5,8 @@
 
 目次: [変換](#変換のオプション) / [パレット](#パレット) / [動き](#動き1-枚の絵) / [GIF](#gif-アニメ---gif) / [動きの表](#動きの表---motion-spec----write-motion-spec) /
 [コマが並んだ絵](#コマが並んだ絵---frames) / [差し替え](#差し替えまばたき---swaps) / [読み戻し](#手直ししたシートの読み戻し---readback) /
-[キャンバスを倍数にそろえる](#キャンバスを倍数にそろえる---canvas-multiple) / [大きさをくらべる](#大きさをくらべるcompare) / [シートの JSON](#シートの-json)
+[キャンバスを倍数にそろえる](#キャンバスを倍数にそろえる---canvas-multiple) / [大きさをくらべる](#大きさをくらべるcompare) / [シートの JSON](#シートの-json) /
+[1 枚絵（Still App）](#1-枚絵still-app)
 
 ## 変換のオプション
 
@@ -687,3 +688,63 @@ Windows の CLI は JSON の改行を CRLF、画面は LF で書く（中身は�
 ```
 
 1 件の項目と code の一覧は [sprite-app-plan.md](sprite-app-plan.md) の「作らなかった理由の記録（skipped）」。
+
+## 1 枚絵（Still App）
+
+`python -m apps.still` は、ドット絵風の 1 枚絵（背景も絵の一部）を、決まった色数・格子のドット絵にそろえる別のアプリ
+（`retrocore/still/`。使い方は [apps/still/README.md](../apps/still/README.md)）。ブラウザ版（`apps/still/web/still-app.html`。
+`python tools/build_still_web.py` で作る）と同じ関数で、同じ設定なら PNG と JSON はバイト単位で同じ（`tests/test_still_cli.py`）。
+
+```bash
+python -m apps.still 入力.png --mode pc98 --out out/still/部屋
+python -m apps.still 入力.png --width 160 --colors 8 --canvas 640x400
+```
+
+| オプション | 内容 |
+| --- | --- |
+| `input` | 入力の画像（PNG・JPG）。透明な所は黒で埋める |
+| `--out` / `-o` | 出力名（拡張子なし）。`<出力名>.png` と `<出力名>.json` を書く。既定 `out/still/<入力の名前>` |
+| `--mode pc98` | 初めの設定の組み合わせ（既定）: 16 色・4096 色に丸める・上限 640×400・いちばん暗い色を取っておく。強制ではなく、下で個別に変えられる |
+| `--colors N` | 色数の上限（2〜256）。似た色が多いときは少なくなる |
+| `--no-4bit` | 色を 4096 色（RGB 各 4 ビット）に丸めない |
+| `--max-size WxH` | 大きさの上限（ドット）。超えたら出力せずに止め、収まる `--width` の候補（いちばん大きい数・その 3/4・半分）を出す |
+| `--width N` | マス目を探さずに、横 N マスに等分する（縦は縦横の比から四捨五入） |
+| `--canvas WxH` | 絵を真ん中に置き、余白を足して W×H にする（奇数の余りは右・下に 1 多く）。余白はパレットのいちばん暗い色（0 番）。絵より小さい・上限より大きいときはエラー |
+| `--no-keep-darkest` | いちばん暗い色をパレットに取っておかない |
+| `-q` | 結果の表示を減らす |
+
+工程:
+1. **ドットに戻す**: 既定は Sprite App と同じグリッド検出（正方形のドット。端で半ドットより細いマスは落とす）。見つからないときは止めて、
+   縦・横の境目から別々に推定した 1 ドットの大きさと、1 ドット 6・8・10・12px とした場合の `--width` の候補を出す。
+   マスの色は平均ではなく **いちばん多い色**（各チャンネル 16 段階の組で数え、いちばん多い組の中でいちばん多い元の色。縁から 2 割は数えない）
+2. **大きさを確かめる**: 上限を超えたら止める（上の `--max-size`）
+3. **減色**（`retrocore/still/colors.py`）: いちばん暗い色を 1 色取っておき（全体の 1% 以上ある 16 段階の組のうちいちばん暗い組の色）、
+   残りの色を Sprite App の単純化（大きな面を守る割合だけ 0.5%）で選ぶ。選んだ色を 4096 色に丸め（各チャンネルの上下の段のうち、
+   明るさの感じ方で近い方）、丸めで重なったら少ない色数のまま（JSON の `merged_by_4bit` と警告）。最後に全部のドットをいちばん近い色
+   （OKLab）にする。新しい色は作らない
+4. **キャンバス**（`--canvas` のときだけ）→ **PNG**（インデックスカラー。パレットは使った色だけ、暗い順。ビット深度は色数に合わせて 1・2・4・8。
+   Pillow の版で圧縮が変わらないよう、標準の zlib で書く）と **JSON**
+
+JSON（`<出力名>.json`）の形:
+
+```json
+{
+  "app": "still", "version": 1, "source": "入力.png",
+  "input": {"width": 1672, "height": 941},
+  "width": 165, "height": 95,
+  "picture": {"width": 165, "height": 95},
+  "pixel_aspect": "1:1",
+  "dots": {"method": "grid", "cells": [165, 95], "dot_size": 9.935, "gap_range": {"x": [8, 12], "y": [7, 12]},
+           "trimmed_edges": {"left": 0, "top": 0, "right": 0, "bottom": 0}, "area": [0, 0, 1672, 941]},
+  "canvas": null,
+  "colors": {"limit": 16, "used": 16, "chosen": 16, "merged_by_4bit": 0, "darkest_kept": "#111111"},
+  "palette": [{"index": 0, "rgb4": [1, 1, 1], "rgb": [17, 17, 17], "hex": "#111111", "count": 2447}, …],
+  "settings": {"mode": "pc98", "colors": 16, "four_bit": true, "max_size": [640, 400], "width": null, "canvas": null, "keep_darkest": true},
+  "warnings": []
+}
+```
+
+- `width`・`height` は出力の大きさ（キャンバスを足した後）、`picture` は絵の部分の大きさ
+- `dots` は `--width` のとき `{"method": "width", "cells", "width", "cell_size": [横, 縦]（px）, "area"}`
+- `canvas` は `--canvas` のとき `{"width", "height", "offset": [左, 上], "fill": {"index": 0, "hex"}}`
+- `palette` の `rgb4` は RGB 各 0〜15（`--no-4bit` で 4096 色に無い色は `null`）。`count` はその色のドット数（余白を含む）
