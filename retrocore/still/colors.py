@@ -171,3 +171,66 @@ def reduce_colors(rgb: np.ndarray, colors: int = 16, *, four_bit: bool = True, k
     remap[used] = np.arange(len(used))
     return Reduced(remap[idx].astype(np.uint8), pal[used].astype(np.uint8), counts.astype(np.int64),
                    dark, chosen, merged)
+
+
+# ---- 似た色をまとめる（今風モード。`merge_similar()`） ----
+
+# 見た目でほぼ区別できない色の距離（OKLab のユークリッド距離。色みの重みは付けない）。OKLab では 0.02 がやっと見分けられる差と
+# されるので、その 2 倍（並べればやっと分かるが、絵の中ではまず見分けられない）にする。ai15 を 32 色にしたとき、
+# これより近い組はにじみの小さい色（10〜36 ドット）とその隣の色で、0.042 から上は描き分けた色（影の段など）だった
+SIMILAR_DISTANCE = 0.04
+
+
+@dataclass
+class Similar:
+    """似た色をまとめた結果。"""
+
+    index: np.ndarray        # 高さ × 幅（uint8）。まとめた後のパレットの番号
+    palette: np.ndarray      # まとめた後のパレット（暗い順のまま。新しい色は無い）
+    counts: np.ndarray
+    pairs: list[dict]        # まとめた順に {"from", "to", "count"（移したドット数）, "distance"}。色は (r, g, b)
+
+
+def merge_similar(index: np.ndarray, palette: np.ndarray, counts: np.ndarray, keep: list[int] | tuple[int, ...] = (0,),
+                  distance: float = SIMILAR_DISTANCE) -> Similar:
+    """パレットの色どうしで、OKLab の距離が `distance` より近い組を、ドット数の少ない方を多い方に合わせてまとめる。
+
+    いちばん近い組から 1 組ずつまとめる（残った色の色は変えないので、新しい色は作らない）。ドット数が同じなら番号の小さい方
+    （暗い方）を残す。`keep` の番号の色（いちばん暗い色）は必ず残す側にし、`keep` どうしはまとめない。
+    """
+    pal = np.asarray(palette, np.uint8).reshape(-1, 3)
+    n = np.asarray(counts, np.int64).copy()
+    k = len(pal)
+    lab = rgb_to_oklab(pal.astype(np.float64))
+    d = np.sqrt(((lab[:, None, :] - lab[None, :, :]) ** 2).sum(-1))
+    d = np.round(d, 9)   # 計算の環境による末尾の違いで、組の順番が変わらないように
+    keep_mask = np.zeros(k, bool)
+    keep_mask[[int(i) for i in keep if 0 <= int(i) < k]] = True
+    alive = np.ones(k, bool)
+    target = np.arange(k)
+    pairs = []
+    iu, ju = np.triu_indices(k, 1)
+    dist = d[iu, ju]
+    order = np.lexsort((ju, iu, dist))
+    for p in order:
+        if dist[p] >= distance:
+            break
+        i, j = int(iu[p]), int(ju[p])
+        if not (alive[i] and alive[j]) or (keep_mask[i] and keep_mask[j]):
+            continue
+        # 残す側: keep の色、次にドット数の多い方、同じなら番号の小さい方
+        if keep_mask[i] or (not keep_mask[j] and n[i] >= n[j]):
+            stay, go = i, j
+        else:
+            stay, go = j, i
+        pairs.append({"from": tuple(int(v) for v in pal[go]), "to": tuple(int(v) for v in pal[stay]),
+                      "count": int(n[go]), "distance": float(dist[p])})
+        n[stay] += n[go]
+        n[go] = 0
+        alive[go] = False
+        target[target == go] = stay
+    used = np.flatnonzero(alive)
+    remap = np.zeros(k, np.int64)
+    remap[used] = np.arange(len(used))
+    lut = remap[target].astype(np.uint8)
+    return Similar(lut[np.asarray(index)], pal[used].copy(), n[used], pairs)
