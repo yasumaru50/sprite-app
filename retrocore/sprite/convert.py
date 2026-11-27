@@ -715,7 +715,8 @@ def _add_sheet(out: dict, res, image_name: str, conv: list, swaps=None, ref=None
         out["swaps_json"] = swaps_json(swaps, palette_of([ref]))   # 保存する <出力名>_<動き>_swaps.json の中身
     if not res.skipped:
         res = C.pad_result(res, *canvas)
-        out["canvas"] = res.info.get("canvas")
+        if "canvas" in res.info:   # そろえたときだけ（そろえない結果は前と同じ）
+            out["canvas"] = res.info["canvas"]
         out["sheet_png"] = encode_png(make_sheet(res.frames))
         out["sheet_json"] = sheet_json(res, image_name, conv)
     else:
@@ -1323,7 +1324,8 @@ def frames_sheets(request: dict, result=None) -> dict:
     from . import canvas as C
     anims = [C.pad_result(a, *canvas) for a in anims]   # キャンバスを倍数にそろえる（直し・差し替えの後。canvas.py）
     talks = [C.pad_result(a, *canvas) for a in talks]
-    out["canvas"] = anims[0].info.get("canvas")
+    if "canvas" in anims[0].info:   # そろえたときだけ（そろえない結果は前と同じ）
+        out["canvas"] = anims[0].info["canvas"]
     out["sheets"] = [sheet_entry(a) for a in anims]
     if "talk_swaps" in out:   # 口パクがあるときだけ: しゃべりのシート（CLI と同じ名前・中身。反転は 2 つ目）
         out["talk_sheets"] = [sheet_entry(a) for a in talks]

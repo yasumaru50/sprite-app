@@ -188,7 +188,7 @@ def test_frames_cli_matches_web(tmp_path, walk_png):
         assert (d / s["name"]).read_bytes() == s["png"]
         assert (d / s["name"]).with_suffix(".json").read_text(encoding="utf-8") == s["json"]
     off = C.frames_sheets({"token": w["token"], "base": "walk", "name": "walk"})
-    assert off["ok"] and off["canvas"] is None and "canvas" not in json.loads(off["sheets"][0]["json"])
+    assert off["ok"] and "canvas" not in off and "canvas" not in json.loads(off["sheets"][0]["json"])
 
 
 def test_edits_stay_on_the_same_picture(tmp_path, walk_png):
