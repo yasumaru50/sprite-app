@@ -1,7 +1,7 @@
 """Still App の入口（CLI とブラウザ版で共通）。1 枚絵を、決まった色数・格子の本物のドット絵にそろえる。
 
 工程: 読み込み（透明は黒で埋める）→ ドットに戻す（グリッド検出か --width）→ 大きさの上限を確かめる
-→ 減色（4 ビットの丸め・いちばん暗い色を取っておく）→ キャンバス（--canvas のときだけ余白を足す）→ PNG（インデックスカラー）と JSON。
+→ 減色（4 ビットの丸め・いちばん暗い色を取っておく）→ 模様を整える（--tidy-pattern のときだけ）→ キャンバス（--canvas のときだけ余白を足す）→ PNG（インデックスカラー）と JSON。
 
 `--mode`（`MODES`）は初めの設定の組み合わせ（プリセット）で、強制ではない。個別の設定で上書きできる。
 同じ入力・同じ設定からは、CLI でもブラウザ版でも同じバイト列の PNG と JSON ができる（`convert_still_bytes()`）。
@@ -27,6 +27,7 @@ from PIL import Image
 from ..sprite.image import to_rgba
 from . import colors as colors_mod
 from . import dots as dots_mod
+from . import pattern as pattern_mod
 
 APP = "still"
 FORMAT_VERSION = 1
@@ -76,6 +77,7 @@ class StillSettings:
     width: int | None = None                 # 横のマス数（None ならグリッド検出）
     canvas: tuple[int, int] | None = None    # 余白を足して、この大きさにする
     keep_darkest: bool = MODES[DEFAULT_MODE]["keep_darkest"]
+    tidy_pattern: bool = False               # ざらついた範囲を 2 色の模様に整える（既定は切。プリセットには入れない）
 
     @classmethod
     def from_mode(cls, mode: str = DEFAULT_MODE, **overrides) -> "StillSettings":
@@ -83,6 +85,7 @@ class StillSettings:
         if mode not in MODES:
             raise ValueError(f"--mode は {', '.join(MODES)} のどれかです（{mode}）")
         base = {k: v for k, v in MODES[mode].items() if k != "label"}
+        base["tidy_pattern"] = False
         base.update({k: v for k, v in overrides.items() if v is not None})
         return cls(mode=mode, **base)
 
@@ -102,10 +105,12 @@ class StillSettings:
                 if isinstance(v[k], bool) or not isinstance(v[k], (int, float)) or int(v[k]) != v[k]:
                     raise ValueError(f"{k} は整数で指定してください（{v[k]}）")
                 v[k] = int(v[k])
-        for k in ("four_bit", "keep_darkest"):
+        for k in ("four_bit", "keep_darkest", "tidy_pattern"):
             if v[k] is not None and not isinstance(v[k], bool):
                 raise ValueError(f"{k} は true か false で指定してください（{v[k]}）")
+        tidy = v.pop("tidy_pattern")
         s = cls.from_mode(values.get("mode") or DEFAULT_MODE, **v)
+        s.tidy_pattern = bool(tidy)
         s.validate()
         return s
 
@@ -121,9 +126,12 @@ class StillSettings:
             self.canvas = parse_size(self.canvas, "キャンバス")
 
     def to_json(self) -> dict:
-        return {"mode": self.mode, "colors": self.colors, "four_bit": self.four_bit,
-                "max_size": list(self.max_size), "width": self.width,
-                "canvas": None if self.canvas is None else list(self.canvas), "keep_darkest": self.keep_darkest}
+        out = {"mode": self.mode, "colors": self.colors, "four_bit": self.four_bit,
+               "max_size": list(self.max_size), "width": self.width,
+               "canvas": None if self.canvas is None else list(self.canvas), "keep_darkest": self.keep_darkest}
+        if self.tidy_pattern:   # 切のときは書かない（前の版と同じバイト列にするため）
+            out["tidy_pattern"] = True
+        return out
 
 
 @dataclass
@@ -137,6 +145,17 @@ class StillResult:
     input_size: tuple[int, int]
     canvas_offset: tuple[int, int] | None = None
     warnings: list[str] = field(default_factory=list)
+    tidied: pattern_mod.Tidied | None = None   # --tidy-pattern のときだけ
+
+    def overlay(self) -> np.ndarray:
+        """整えた範囲の見える化（出力の大きさの RGBA。表示だけに使う）。整えていなければ全部透明。"""
+        h, w = self.index.shape
+        label = np.full((h, w), -1, np.intp)
+        if self.tidied is not None:
+            ox, oy = self.canvas_offset or (0, 0)
+            th, tw = self.tidied.label.shape
+            label[oy:oy + th, ox:ox + tw] = self.tidied.label
+        return pattern_mod.overlay_rgba(label)
 
     @property
     def size(self) -> tuple[int, int]:
@@ -186,6 +205,20 @@ def convert_still(rgba: np.ndarray, settings: StillSettings | None = None) -> St
     if red.merged:
         warnings.append(f"選んだ色を 4096 色に丸めたら {red.merged} 色が重なり、{red.chosen - red.merged} 色になりました"
                         f"（上限 {s.colors} 色）")
+    tidied = None
+    if s.tidy_pattern:
+        dark = [0]
+        if red.darkest is not None:
+            dark += [int(i) for i in np.flatnonzero(np.all(palette == red.darkest, axis=1))]
+        tidied = pattern_mod.tidy_pattern(index, palette, dark)
+        index = tidied.index
+        # 使われなくなった色はパレットから外す（暗い順のまま。新しい色は作らない）
+        used, counts = np.unique(index, return_counts=True)
+        remap = np.zeros(len(palette), np.uint8)
+        remap[used] = np.arange(len(used), dtype=np.uint8)
+        index = remap[index]
+        palette = palette[used]
+        counts = counts.astype(np.int64)
     offset = None
     if s.canvas is not None:
         cw, ch = s.canvas
@@ -198,7 +231,7 @@ def convert_still(rgba: np.ndarray, settings: StillSettings | None = None) -> St
             index = big
             counts = counts.copy()
             counts[fill] += cw * ch - dw * dh
-    return StillResult(index, palette, counts, dots, red, s, (w, h), offset, warnings)
+    return StillResult(index, palette, counts, dots, red, s, (w, h), offset, warnings, tidied)
 
 
 # ---- ファイルの形 ----
@@ -264,9 +297,21 @@ def result_info(res: StillResult, source: str = "") -> dict:
         "colors": {"limit": s.colors, "used": len(res.palette), "chosen": red.chosen, "merged_by_4bit": red.merged,
                    "darkest_kept": None if red.darkest is None else _hex(red.darkest)},
         "palette": pal,
+        **({} if res.tidied is None else {"pattern": pattern_info(res.tidied)}),
         "settings": s.to_json(),
         "warnings": list(res.warnings),
     }
+
+
+def pattern_info(t: pattern_mod.Tidied) -> dict:
+    """--tidy-pattern の記録（範囲の数・変えたドット数・中で決めた設定・範囲ごと）。色の番号は整える前のパレットのもの。"""
+    return {"regions": len(t.tidied), "changed": t.changed,
+            "skipped": {"third_color": sum(r.skipped == "third_color" for r in t.regions), "small": t.small},
+            "protected_line_dots": int(np.count_nonzero(t.protected)),
+            "settings": t.settings,
+            "list": [{"box": list(r.box), "size": r.size, "colors": [_hex(c) for c in r.colors_rgb],
+                      "changed": r.changed, "third": r.third, **({"skipped": r.skipped} if r.skipped else {})}
+                     for r in t.regions]}
 
 
 _NUMBER_LIST = re.compile(r"\[\s+(-?[\d.]+(?:,\s+-?[\d.]+)*)\s+\]")
@@ -333,10 +378,15 @@ def still_for_web(data: bytes, name: str = "", settings_json: str = "{}") -> str
             res["detail"] = error_detail(e)
         return json.dumps(res, ensure_ascii=False)
     info = out["info"]
+    extra = {}
+    if out["result"].tidied is not None:   # 見える化の重ね絵（表示だけ。保存する PNG には入らない）
+        buf = io.BytesIO()
+        Image.fromarray(out["result"].overlay(), "RGBA").save(buf, "PNG")
+        extra = {"pattern": info["pattern"], "overlay_base64": base64.b64encode(buf.getvalue()).decode("ascii")}
     return json.dumps({"ok": True, "png_base64": base64.b64encode(out["png"]).decode("ascii"), "json_text": out["json"],
                        "width": info["width"], "height": info["height"], "palette": info["palette"],
                        "dots": info["dots"], "colors": info["colors"], "canvas": info["canvas"],
-                       "warnings": info["warnings"]}, ensure_ascii=False)
+                       "warnings": info["warnings"], **extra}, ensure_ascii=False)
 
 
 def spec() -> dict:

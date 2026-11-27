@@ -66,6 +66,9 @@
   .stage { height: 460px; border: 1px solid var(--line); border-radius: 6px; overflow: auto; background: var(--stage);
            display: flex; }
   .stage > * { margin: auto; flex: none; display: block; image-rendering: pixelated; image-rendering: crisp-edges; }
+  .overlay-wrap { position: relative; }
+  .overlay-wrap > img { display: block; image-rendering: pixelated; image-rendering: crisp-edges; }
+  .overlay-wrap > img.overlay { position: absolute; left: 0; top: 0; pointer-events: none; }
   .stage .empty { color: var(--muted); background: var(--panel); padding: 4px 10px; border-radius: 4px; image-rendering: auto; }
   .meta { color: var(--muted); font-size: 0.88em; margin-top: 6px; min-height: 1.5em; }
   .actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 12px; }
@@ -121,7 +124,7 @@
     </div>
 
     <details class="fold" id="fold-need">
-      <summary><span class="fold-name">必要なときに開く</span><span class="fold-mark" hidden>（変更あり）</span><small class="fold-what">色数・横のマス数・大きさの上限・キャンバス・4096 色に丸める・いちばん暗い色</small></summary>
+      <summary><span class="fold-name">必要なときに開く</span><span class="fold-mark" hidden>（変更あり）</span><small class="fold-what">色数・横のマス数・大きさの上限・キャンバス・4096 色に丸める・いちばん暗い色・模様を整える</small></summary>
       <div class="fold-body">
         <div class="controls">
           <div class="field">
@@ -154,6 +157,10 @@
             <label class="check"><input type="checkbox" id="keep-darkest"> いちばん暗い色を取っておく</label>
             <small class="help">パレットの 1 色を絵の中のいちばん暗い色にして、暗い線が中間の色に吸われて消えないようにします（CLI の --no-keep-darkest で切）</small>
           </div>
+          <div class="field">
+            <label class="check"><input type="checkbox" id="tidy-pattern"> ざらついた範囲を模様に整える</label>
+            <small class="help">AI が描いたディザ風の所は、減色するとばらばらの点になります。そういう所を、その場所の多い 2 色だけを使った 2×2 の決まった模様（濃さ 5 段。50% は市松）に置き換えます。輪郭・平塗りの面・小さい所・3 色目が多い所は変えません（CLI の --tidy-pattern）</small>
+          </div>
         </div>
       </div>
     </details>
@@ -173,6 +180,10 @@
         <label for="zoom">拡大</label>
         <select id="zoom"></select>
         <small class="help">結果を何倍で見るか（ニアレストネイバー）。元の絵は結果と同じ大きさに合わせて並べます</small>
+      </div>
+      <div class="field">
+        <label class="check"><input type="checkbox" id="show-overlay" disabled> 整えた範囲を色で重ねる</label>
+        <small class="help">「ざらついた範囲を模様に整える」で変えた範囲を、薄い色（縁は濃い色）で結果に重ねて見せます。表示だけで、保存する PNG は変わりません</small>
       </div>
     </div>
     <div class="views" style="margin-top:12px">
@@ -306,6 +317,7 @@ function applyMode(key) {
   $("max-h").value = m.max_size[1];
   $("four-bit").checked = m.four_bit;
   $("keep-darkest").checked = m.keep_darkest;
+  $("tidy-pattern").checked = false;
   $("width").value = "";
   $("canvas-w").value = "";
   $("canvas-h").value = "";
@@ -350,6 +362,7 @@ function currentSettings() {
     canvas: cw === "" ? null : [intField("canvas-w", "キャンバスの幅"), intField("canvas-h", "キャンバスの高さ")],
     four_bit: $("four-bit").checked,
     keep_darkest: $("keep-darkest").checked,
+    tidy_pattern: $("tidy-pattern").checked,
   };
 }
 
@@ -357,6 +370,7 @@ function currentSettings() {
 let worker = null, nextId = 1, ready = false, busy = false;
 const pending = new Map();
 let srcFile = null, srcBytes = null, srcUrl = null, srcImg = null, outImg = null, outPngUrl = null, outJsonUrl = null;
+let overlayImg = null, overlayUrl = null;
 function setStatus(text, spin) {
   $("status").innerHTML = "";
   if (spin) { const s = document.createElement("span"); s.className = "spinner"; $("status").appendChild(s); }
@@ -407,6 +421,16 @@ function render() {
   if (outImg) {
     const w = outImg.naturalWidth * z, h = outImg.naturalHeight * z;
     put($("out-stage"), outImg, w, h);
+    if (overlayImg && $("show-overlay").checked) {   // 見える化（表示だけ）。結果の上に同じ大きさで重ねる
+      const wrap = document.createElement("div");
+      wrap.className = "overlay-wrap";
+      $("out-stage").innerHTML = "";
+      overlayImg.className = "overlay";
+      overlayImg.style.width = `${w}px`;
+      overlayImg.style.height = `${h}px`;
+      wrap.append(outImg, overlayImg);
+      $("out-stage").appendChild(wrap);
+    }
     if (srcImg) {
       // キャンバスで余白を足したときは、元の絵を余白の内側（絵の部分）に合わせる
       const pic = outImg.picture || { width: outImg.naturalWidth, height: outImg.naturalHeight };
@@ -417,11 +441,14 @@ function render() {
   }
 }
 $("zoom").addEventListener("change", render);
+$("show-overlay").addEventListener("change", render);
 
 function clearResult(text) {
   outImg = null;
-  for (const u of [outPngUrl, outJsonUrl]) if (u) URL.revokeObjectURL(u);
-  outPngUrl = outJsonUrl = null;
+  overlayImg = null;
+  for (const u of [outPngUrl, outJsonUrl, overlayUrl]) if (u) URL.revokeObjectURL(u);
+  outPngUrl = outJsonUrl = overlayUrl = null;
+  $("show-overlay").disabled = true;
   $("out-stage").innerHTML = `<span class="empty">${text}</span>`;
   $("out-meta").textContent = "";
   $("swatches").innerHTML = "";
@@ -511,7 +538,14 @@ async function runConvert() {
     const how = d.method === "grid" ? `グリッド検出（1 ドット ${d.dot_size.toFixed(1)}px）`
                                     : `横 ${d.width} マス（1 マス ${d.cell_size[0].toFixed(1)}×${d.cell_size[1].toFixed(1)}px）`;
     $("out-meta").textContent = `${how} → ${info.picture.width}×${info.picture.height} ドット、${result.colors.used} 色`
-      + (result.canvas ? `、キャンバス ${result.width}×${result.height}` : "");
+      + (result.canvas ? `、キャンバス ${result.width}×${result.height}` : "")
+      + (result.pattern ? `、模様を整えた範囲 ${result.pattern.regions} か所（${result.pattern.changed} ドット）` : "");
+    if (result.overlay_base64) {
+      overlayUrl = URL.createObjectURL(new Blob([decodeBase64(result.overlay_base64)], { type: "image/png" }));
+      overlayImg = await loadImage(overlayUrl);
+      overlayImg.alt = "整えた範囲";
+      $("show-overlay").disabled = false;
+    }
     for (const p of result.palette) {
       const el = document.createElement("div");
       el.className = "swatch";

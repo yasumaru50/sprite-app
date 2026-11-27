@@ -3,6 +3,7 @@
     python -m apps.still 入力.png --mode pc98 --out out/still/部屋        # → 部屋.png（インデックスカラー）と 部屋.json
     python -m apps.still 入力.png --width 160                             # グリッド検出の代わりに横 160 マスに縮める
     python -m apps.still 入力.png --colors 8 --no-4bit --max-size 320x200 --canvas 320x200
+    python -m apps.still 入力.png --width 600 --tidy-pattern                # ざらついた範囲を 2 色の模様に整える
 
 --mode はプリセット（初めの設定の組み合わせ）で、個別のオプションで上書きできる。変換は retrocore.still（ブラウザ版と共通）。
 """
@@ -35,6 +36,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--canvas", default=None, help="余白を足してこの大きさ（幅x高さ）にする。余白はいちばん暗い色")
     p.add_argument("--no-keep-darkest", dest="keep_darkest", action="store_const", const=False, default=None,
                    help="いちばん暗い色をパレットに取っておかない")
+    p.add_argument("--tidy-pattern", dest="tidy_pattern", action="store_true",
+                   help="ざらついた範囲（減色でばらばらの点になったディザ風の所）を、2 色の決まった模様（2×2）に整える")
     p.add_argument("-q", "--quiet", action="store_true", help="結果の表示を減らす")
     return p
 
@@ -45,6 +48,7 @@ def settings_from_args(args) -> StillSettings:
         max_size=None if args.max_size is None else parse_size(args.max_size, "大きさの上限"),
         width=args.width, keep_darkest=args.keep_darkest,
         canvas=None if args.canvas is None else parse_size(args.canvas, "キャンバス"))
+    s.tidy_pattern = bool(args.tidy_pattern)
     s.validate()
     return s
 
@@ -92,6 +96,9 @@ def main(argv: list[str] | None = None) -> int:
                else f"--width {d['width']}（1 マス {d['cell_size'][0]:.1f}×{d['cell_size'][1]:.1f}px）")
         print(f"{args.input.name}: {how} → {info['picture']['width']}×{info['picture']['height']} ドット、"
               f"{info['colors']['used']} 色" + (f"、キャンバス {info['width']}×{info['height']}" if info["canvas"] else ""))
+        if "pattern" in info:
+            t = info["pattern"]
+            print(f"  模様を整えた範囲 {t['regions']} か所、変えたドット {t['changed']}")
         print(f"  → {png}\n  → {js}")
     return 0
 
