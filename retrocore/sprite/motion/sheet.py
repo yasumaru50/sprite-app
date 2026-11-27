@@ -60,6 +60,9 @@ def sheet_info(result: MotionResult, image_name: str, skipped: list | None = Non
     """シートの情報（JSON にする辞書）。`skipped` は変換の工程の記録（`report.py`。動きの記録 `result.skips` の前に入れる）。"""
     w, h = result.size
     n = len(result.frames)
+    cv = result.info.get("canvas")   # キャンバスを倍数にそろえたとき（canvas.py）: 足す前の大きさで pivot を決めてずらす
+    w0, h0 = (cv["width"], cv["height"]) if cv else (w, h)
+    dx, dy = (cv["left"], cv["top"]) if cv else (0, 0)
     info = {
         "version": SHEET_VERSION,
         "motion": result.name,
@@ -70,7 +73,7 @@ def sheet_info(result: MotionResult, image_name: str, skipped: list | None = Non
         "columns": n,
         "rows": 1,
         "loop": True,
-        "pivot": {"x": w / 2, "y": h},
+        "pivot": {"x": w0 / 2 + dx, "y": h0 + dy},
         "total_duration_ms": int(sum(result.durations)),
         "frames": [{"index": i, "x": i * w, "y": 0, "width": w, "height": h, "duration_ms": int(d)}
                    for i, d in enumerate(result.durations)],
@@ -84,7 +87,7 @@ def sheet_info(result: MotionResult, image_name: str, skipped: list | None = Non
         # 浮遊: 上下に足した透明の行の数。pivot は 1 枚目の足元（元の絵の下端の中央）
         top, bottom = (int(v) for v in result.info["padding_y"])
         info["padding"] = {"left": p, "right": p, "top": top, "bottom": bottom}
-        info["pivot"] = {"x": w / 2, "y": h - bottom}
+        info["pivot"] = {"x": w0 / 2 + dx, "y": h0 - bottom + dy}
         offsets = result.info.get("offset_y")   # 表から作ったときは offset_y（体全体のずれを使ったときだけ）
         if offsets is None and result.name in ("float", "bounce"):
             offsets = result.info.get("offsets")
@@ -101,6 +104,15 @@ def sheet_info(result: MotionResult, image_name: str, skipped: list | None = Non
     if "swaps" in result.info:
         # 差し替えの記録（間隔・1 周の時間・周の数・入れた時刻とフレーム。差し替えたときだけ）
         info["swaps"] = result.info["swaps"]
+    if cv:
+        # キャンバスを倍数にそろえたときだけ: 地面の線（pivot.y）を pivot のすぐ後に、足した余白を canvas に書く
+        out = {}
+        for k, v in info.items():
+            out[k] = v
+            if k == "pivot":
+                out["ground_y"] = v["y"]
+        info = out
+        info["canvas"] = dict(cv)
     # 作らなかった理由の記録（版 2 から。何もなければ空の一覧）。シートを作れたときは、変換の工程の分だけが入る
     info["skipped"] = list(skipped or []) + list(result.skips)
     return info

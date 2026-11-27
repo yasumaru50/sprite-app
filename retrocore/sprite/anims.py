@@ -82,6 +82,8 @@ class AnimsConfig:
     match_height: bool = False        # キャラの高さをいちばん小さいファイルに合わせる（--join-match-height）
     mirror: bool = False              # 左右反転のシートも作る（--mirror）
     settings: dict | None = None      # 変換の設定（SpriteSettings の項目。画面で保存したとき。無ければ CLI の引数）
+    canvas_multiple: int = 0          # キャンバスを倍数にそろえる（0 はそろえない。canvas.py。--canvas-multiple）
+    canvas_align: str = "bottom"      # その並べ方（bottom = 下ぞろえ・左右中央 / center = 上下左右中央。--canvas-align）
 
     def files(self) -> list:
         return [f for a in self.anims for f in a.files]
@@ -150,7 +152,7 @@ def config_from_dict(d) -> AnimsConfig:
     common = d.get("common") or {}
     if not isinstance(common, dict):
         raise ValueError("common（全部の動きで共通の設定）は {...} で書いてください")
-    unknown = sorted(set(common) - {"align", "grid", "match_height", "mirror"})
+    unknown = sorted(set(common) - {"align", "grid", "match_height", "mirror", "canvas_multiple", "canvas_align"})
     if unknown:
         raise ValueError(f"知らない共通の設定です: {', '.join(unknown)}")
     settings = d.get("settings")
@@ -205,6 +207,8 @@ def config_from_dict(d) -> AnimsConfig:
                       grid=common.get("grid", F.DEFAULT_GRID_MODE),
                       match_height=_bool(common.get("match_height", False), "match_height"),
                       mirror=_bool(common.get("mirror", False), "mirror"), settings=settings)
+    from . import canvas as C
+    cfg.canvas_multiple, cfg.canvas_align = C.check(common.get("canvas_multiple", 0), common.get("canvas_align"))
     if cfg.align not in F.ALIGNS:
         raise ValueError(f"横のそろえ方は {' / '.join(F.ALIGNS)} のどれかです: {cfg.align!r}")
     if cfg.grid not in F.GRID_MODES:
@@ -231,6 +235,9 @@ def config_dict(cfg: AnimsConfig) -> dict:
     if cfg.settings is not None:
         out["settings"] = dict(cfg.settings)
     out["common"] = {"align": cfg.align, "grid": cfg.grid, "match_height": bool(cfg.match_height), "mirror": bool(cfg.mirror)}
+    if cfg.canvas_multiple:   # キャンバスを倍数にそろえるときだけ（そろえない設定のファイルは前と同じ）
+        out["common"]["canvas_multiple"] = int(cfg.canvas_multiple)
+        out["common"]["canvas_align"] = cfg.canvas_align
     out["anims"] = [{"name": a.name, "files": list(a.files), "order": a.order,
                      "duration_ms": a.durations[0] if len(a.durations) == 1 else list(a.durations), "loop": bool(a.loop),
                      "align_y": a.align_y, "shift_y": None if a.shift_y is None else list(a.shift_y)} for a in cfg.anims]
@@ -398,6 +405,9 @@ def assemble_anims(res, cfg: AnimsConfig, stem: str = "sprite", mirror: bool = F
         if l or W - l - w:
             m.frames = [np.pad(f, ((0, 0), (l, W - l - w), (0, 0))) for f in m.frames]
         m.info["pivot_x"] = L
+    if cfg.canvas_multiple:   # キャンバスを倍数にそろえる（全部の動きのコマに同じ余白。canvas.py）
+        from . import canvas as C
+        ms = [C.pad_result(m, cfg.canvas_multiple, cfg.canvas_align) for m in ms]
     sheet = AnimsSheet(name=cfg.name + ("_mirror" if mirror else ""), anims=ms, specs=list(cfg.anims))
     sheet.image_name = sheet_file_name(stem, sheet)
     sheet.info = _sheet_info(sheet, res, sheet.image_name)
@@ -409,6 +419,8 @@ def _sheet_info(sheet: AnimsSheet, res, image_name: str) -> dict:
     ms = sheet.anims
     info = {"source_frames": [k for m in ms for k in m.info["source_frames"]], "align": res.align,
             "align_y": res.align_y, "pivot_x": ms[0].info["pivot_x"], "ground": True}
+    if "canvas" in ms[0].info:
+        info["canvas"] = ms[0].info["canvas"]
     if any("flipped" in m.info for m in ms):
         info["flipped"] = [fl for m in ms for fl in m.info.get("flipped", [False] * len(m.frames))]
     if res.touchup is not None:
@@ -502,6 +514,8 @@ def anim_info(info: dict, anim: str, image_name: str | None = None) -> dict:
            "loop": bool(a.get("loop", True)), "pivot": copy.deepcopy(info.get("pivot"))}
     if "ground_y" in info:
         out["ground_y"] = info["ground_y"]
+    if "canvas" in info:
+        out["canvas"] = copy.deepcopy(info["canvas"])
     out["total_duration_ms"] = int(sum(int(f["duration_ms"]) for f in frames))
     out["frames"] = frames
     if "source" in info:

@@ -25,6 +25,7 @@ NumPy と標準ライブラリだけを使う（Pyodide で動く）。
 from __future__ import annotations
 
 import json
+import dataclasses
 import math
 import re
 from dataclasses import dataclass, field
@@ -305,11 +306,22 @@ def render(effect: Effect, outline=None) -> list[np.ndarray]:
     return out
 
 
-def make_fx(name: str, char_frames, mirror: bool = False, offset=(0, 0), end=None, effects: dict | None = None) -> FxResult:
+def make_fx(name: str, char_frames, mirror: bool = False, offset=(0, 0), end=None, effects: dict | None = None,
+            canvas: dict | None = None) -> FxResult:
     """キャラのシートのコマ（`char_frames`。1 コマ目で置く場所と輪郭の色を決める）に重ねるエフェクトを作る。
 
     `mirror` は、キャラのシートが左右反転したものか（置く場所を反転する。絵は反転しない）。`end` は 1 回で終わるものの終わり方
-    （くり返すものでは使わず、None にする）。"""
+    （くり返すものでは使わず、None にする）。
+    `canvas` はキャラのシートの JSON の `canvas`（キャンバスを倍数にそろえたとき。`canvas.py`）。あれば、余白を足す前の絵で
+    置く場所を決めてから、`position` を余白の分ずらす（エフェクトのシートの大きさは変えない）。"""
+    if canvas:
+        from ..canvas import crop_image
+        full = np.asarray(char_frames[0]) if char_frames else None
+        got = make_fx(name, [crop_image(f, canvas) for f in char_frames], mirror, offset, end, effects)
+        x, y = got.position
+        ch, cw = full.shape[:2]
+        return dataclasses.replace(got, position=(int(x + canvas["left"]), int(y + canvas["top"])),
+                                   char_size=(int(cw), int(ch)))
     effect = load_effect(name, effects)
     dx, dy = check_offset(offset)
     end = check_end(end) if not effect.loop else None
@@ -559,7 +571,8 @@ def fx_for_web(sheet_png: bytes, sheet_json_text: str, options_json: str = "{}")
         char_frames, char_durations = frames_from_sheet(decode_image(sheet_png), info)
         src = info.get("source")
         mirror = bool(isinstance(src, dict) and src.get("mirrored"))
-        fx = make_fx(str(opts.get("fx")), char_frames, mirror, tuple(opts.get("offset") or (0, 0)), opts.get("end"))
+        fx = make_fx(str(opts.get("fx")), char_frames, mirror, tuple(opts.get("offset") or (0, 0)), opts.get("end"),
+                     canvas=info.get("canvas"))
         char_name = str(info["image"])
         name = fx_file_name(char_name, fx)
         out = {"ok": True, "name": name, "png_base64": base64.b64encode(encode_png(fx_sheet(fx))).decode("ascii"),

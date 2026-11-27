@@ -562,10 +562,11 @@ def motion_image_bytes(sprite_png: bytes, options: dict | None = None) -> dict:
     try:   # 変換の工程の記録（画面は変換の結果の "skipped" をそのまま渡す。CLI は変換の結果から渡す）
         conv = check_entries(values.pop("convert_skipped", None))
         swaps = _swap_values(values)
+        canvas = _canvas_values(values)
     except ValueError as e:
         return {"ok": False, "error": f"動きの設定に問題があり、作れませんでした: {e}", "detail": error_detail(e)}
     if "spec" in values:
-        return _table_motion(sprite_png, values, conv, swaps)
+        return _table_motion(sprite_png, values, conv, swaps, canvas)
     try:
         image_name = values.pop("image_name", None) or f"sprite_{values.get('motion', 'breathe')}_sheet.png"
         if not isinstance(image_name, str):
@@ -597,8 +598,37 @@ def motion_image_bytes(sprite_png: bytes, options: dict | None = None) -> dict:
         out["split_used"] = None if res.spec is None else res.spec["regions"]["upper"]["at"]
     elif res.name == "stretch":   # 伸び: 上に足した透明の行の数（上, 下）
         out["padding_y"] = [int(v) for v in res.info.get("padding_y", [0, 0])]
-    _add_sheet(out, res, image_name, conv, swaps, sprite)
+    _add_sheet(out, res, image_name, conv, swaps, sprite, canvas)
     return out
+
+
+def _canvas_values(values: dict) -> tuple[int, str]:
+    """設定から "canvas"（{"multiple": 16, "align": "bottom"}。キャンバスを倍数にそろえる。`canvas.py`）を取り出して読む。"""
+    from . import canvas as C
+    return C.from_dict(values.pop("canvas", None))
+
+
+def canvas_still_for_web(sprite_png: bytes, options_json: str = "{}") -> str:
+    """画面の「③ 変換の結果（PNG）」を保存するときに、キャンバスを倍数にそろえる（CLI の 1 枚の絵の --canvas-multiple と同じ）。
+    設定は {"multiple": 16, "align": "bottom", "image_name": "<出力名>.png"}。結果は {"ok", "png_base64", "json"（そろえないときは
+    None）, "width", "height", "canvas"}（JSON 文字列）。"""
+    from . import canvas as C
+    try:
+        values = json.loads(options_json or "{}")
+        if not isinstance(values, dict):
+            raise ValueError("設定は {\"multiple\": 16} のような形で渡してください")
+        name = str(values.pop("image_name", None) or "sprite.png")
+        multiple, align = C.from_dict(values)
+        img, text = C.pad_still(decode_image(sprite_png), name, multiple, align)
+    except ValueError as e:
+        return json.dumps({"ok": False, "error": f"キャンバスの設定に問題があります: {e}", "detail": error_detail(e)},
+                          ensure_ascii=False)
+    except Exception as e:
+        return json.dumps({"ok": False, "error": friendly_error(e), "detail": error_detail(e)}, ensure_ascii=False)
+    out = {"ok": True, "png_base64": base64.b64encode(encode_png(img)).decode("ascii"), "json": text,
+           "width": int(img.shape[1]), "height": int(img.shape[0]),
+           "canvas": None if text is None else json.loads(text)["canvas"]}
+    return json.dumps(out, ensure_ascii=False)
 
 
 def _swap_values(values: dict):
@@ -659,11 +689,12 @@ def _talk_view(out: dict, anim, swaps, ref, palette=None, mirror_anim=None):
     return talks
 
 
-def _add_sheet(out: dict, res, image_name: str, conv: list, swaps=None, ref=None) -> None:
+def _add_sheet(out: dict, res, image_name: str, conv: list, swaps=None, ref=None, canvas=(0, "bottom")) -> None:
     """作れたらシートの PNG と JSON、作れなかったら作らなかった理由の JSON（CLI の `_skipped.json` と同じ）を足す。
     `swaps` があれば、シートに差し替え（まばたきなど）を入れる（`ref` は差し替えを描いた絵。変換したスプライト）。
     口パクがあれば、しゃべりのシートも "talk"（{"name", "sheet_png", "sheet_json", ...}）に足す（CLI の
-    `<出力名>_<動き>_talk_sheet.png` と同じ中身）。"""
+    `<出力名>_<動き>_talk_sheet.png` と同じ中身）。`canvas` は (倍数, 並べ方)。シートに透明な余白を足す（`canvas.py`）。"""
+    from . import canvas as C
     from .motion import make_sheet, sheet_json
     from .motion.report import skipped_json
     out["skipped_records"] = list(conv) + list(res.skips)
@@ -674,6 +705,7 @@ def _add_sheet(out: dict, res, image_name: str, conv: list, swaps=None, ref=None
         if "talk_swaps" in out:
             out["talk"] = None
         for t in talks:
+            t = C.pad_result(t, *canvas)
             w, h = t.size
             name = talk_image_name(image_name)
             out["talk"] = {"name": name, "sheet_png": encode_png(make_sheet(t.frames)),
@@ -682,6 +714,8 @@ def _add_sheet(out: dict, res, image_name: str, conv: list, swaps=None, ref=None
         res = _apply_swaps_view(out, res, swaps, ref)
         out["swaps_json"] = swaps_json(swaps, palette_of([ref]))   # 保存する <出力名>_<動き>_swaps.json の中身
     if not res.skipped:
+        res = C.pad_result(res, *canvas)
+        out["canvas"] = res.info.get("canvas")
         out["sheet_png"] = encode_png(make_sheet(res.frames))
         out["sheet_json"] = sheet_json(res, image_name, conv)
     else:
@@ -733,7 +767,7 @@ def _spec_error_result(e) -> dict:
             "spec_errors": spec_error_items(e.problems), "detail": ""}
 
 
-def _table_motion(sprite_png: bytes, values: dict, conv: list | None = None, swaps=None) -> dict:
+def _table_motion(sprite_png: bytes, values: dict, conv: list | None = None, swaps=None, canvas=(0, "bottom")) -> dict:
     """表（{"spec": 表の辞書か JSON の文字列, "image_name": シートの名前}）から動きを作る（`motion_image_bytes()` の表の経路）。
 
     作れた・作れなかったの返し方はプリセットと同じで、ほかに "problems"（作れない行。row は 1 から。画面でマスを赤くする）、
@@ -768,7 +802,7 @@ def _table_motion(sprite_png: bytes, values: dict, conv: list | None = None, swa
            "offset_y": [int(v) for v in res.info.get("offset_y", [])], "poses": res.info.get("poses"),
            "spec": res.spec,
            "spec_files": {style: spec_json(with_height_style(res.spec, sprite, style)) for style in ("number", "percent")}}
-    _add_sheet(out, res, image_name, conv or [], swaps, sprite)
+    _add_sheet(out, res, image_name, conv or [], swaps, sprite, canvas)
     return out
 
 
@@ -1226,7 +1260,8 @@ def frames_sheets(request: dict, result=None) -> dict:
     from . import frames as F
     from .motion import make_sheet
     try:
-        unknown = sorted(set(request) - {"token", "base", "name", "order", "durations", "root_y", "mirror", "swaps"})
+        unknown = sorted(set(request) - {"token", "base", "name", "order", "durations", "root_y", "mirror", "swaps",
+                                         "canvas"})
         if unknown:
             raise ValueError(f"知らない設定です: {', '.join(unknown)}")
         if result is None:
@@ -1242,6 +1277,7 @@ def frames_sheets(request: dict, result=None) -> dict:
         durations = request.get("durations")
         root_y = request.get("root_y")
         swaps = _swap_values(dict(request))
+        canvas = _canvas_values(dict(request))
         anims = [F.assemble_frames(result, order, durations, root_y, name)]
         if request.get("mirror"):
             anims.append(F.assemble_frames(result, order, durations, root_y, name, mirror=True))
@@ -1284,6 +1320,10 @@ def frames_sheets(request: dict, result=None) -> dict:
                        "durations": [int(d) for d in anim.durations], "mirror": anim.name.endswith("_mirror"),
                        "offset_y": [int(v) for v in anim.info.get("offset_y", [])],
                 "padding_y": [int(v) for v in anim.info.get("padding_y", (0, 0))]}
+    from . import canvas as C
+    anims = [C.pad_result(a, *canvas) for a in anims]   # キャンバスを倍数にそろえる（直し・差し替えの後。canvas.py）
+    talks = [C.pad_result(a, *canvas) for a in talks]
+    out["canvas"] = anims[0].info.get("canvas")
     out["sheets"] = [sheet_entry(a) for a in anims]
     if "talk_swaps" in out:   # 口パクがあるときだけ: しゃべりのシート（CLI と同じ名前・中身。反転は 2 つ目）
         out["talk_sheets"] = [sheet_entry(a) for a in talks]
