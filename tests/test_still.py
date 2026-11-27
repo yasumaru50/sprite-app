@@ -318,7 +318,7 @@ def test_mode_preset_and_overrides():
     assert StillSettings() == s
     s2 = StillSettings.from_mode("pc98", colors=8, four_bit=False, max_size=(320, 200))
     assert (s2.colors, s2.four_bit, s2.max_size) == (8, False, (320, 200))
-    assert set(MODES) == {"pc98"}
+    assert set(MODES) == {"pc98", "modern"}
 
 
 @pytest.mark.parametrize("values, words", [
