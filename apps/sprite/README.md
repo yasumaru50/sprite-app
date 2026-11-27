@@ -185,7 +185,10 @@ Display → Window → Size の **Viewport Width / Height** にゲームの画�
 | Mipmaps → **Generate** | 切 | 縮めたときに隣のコマの色が混ざる |
 
 **キャラのシート**: AnimatedSprite2D に置き、`centered` を切って、`offset` を `(-pivot.x, -ground_y)` にすると、足元の真ん中がノードの位置に来る
-（`ground_y` が無いシートは `pivot.y`）。手で読み込むなら SpriteFrames の「Add frames from sprite sheet」（スプライトシートから追加）で、
+（`ground_y` が無いシートは `pivot.y`）。保存の欄の「キャンバスを倍数にそろえる」（CLI の `--canvas-multiple 16`）で 16 の倍数などにしたときも同じで、
+`centered` を切り `offset` を `(-pivot.x, -pivot.y)` にすれば、ノードの位置に足元が来る（JSON の `pivot` は足した余白の分ずれている）。
+`pivot` が `24.5` のように半ドットのときは、`offset` に入れる前に切り捨てて整数にする（例：-24.5 → -24。pivot.x を 24 にしてから符号を付ける）。
+半ドットのままだと、絵が小数の位置に置かれて、にじんだり震えたりすることがある。手で読み込むなら SpriteFrames の「Add frames from sprite sheet」（スプライトシートから追加）で、
 横 `columns`・縦 `rows` に分け、まとめたシートなら動きの行（`row`）のコマ（`frames` の番号）を選ぶ。速さ（FPS）は `1000 / duration_ms`、ループは `loop`、
 コマごとの時間が違うときは各フレームの長さ（Duration）を `frames[].duration_ms / duration_ms` にする（下の例はこれを自動でする）。
 
@@ -232,7 +235,7 @@ func _ready() -> void:
 		sf.remove_animation("default")  # SpriteFrames.new() に最初からある空の動き
 	sprite_frames = sf
 	centered = false
-	offset = Vector2(-float(data["pivot"]["x"]), -float(data.get("ground_y", data["pivot"]["y"])))  # 足元をノードの位置に
+	offset = Vector2(-floor(float(data["pivot"]["x"])), -floor(float(data.get("ground_y", data["pivot"]["y"]))))  # 足元をノードの位置に（半ドットは先に切り捨てる）
 	play(data["animations"].keys()[0])  # 最初の動き（idle など）を再生
 ```
 

@@ -32,6 +32,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from fractions import Fraction
 from pathlib import Path
@@ -65,6 +66,7 @@ from retrocore.sprite import anims as anims_mod
 from retrocore.sprite import same as same_mod
 from retrocore.sprite import steady as steady_mod
 from retrocore.sprite import edit as edit_mod
+from retrocore.sprite import canvas as canvas_mod
 from retrocore.sprite import fx as fx_mod
 
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tif", ".tiff"}
@@ -278,6 +280,21 @@ def _fx_offset(text: str) -> tuple[int, int]:
     if max(abs(v) for v in vals) > fx_mod.MAX_OFFSET:
         raise argparse.ArgumentTypeError(f"−{fx_mod.MAX_OFFSET}〜{fx_mod.MAX_OFFSET} で指定してください: {text}")
     return vals[0], vals[1]
+
+
+def _canvas_multiple(text: str) -> int:
+    try:
+        v = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"0 か 1〜{canvas_mod.MAX_MULTIPLE} の整数で指定してください: {text}")
+    if not 0 <= v <= canvas_mod.MAX_MULTIPLE:
+        raise argparse.ArgumentTypeError(f"0 か 1〜{canvas_mod.MAX_MULTIPLE} の整数で指定してください: {text}")
+    return v
+
+
+def canvas_of(args: argparse.Namespace) -> tuple[int, str]:
+    """--canvas-multiple / --canvas-align の (倍数, 並べ方)。倍数 0 はそろえない。"""
+    return int(getattr(args, "canvas_multiple", None) or 0), getattr(args, "canvas_align", None) or canvas_mod.DEFAULT_ALIGN
 
 
 def _frame_order(text: str) -> list:
@@ -541,6 +558,14 @@ def build_parser() -> argparse.ArgumentParser:
                      help="最終結果で使った色（透明は含めない）をパレットファイルに保存する（拡張子で "
                           + " / ".join(palette_mod.WRITE_FORMATS) + " を決める。何度でも指定できる）。"
                           "入力が複数のときは <名前>_<入力の名前>.<拡張子> に保存する")
+    cv = p.add_argument_group("キャンバスを倍数にそろえる（保存の直前に透明な余白を足すだけ。絵は拡大・縮小しない）")
+    cv.add_argument("--canvas-multiple", type=_canvas_multiple, default=None, metavar="N",
+                    help="1 枚の絵（<出力名>.png。JSON <出力名>.json も書く）と、シート（動き・コマ・まとめたシート・しゃべり。"
+                         "コマのシートは 1 コマの大きさ）の幅と高さを N の倍数にする（1〜256。8・16・32 など。0 か指定なしでそろえない）。"
+                         "JSON の pivot・ground_y を余白の分ずらし、canvas に足した余白を書く。エフェクトのシートは大きさを変えず position をずらす")
+    cv.add_argument("--canvas-align", choices=list(canvas_mod.ALIGNS), default=None,
+                    help="余白の足し方。" + "、".join(f"{k} = {v}" for k, v in canvas_mod.ALIGNS.items())
+                         + f"（既定 {canvas_mod.DEFAULT_ALIGN}）。余りが奇数なら右（center では下も）に 1 ドット多く足す")
     mo = p.add_argument_group("動き（変換の結果を材料にして、アニメーションのスプライトシートも書く。変換の結果は変わらない）")
     mo.add_argument("--motion", choices=list(motion_mod.MOTIONS), default=None,
                     help="付ける動き。" + "、".join(f"{k} = {v}" for k, v in motion_mod.MOTIONS.items())
@@ -969,6 +994,8 @@ def check_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> Non
         given = _option_names(args, ("gif_scale", "gif_background"))
         if given:
             parser.error(f"{' / '.join(given)} は GIF のオプションです。--gif と一緒に指定してください")
+    if args.canvas_align is not None and args.canvas_multiple is None:
+        parser.error("--canvas-align は --canvas-multiple と一緒に指定してください")
     if args.spec_height is not None and args.write_motion_spec is None:
         parser.error("--spec-height は --write-motion-spec と一緒に指定してください")
     if args.no_cleanup and args.cleanup not in (None, "off"):
@@ -1120,6 +1147,7 @@ def write_motion(args: argparse.Namespace, sprite, dst: Path, src: Path, many: b
         res = apply_swaps_cli(args, res, sprite, src)
         if res is None:
             return 1
+    res = canvas_mod.pad_result(res, *canvas_of(args))
     png, js = motion_mod.save_sheet(res, motion_path(dst, res.name), skipped)
     if not args.quiet:
         w, h = res.size
@@ -1152,6 +1180,7 @@ def write_motion(args: argparse.Namespace, sprite, dst: Path, src: Path, many: b
         print(f"  → {png}（{label}: {len(res.frames)} フレーム、{w}×{h}、"
               f"{'/'.join(str(d) for d in res.durations)} ミリ秒{''.join(parts)}）")
         print_swaps(res)
+        print_canvas(res)
         print(f"  → {js}")
     failed = 0
     if getattr(args, "gif", False):
@@ -1168,7 +1197,7 @@ def write_fx(args: argparse.Namespace, anim, png: Path, src: Path) -> int:
     --piskel なら 2 つのレイヤーの .piskel も）を書く。作れなければ警告を出して 1 を返す。"""
     try:
         fx = fx_mod.make_fx(args.fx, anim.frames, anim.name.endswith("_mirror"), tuple(args.fx_offset or (0, 0)),
-                            args.fx_end)
+                            args.fx_end, canvas=anim.info.get("canvas"))
     except ValueError as e:
         print(f"警告（{src.name}）: エフェクト（{args.fx}）を作れませんでした: {e}", file=sys.stderr)
         return 1
@@ -1230,6 +1259,7 @@ def write_talk(args: argparse.Namespace, anim, sprite, dst: Path, src: Path, ski
     print_warnings(rep.warnings, src)
     if talk is None:
         return 1
+    talk = canvas_mod.pad_result(talk, *canvas_of(args))
     png, js = motion_mod.save_sheet(talk, motion_path(dst, talk.name), skipped)
     if not args.quiet:
         w, h = talk.size
@@ -1304,6 +1334,12 @@ def print_talk(res) -> None:
     from retrocore.sprite.swap import SwapReport, talk_summary
     sw = res.info["swaps"]
     print("    しゃべり: " + talk_summary(SwapReport(sw["interval_ms"], sw["cycle_ms"], sw["repeats"], sw["items"])))
+
+
+def print_canvas(res) -> None:
+    """キャンバスを倍数にそろえたときの 1 行。"""
+    if "canvas" in res.info:
+        print("    " + canvas_mod.summary(res.info["canvas"]))
 
 
 def print_swaps(res) -> None:
@@ -1521,6 +1557,9 @@ def write_frames(args: argparse.Namespace, images: list, settings: SpriteSetting
         if got is None:
             return 1
         anims = list(got) if isinstance(got, tuple) else [got]
+    cv = canvas_of(args)   # キャンバスを倍数にそろえる（直し・差し替えの後。全部のコマに同じ余白）
+    anims = [canvas_mod.pad_result(a, *cv) for a in anims]
+    talks = [canvas_mod.pad_result(a, *cv) for a in talks]
     for anim in anims + talks:
         png, js = frames_mod.save_frames_sheet(anim, dst.with_name(frames_mod.sheet_file_name(dst.stem, anim)),
                                                res.skipped, res.dot_size)
@@ -1542,6 +1581,7 @@ def write_frames(args: argparse.Namespace, images: list, settings: SpriteSetting
                   f"コマ {order}、{w}×{h}、{'/'.join(str(d) for d in anim.durations)} ミリ秒{extra}）")
             print(f"  → {js}")
             print_talk(anim) if any(anim is t for t in talks) else print_swaps(anim)
+            print_canvas(anim)
             print(f"    （Piskel で直すときは: Import → Import as spritesheet → 幅 {w}・高さ {h}。{len(anim.frames)} コマ）")
         if args.piskel:
             from retrocore.sprite.piskel import fps_for_durations, piskel_text
@@ -1711,6 +1751,8 @@ def run_anims(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
         cfg.align = args.align
     if args.frame_grid is not None:
         cfg.grid = args.frame_grid
+    if args.canvas_multiple is not None:   # 引数が設定のファイルより優先
+        cfg.canvas_multiple, cfg.canvas_align = canvas_of(args)
     for sp in args.save_palette or []:
         if sp.suffix.lower() not in palette_mod.WRITE_FORMATS:
             parser.error(f"--save-palette は {' / '.join(palette_mod.WRITE_FORMATS)} のファイルで指定してください: {sp}")
@@ -1831,6 +1873,8 @@ def run_anims(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
                   f"{'/'.join(str(d) for d in m.durations)} ミリ秒、{'くり返す' if a.loop else '1 回で終わる'}"
                   f"、縦 {a.align_y}" + (f"、上げ下げ {','.join(map(str, a.shift_y))}" if a.shift_y else ""))
         print(f"    （1 コマ {w}×{h}、{sh.columns} 列 × {len(sh.anims)} 行、地面の線 ground_y {sh.info['ground_y']}）")
+        if "canvas" in sh.info:
+            print("    " + canvas_mod.summary(sh.info["canvas"]))
     failed = 0
     if args.gif:
         scale = args.gif_scale or gif_mod.DEFAULT_SCALE
@@ -1924,9 +1968,16 @@ def main(argv: list[str] | None = None) -> int:
             failed += 1
             continue
         out = result.image
-        save_rgba(out, dst)
+        still, still_json = canvas_mod.pad_still(out, dst.name, *canvas_of(args))   # 余白は保存する絵だけ（動きの材料は元の絵）
+        save_rgba(still, dst)
         if not args.quiet:
             print(f"  → {dst}")
+        if still_json is not None:
+            jp = dst.with_suffix(".json")
+            jp.write_text(still_json, encoding="utf-8")
+            if not args.quiet:
+                print("    " + canvas_mod.summary(json.loads(still_json)["canvas"]))
+                print(f"  → {jp}")
         print_warnings(result.warnings, src)
         for pp in palette_paths(args.save_palette, dst, len(inputs) > 1):
             cols = save_palette(used_colors(out), pp)
@@ -1934,7 +1985,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"  → {pp}（パレット {len(cols)} 色）")
         if args.preview_scale is not None:
             pv = preview_path(dst, args.preview_scale)
-            save_rgba(scale_nearest(out, args.preview_scale), pv)
+            save_rgba(scale_nearest(still, args.preview_scale), pv)
             if not args.quiet:
                 print(f"  → {pv}（プレビュー {args.preview_scale} 倍）")
         if (args.motion is not None or args.motion_spec is not None) and \

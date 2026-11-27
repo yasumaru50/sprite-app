@@ -832,6 +832,26 @@
 
   <section class="panel" id="save-panel">
     <h2 class="title" id="save-title">保存</h2>
+    <div class="actions" id="canvas-controls">
+      <label for="canvas-multiple">キャンバスを倍数にそろえる</label>
+      <select id="canvas-multiple">
+        <option value="0" selected>そろえない</option>
+        <option value="8">8</option><option value="16">16</option><option value="32">32</option>
+        <option value="custom">任意の数…</option>
+      </select>
+      <input type="number" id="canvas-custom" min="1" max="256" step="1" value="24" hidden aria-label="キャンバスの倍数（1〜256）">
+      <label for="canvas-align">並べ方</label>
+      <select id="canvas-align">
+        <option value="bottom" selected>下ぞろえ・左右中央</option>
+        <option value="center">上下左右中央</option>
+      </select>
+    </div>
+    <div class="note" id="canvas-status" role="status" aria-live="polite"></div>
+    <div class="note help" data-help-at="canvas-controls" data-help-name="キャンバスを倍数にそろえる">保存する絵の幅と高さを、選んだ数の倍数にします（ゲームのエンジンで扱いやすい大きさに）。
+      絵は拡大・縮小せず、透明な余白を足すだけです。余りが奇数のときは右（上下左右中央では下も）に 1 ドット多く足します。
+      1 枚の絵は ③ の PNG（と ③ の情報の JSON）、コマの絵・まとめたシートは 1 コマの大きさをそろえます（全部のコマに同じ余白）。
+      JSON の pivot・ground_y は余白の分ずれ、canvas に足した余白が入ります。直したドット・差し替えは余白を足す前の位置のままです。
+      CLI では <code>--canvas-multiple 16</code>（<code>--canvas-align center</code>）。</div>
     <div class="actions">
       <button type="button" id="dl-zip" class="big" disabled>まとめて保存（ZIP）</button>
       <span class="note" id="zip-status" role="status" aria-live="polite"></span>
@@ -860,6 +880,7 @@
       <div class="fold-body">
       <div class="actions">
       <a id="download" class="button" aria-disabled="true" href="#">③ 結果を PNG で保存（透明つき）</a>
+      <a id="dl-still-json" class="button secondary" aria-disabled="true" href="#" hidden>③ の情報（JSON。pivot・ground_y・canvas）</a>
       </div>
       <div class="motion-part">
       <div class="actions">
@@ -998,6 +1019,7 @@ let convertForWeb = null;
 let motionForWeb = null;
 let tableForWeb = null;
 let gifForWeb = null;
+let canvasStillForWeb = null;
 let edgesForWeb = null;
 let framesConvertForWeb = null;
 let framesJoinForWeb = null;
@@ -1027,6 +1049,9 @@ async function init(indexURL, sources) {
     "from retrocore.sprite.convert import motion_for_web",
     "from retrocore.sprite.convert import table_for_web",
     "from retrocore.sprite.convert import gif_for_web",
+    "from retrocore.sprite.convert import canvas_still_for_web",
+    "def sprite_app_canvas_still(js_bytes, options_json):",
+    "    return canvas_still_for_web(js_bytes.to_bytes(), options_json)",
     "from retrocore.sprite.convert import frames_convert_for_web, frames_sheets_for_web, frames_same_for_web, frames_edits_for_web, frames_restore_for_web",
     "def sprite_app_frames(js_bytes, request_json):",
     "    return frames_convert_for_web(js_bytes.to_bytes(), request_json)",
@@ -1071,6 +1096,7 @@ async function init(indexURL, sources) {
   motionForWeb = pyodide.globals.get("sprite_app_motion");
   tableForWeb = pyodide.globals.get("sprite_app_table");
   gifForWeb = pyodide.globals.get("sprite_app_gif");
+  canvasStillForWeb = pyodide.globals.get("sprite_app_canvas_still");
   edgesForWeb = pyodide.globals.get("sprite_app_edges");
   framesConvertForWeb = pyodide.globals.get("sprite_app_frames");
   framesJoinForWeb = pyodide.globals.get("sprite_app_frames_join");
@@ -1101,6 +1127,10 @@ self.onmessage = async (ev) => {
     } else if (msg.type === "table") {
       // うなずくの自動の首は変換の結果から決めるので、あれば PNG も渡す
       const json = tableForWeb(JSON.stringify(msg.request), msg.bytes ? new Uint8Array(msg.bytes) : null);
+      self.postMessage({ type: "result", id: msg.id, result: JSON.parse(json) });
+    } else if (msg.type === "canvas-still") {
+      // 1 枚の絵のキャンバスを倍数にそろえる（③ の PNG と JSON。CLI の --canvas-multiple と同じ関数）
+      const json = canvasStillForWeb(new Uint8Array(msg.bytes), JSON.stringify(msg.options));
       self.postMessage({ type: "result", id: msg.id, result: JSON.parse(json) });
     } else if (msg.type === "gif") {
       const json = gifForWeb(new Uint8Array(msg.bytes), msg.sheetJson, JSON.stringify(msg.options));
@@ -1401,6 +1431,7 @@ function clearResult(text) {
   if (outUrl) URL.revokeObjectURL(outUrl);
   outUrl = null;
   $("download").href = "#";
+  if (typeof stillUpdate === "function") stillUpdate();
   $("stage-out").innerHTML = `<span class="empty">${text}</span>`;
   $("meta-out").textContent = "";
   $("steps-box").hidden = true;
@@ -1678,6 +1709,7 @@ async function runConvert() {
     setStatus(`変換できました（${((performance.now() - t0) / 1000).toFixed(1)} 秒）。`, false);
     table.nums = {}; table.limits = null; table.suggest = []; table.pixels = [];
     if (table.base) refreshEdgeNumbers();   // 表の範囲の割合の端を、新しい変換結果で数にし直す（絵の上の範囲も描き直す）
+    stillUpdate();     // キャンバスを倍数にそろえるなら、③ の PNG に余白を足したものを保存する
     requestMotion(0);  // 動き（呼吸・横揺れ）を選んでいれば、変換結果から動きを作る（「なし」なら何もしない）
   } catch (e) {
     clearResult("変換できませんでした");
@@ -1690,6 +1722,74 @@ async function runConvert() {
 }
 $("convert").addEventListener("click", runConvert);
 $("download").addEventListener("click", (ev) => { if (!outUrl || busy) ev.preventDefault(); });
+
+// ---- キャンバスを倍数にそろえる（保存の前の欄。CLI の --canvas-multiple / --canvas-align） ----
+// 余白は保存するものにだけ足す（動きの材料・直し・差し替えは余白を足す前の絵のまま）。シートは Python がシートを作るときに足し、
+// 1 枚の絵（③）は canvas_still_for_web で足す。中身は CLI と同じ関数（retrocore/sprite/canvas.py）なので、同じ設定なら同じバイトになる。
+const still = { url: null, jsonUrl: null, seq: 0 };
+function canvasRequest() {
+  const v = $("canvas-multiple").value;
+  if (v === "0") return null;
+  const n = v === "custom" ? Number($("canvas-custom").value) : Number(v);
+  if (!Number.isInteger(n) || n < 1 || n > 256) {
+    throw new Error(`キャンバスの倍数は 1〜256 の整数で入れてください（いまは「${$("canvas-custom").value}」）。`);
+  }
+  return { multiple: n, align: $("canvas-align").value };
+}
+function canvasCli() {
+  let c = null;
+  try { c = canvasRequest(); } catch (e) { return ""; }
+  return c ? ` --canvas-multiple ${c.multiple}` + (c.align !== "bottom" ? ` --canvas-align ${c.align}` : "") : "";
+}
+function canvasSummary(c) {
+  if (!c) return "";
+  const w = c.width + c.left + c.right, h = c.height + c.top + c.bottom;
+  return `${c.width}×${c.height} → ${w}×${h}（左 ${c.left}・右 ${c.right}・上 ${c.top}・下 ${c.bottom}）`;
+}
+// いまの余白の様子（③ の絵とシート）。CLI の引数も添える
+function canvasShow() {
+  const lines = [];
+  let err = "";
+  try { canvasRequest(); } catch (e) { err = e.message; }
+  if (err) { $("canvas-status").textContent = err; return; }
+  if (still.canvas) lines.push(`③ の絵: ${canvasSummary(still.canvas)}`);
+  if (motion.info && motion.info.canvas) lines.push(`シートの 1 コマ: ${canvasSummary(motion.info.canvas)}、pivot (${motion.info.pivot.x}, ${motion.info.pivot.y})`);
+  const cli = canvasCli();
+  if (lines.length && cli) lines.push(`CLI では引数に「${cli.trim()}」を足します（動きをまとめたときは .anims.json に入ります）`);
+  $("canvas-status").textContent = lines.join("。") + (lines.length ? "。" : "");
+}
+async function stillUpdate() {
+  const seq = ++still.seq;
+  if (outUrl) $("download").href = outUrl;
+  for (const u of [still.url, still.jsonUrl]) if (u) URL.revokeObjectURL(u);
+  still.url = still.jsonUrl = still.canvas = null;
+  const j = $("dl-still-json");
+  j.hidden = true; j.href = "#"; j.setAttribute("aria-disabled", "true");
+  let cv = null;
+  try { cv = canvasRequest(); } catch (e) { cv = null; }
+  if (!cv || framesMode() || !outPng || !outUrl) { canvasShow(); return; }
+  const name = $("download").download || `${outBase}.png`;
+  const { result } = await call({ type: "canvas-still", bytes: outPng.slice().buffer, options: { ...cv, image_name: name } });
+  if (seq !== still.seq || framesMode()) return;
+  if (!result.ok) { $("canvas-status").textContent = result.error; return; }
+  still.url = URL.createObjectURL(new Blob([decodeBase64(result.png_base64)], { type: "image/png" }));
+  still.jsonUrl = URL.createObjectURL(new Blob([result.json], { type: "application/json" }));
+  still.canvas = result.canvas;
+  $("download").href = still.url;
+  j.href = still.jsonUrl; j.download = name.replace(/\.png$/, ".json");
+  j.hidden = false; j.setAttribute("aria-disabled", "false");
+  canvasShow();
+}
+function canvasChanged() {
+  $("canvas-custom").hidden = $("canvas-multiple").value !== "custom";
+  stillUpdate();
+  if (framesMode()) { if (frames.token) requestSheets(); }
+  else requestMotion();
+  canvasShow();
+}
+for (const id of ["canvas-multiple", "canvas-align"]) $(id).addEventListener("change", canvasChanged);
+$("canvas-custom").addEventListener("input", canvasChanged);
+$("dl-still-json").addEventListener("click", (ev) => { if ($("dl-still-json").getAttribute("aria-disabled") === "true") ev.preventDefault(); });
 
 // ---- 動き（なし・呼吸・横揺れ・浮遊・弾む・うなずく） ----
 // 動きは変換の結果（PNG）を材料に、CLI の --motion と同じ Python の関数（motion_for_web → make_motion）で作る。
@@ -2031,6 +2131,8 @@ async function runMotion() {
     if (outSkipped.length) options = { ...options, convert_skipped: outSkipped };   // CLI と同じ JSON にする
     const swaps = touch.single ? swapRequest() : null;
     if (swaps) options = { ...options, swaps };   // 差し替え（まばたき）。無ければ今までと同じ
+    const cv = canvasRequest();
+    if (cv) options = { ...options, canvas: cv };   // キャンバスを倍数にそろえる。そろえないときは今までと同じ
   } catch (e) {
     clearMotion("設定を直すと、ここで動きを再生します");
     showMotionError(e.message);
@@ -2125,6 +2227,7 @@ async function showMotion(result, ms) {
   motion.sheetUrl = URL.createObjectURL(new Blob([png], { type: "image/png" }));
   motion.jsonUrl = URL.createObjectURL(new Blob([result.sheet_json], { type: "application/json" }));
   motion.info = JSON.parse(result.sheet_json);  // 再生の表示時間は、保存する JSON の値をそのまま使う
+  canvasShow();
   motion.sheetImg = await loadImage(motion.sheetUrl);
   const name = motion.info.image;
   $("dl-sheet").href = motion.sheetUrl;
@@ -2201,6 +2304,11 @@ function motionScale(w, h, rulerW) {
   return Math.max(1, Math.floor(fit));
 }
 function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+// 行の番号を数え始める行: 浮遊で下に足した行と、キャンバスを倍数にそろえて下に足した行は数えない
+function rowsBelow() {
+  const i = motion.info;
+  return i ? (i.padding ? i.padding.bottom : 0) + (i.canvas ? i.canvas.bottom : 0) : 0;
+}
 function drawRuler(h, k) {
   // 行の番号: 下から何ドット目か（1 = いちばん下の行）。1 行ごとに短い目盛り、1 と 5 行ごとに番号（PR #22 の目安の画像と同じ数え方）。
   // 指定できない行（足元・絵より上）は灰色。選んでいる高さには印を付ける
@@ -2219,7 +2327,7 @@ function drawRuler(h, k) {
   ctx.textAlign = "right";
   const lim = motion.limits;
   // 浮遊は下に透明の行を足すので、元の絵のいちばん下の行を 1 にする（足した行は 0 以下で、番号は書かない）
-  const below = motion.info && motion.info.padding ? motion.info.padding.bottom : 0;
+  const below = rowsBelow();
   for (let y = 0; y < h; y++) {
     const n = h - below - y, cy = y * k + k / 2;
     const ok = lim && lim[0] <= n && n <= lim[1];
@@ -2270,7 +2378,7 @@ function drawMotion() {
   if (rows) {
     // 5 行ごとに点線（目安の画像と同じ）
     ctx.fillStyle = "rgba(255,255,255,0.8)";
-    const below = motion.info && motion.info.padding ? motion.info.padding.bottom : 0;   // 浮遊で下に足した行
+    const below = rowsBelow();   // 浮遊で下に足した行
     for (let y = 0; y < h; y++) {
       const n = h - below - y;
       if (n < 1 || n % 5 !== 0) continue;
@@ -4058,6 +4166,8 @@ function sheetRequest() {
   const req = { token: frames.token, base: outBase, name: frameName(), order: order ? order.map(orderToken) : null, durations, root_y: rootY(len), mirror: true };
   const swaps = swapRequest();
   if (swaps) req.swaps = swaps;   // 差し替え（まばたき）。無ければ今までと同じ
+  const cv = canvasRequest();
+  if (cv) req.canvas = cv;   // キャンバスを倍数にそろえる。そろえないときは今までと同じ
   return req;
 }
 // CLI で同じファイルを作る引数（画面の下に出す）
@@ -4090,6 +4200,7 @@ function framesCli(req) {
   parts.push(...sameCli());
   if (touchCount()) parts.push(`--edits ${touchFileName()}`);
   if (req.swaps) parts.push(`--swaps ${swapFileName()}`);
+  if (req.canvas) parts.push(canvasCli().trim());
   parts.push("--mirror", "--flicker", "--piskel");
   return parts.join(" ");
 }
@@ -4283,6 +4394,7 @@ async function showSheets(result, req) {
   motion.sheetUrl = URL.createObjectURL(new Blob([png], { type: "image/png" }));
   motion.jsonUrl = URL.createObjectURL(new Blob([main.json], { type: "application/json" }));
   motion.info = JSON.parse(main.json);
+  canvasShow();
   motion.sheetImg = await loadImage(motion.sheetUrl);
   motion.sheetPng = png;
   motion.sheetJson = main.json;
@@ -5985,7 +6097,9 @@ function animsConfig(groups) {
 // シートを作るときの設定: 動き・ファイル・そろえ方は変換したときのもの、順番・時間・くり返すかはいまの値
 function animsSheetConfig() {
   const at = anims.at;
-  return { ...at, anims: at.anims.map((a) => {
+  const cv = canvasRequest();   // キャンバスを倍数にそろえる（設定のファイルの common に入る。そろえないときは今までと同じ）
+  const common = cv ? { ...at.common, canvas_multiple: cv.multiple, canvas_align: cv.align } : at.common;
+  return { ...at, common, anims: at.anims.map((a) => {
     const st = animSettings(a.name);
     return { ...a, order: animOrder(st, a.name), duration_ms: animDurations(st, a.name), loop: !!st.loop };
   }) };
@@ -6123,7 +6237,8 @@ function animsPlayInfo(info, name) {
   const a = info.animations[name];
   const fr = a.frames.map((i) => info.frames[i]);
   return { frame_width: info.frame_width, frame_height: info.frame_height, frame_count: fr.length, frames: fr,
-           total_duration_ms: fr.reduce((s, f) => s + f.duration_ms, 0), loop: a.loop, once: a.loop === false };
+           total_duration_ms: fr.reduce((s, f) => s + f.duration_ms, 0), loop: a.loop, once: a.loop === false,
+           pivot: info.pivot, ...(info.canvas ? { canvas: info.canvas } : {}) };
 }
 async function showAnimsSheets(result) {
   const keepFrame = motion.frame;
@@ -6170,6 +6285,7 @@ async function showAnimsSheets(result) {
   $("motion-wrap").hidden = false;
   animsShowPlay(keepFrame);
   $("cli-equiv").textContent = framesCli(null);
+  canvasShow();
 }
 function animsShowPlay(keepFrame = 0) {
   const info = anims.info, name = anims.play;
@@ -6505,7 +6621,7 @@ new MutationObserver(foldLater).observe(document.body, { subtree: true, childLis
 // PNG・JSON は保存のボタン（リンク）が指しているものと同じバイト列、GIF は GIF のボタンと同じ頼み方で作る。
 // ZIP は Python の zip_files（日時を固定・圧縮しない）で作るので、同じ入力なら同じ ZIP になる。
 const zip = { busy: false };
-const ZIP_LINKS = ["download", "dl-sheet", "dl-json", "dl-anims-config", "dl-mirror", "dl-mirror-json",
+const ZIP_LINKS = ["download", "dl-still-json", "dl-sheet", "dl-json", "dl-anims-config", "dl-mirror", "dl-mirror-json",
                    "dl-talk-sheet", "dl-talk-json", "dl-talk-mirror", "dl-talk-mirror-json",
                    "dl-fx", "dl-fx-json", "dl-fx-mirror", "dl-fx-mirror-json", "touch-save", "swap-save"];
 function zipLinks() {
