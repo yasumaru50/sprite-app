@@ -118,3 +118,36 @@ def noisy_scene_rgba() -> np.ndarray:
     out[..., :3] = NOISY_PALETTE[idx]
     out[..., 3] = 255
     return out
+
+
+# 今風モードのテスト用の色。WALL_NEAR は WALL と、SKY_NEAR は SKY と見た目でほぼ同じ（OKLab の距離 0.04 未満）
+MODERN_LINE = (12, 12, 16)
+MODERN_WALL = (200, 170, 130)
+MODERN_WALL_NEAR = (214, 176, 124)
+MODERN_SKY = (90, 140, 210)
+MODERN_SKY_NEAR = (104, 140, 196)
+MODERN_SPECK = (230, 60, 160)   # にじみの点（どの色とも遠い）
+MODERN_FLOOR = (90, 70, 50)
+
+
+def make_modern_scene(w: int = 64, h: int = 40) -> tuple[np.ndarray, dict]:
+    """今風モードのテスト用の 1 枚絵（h×w×3 の RGB。1 ドット＝1 画素）と、置いた点の場所。
+
+    上は空、下は壁、いちばん下は床。空と壁の境目は暗い 1 ドットの線。壁の中に少し違う色（WALL_NEAR）の四角、
+    空の中に少し違う色（SKY_NEAR）の小さな四角。孤立した点: 空の中・壁の中の 1 ドット（SPECK）、絵の端の 1 ドット（変えない）、
+    空の中の暗い線の色の 1 ドット（変えない）、2 ドットならんだ点（どちらもまわりに同じ色があるので変えない）。
+    """
+    rgb = np.zeros((h, w, 3), np.uint8)
+    rgb[:] = MODERN_SKY
+    rgb[16:] = MODERN_WALL
+    rgb[16] = MODERN_LINE
+    rgb[34:] = MODERN_FLOOR
+    rgb[22:30, 30:44] = MODERN_WALL_NEAR      # 8×14 = 112 ドット
+    rgb[3:6, 40:46] = MODERN_SKY_NEAR         # 3×6 = 18 ドット
+    spots = {"sky": (8, 10), "wall": (25, 10), "edge": (0, 20), "dark": (8, 50), "pair": [(10, 25), (10, 26)]}
+    for key in ("sky", "wall", "edge"):
+        rgb[spots[key]] = MODERN_SPECK
+    rgb[spots["dark"]] = MODERN_LINE
+    for yx in spots["pair"]:
+        rgb[yx] = MODERN_SPECK
+    return rgb, spots

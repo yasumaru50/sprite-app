@@ -116,7 +116,7 @@
       <div class="field">
         <label for="mode">初めの設定</label>
         <select id="mode"></select>
-        <small class="help">設定の組み合わせ（プリセット）です。決まりではないので、下の「必要なときに開く」で 1 つずつ変えられます</small>
+        <small class="help">設定の組み合わせ（プリセット）です。決まりではないので、下の「必要なときに開く」で 1 つずつ変えられます。「今風」は最近のインディーゲームの背景のようなドット絵の手直しの出発点で、32 色・4096 色に丸めない・1920×1080 まで・似た色をまとめる です（CLI の --mode modern）</small>
       </div>
       <div class="field">
         <button type="button" id="run" disabled>② 変換する</button>
@@ -124,12 +124,13 @@
     </div>
 
     <details class="fold" id="fold-need">
-      <summary><span class="fold-name">必要なときに開く</span><span class="fold-mark" hidden>（変更あり）</span><small class="fold-what">色数・横のマス数・大きさの上限・キャンバス・4096 色に丸める・いちばん暗い色・模様を整える</small></summary>
+      <summary><span class="fold-name">必要なときに開く</span><span class="fold-mark" hidden>（変更あり）</span><small class="fold-what">色数・横のマス数・大きさの上限・キャンバス・4096 色に丸める・いちばん暗い色・似た色・孤立したドット・模様を整える</small></summary>
       <div class="fold-body">
         <div class="controls">
           <div class="field">
             <label for="colors">色数</label>
             <input type="number" id="colors" step="1">
+            <select id="colors-modern" aria-label="色数（今風）" hidden></select>
             <small class="help" id="colors-help"></small>
           </div>
           <div class="field">
@@ -158,6 +159,14 @@
             <small class="help">パレットの 1 色を絵の中のいちばん暗い色にして、暗い線が中間の色に吸われて消えないようにします（CLI の --no-keep-darkest で切）</small>
           </div>
           <div class="field">
+            <label class="check"><input type="checkbox" id="merge-similar"> 似た色をまとめる</label>
+            <small class="help">減色のあと、見た目でほぼ区別できない色どうし（OKLab の距離 0.04 未満）を、ドット数の多い方の色に合わせます。いちばん暗い色は残します。色数は上限なので、少なくなることがあります。今風モードだけで使います（CLI の --no-merge-similar で切）</small>
+          </div>
+          <div class="field">
+            <label class="check"><input type="checkbox" id="tidy-dots"> 孤立したドットをそろえる</label>
+            <small class="help">まわりの 8 ドットに同じ色が 1 つも無く、まわりの 7 つ以上が同じ色のドットを、その色にします（AI のにじみの点を消すため）。いちばん暗い色のドットと絵の端のドットは変えません。1 回だけ通します（CLI の --tidy-dots）</small>
+          </div>
+          <div class="field">
             <label class="check"><input type="checkbox" id="tidy-pattern"> ざらついた範囲を模様に整える</label>
             <small class="help">AI が描いたディザ風の所は、減色するとばらばらの点になります。そういう所を、その場所の多い 2 色だけを使った 2×2 の決まった模様（濃さ 5 段。50% は市松）に置き換えます。輪郭・平塗りの面・小さい所・3 色目が多い所は変えません（CLI の --tidy-pattern）</small>
           </div>
@@ -184,6 +193,10 @@
       <div class="field">
         <label class="check"><input type="checkbox" id="show-overlay" disabled> 整えた範囲を色で重ねる</label>
         <small class="help">「ざらついた範囲を模様に整える」で変えた範囲を、薄い色（縁は濃い色）で結果に重ねて見せます。表示だけで、保存する PNG は変わりません</small>
+      </div>
+      <div class="field">
+        <label class="check"><input type="checkbox" id="show-dots-overlay" disabled> 置き換えたドットを色で重ねる</label>
+        <small class="help">「孤立したドットをそろえる」で置き換えたドットを濃い桃色（まわり 1 ドットは薄い桃色）で結果に重ねて見せます。表示だけで、保存する PNG は変わりません</small>
       </div>
     </div>
     <div class="views" style="margin-top:12px">
@@ -307,12 +320,20 @@ for (const [key, m] of Object.entries(SPEC.modes)) $("mode").add(new Option(m.la
 $("mode").value = SPEC.default_mode;
 $("colors").min = SPEC.colors.min;
 $("colors").max = SPEC.colors.max;
-$("colors-help").textContent = `パレットの色数の上限（${SPEC.colors.min}〜${SPEC.colors.max}）。似た色が多いときは、これより少なくなることがあります。CLI の --colors`;
+for (const n of SPEC.modern_colors) $("colors-modern").add(new Option(`${n} 色`, String(n)));
+$("colors-help").textContent = `パレットの色数の上限（${SPEC.colors.min}〜${SPEC.colors.max}。今風モードでは ${SPEC.modern_colors.join("・")} から選ぶ）。似た色が多いときは、これより少なくなることがあります。CLI の --colors`;
 for (const z of [1, 2, 3, 4, 6, 8]) $("zoom").add(new Option(`${z} 倍`, String(z)));
 $("zoom").value = "3";
 function applyMode(key) {
   const m = SPEC.modes[key];
+  const modern = key === "modern";   // 今風モードの色数は決まった数から選ぶ
+  $("colors").hidden = modern;
+  $("colors-modern").hidden = !modern;
   $("colors").value = m.colors;
+  $("colors-modern").value = String(m.colors);
+  $("merge-similar").checked = m.merge_similar;
+  $("merge-similar").disabled = !m.merge_similar;   // 98 モードでは使わない
+  $("tidy-dots").checked = false;
   $("max-w").value = m.max_size[0];
   $("max-h").value = m.max_size[1];
   $("four-bit").checked = m.four_bit;
@@ -356,13 +377,16 @@ function currentSettings() {
   if ((cw === "") !== (ch === "")) throw new Error("キャンバスは幅と高さの両方を入れてください（なしにするときは両方とも空に）。");
   return {
     mode: $("mode").value,
-    colors: intField("colors", "色数", { min: SPEC.colors.min, max: SPEC.colors.max }),
+    colors: $("mode").value === "modern" ? Number($("colors-modern").value)
+                                         : intField("colors", "色数", { min: SPEC.colors.min, max: SPEC.colors.max }),
     width: intField("width", "横のマス数", { optional: true }),
     max_size: [intField("max-w", "上限の幅"), intField("max-h", "上限の高さ")],
     canvas: cw === "" ? null : [intField("canvas-w", "キャンバスの幅"), intField("canvas-h", "キャンバスの高さ")],
     four_bit: $("four-bit").checked,
     keep_darkest: $("keep-darkest").checked,
     tidy_pattern: $("tidy-pattern").checked,
+    tidy_dots: $("tidy-dots").checked,
+    ...(SPEC.modes[$("mode").value].merge_similar ? { merge_similar: $("merge-similar").checked } : {}),
   };
 }
 
@@ -370,7 +394,7 @@ function currentSettings() {
 let worker = null, nextId = 1, ready = false, busy = false;
 const pending = new Map();
 let srcFile = null, srcBytes = null, srcUrl = null, srcImg = null, outImg = null, outPngUrl = null, outJsonUrl = null;
-let overlayImg = null, overlayUrl = null;
+let overlayImg = null, overlayUrl = null, dotsOverlayImg = null, dotsOverlayUrl = null;
 function setStatus(text, spin) {
   $("status").innerHTML = "";
   if (spin) { const s = document.createElement("span"); s.className = "spinner"; $("status").appendChild(s); }
@@ -421,14 +445,19 @@ function render() {
   if (outImg) {
     const w = outImg.naturalWidth * z, h = outImg.naturalHeight * z;
     put($("out-stage"), outImg, w, h);
-    if (overlayImg && $("show-overlay").checked) {   // 見える化（表示だけ）。結果の上に同じ大きさで重ねる
+    // 見える化（表示だけ）。結果の上に同じ大きさで重ねる
+    const layers = [[overlayImg, "show-overlay"], [dotsOverlayImg, "show-dots-overlay"]]
+      .filter(([img, id]) => img && $(id).checked).map(([img]) => img);
+    if (layers.length) {
       const wrap = document.createElement("div");
       wrap.className = "overlay-wrap";
       $("out-stage").innerHTML = "";
-      overlayImg.className = "overlay";
-      overlayImg.style.width = `${w}px`;
-      overlayImg.style.height = `${h}px`;
-      wrap.append(outImg, overlayImg);
+      for (const img of layers) {
+        img.className = "overlay";
+        img.style.width = `${w}px`;
+        img.style.height = `${h}px`;
+      }
+      wrap.append(outImg, ...layers);
       $("out-stage").appendChild(wrap);
     }
     if (srcImg) {
@@ -442,13 +471,15 @@ function render() {
 }
 $("zoom").addEventListener("change", render);
 $("show-overlay").addEventListener("change", render);
+$("show-dots-overlay").addEventListener("change", render);
 
 function clearResult(text) {
   outImg = null;
-  overlayImg = null;
-  for (const u of [outPngUrl, outJsonUrl, overlayUrl]) if (u) URL.revokeObjectURL(u);
-  outPngUrl = outJsonUrl = overlayUrl = null;
+  overlayImg = dotsOverlayImg = null;
+  for (const u of [outPngUrl, outJsonUrl, overlayUrl, dotsOverlayUrl]) if (u) URL.revokeObjectURL(u);
+  outPngUrl = outJsonUrl = overlayUrl = dotsOverlayUrl = null;
   $("show-overlay").disabled = true;
+  $("show-dots-overlay").disabled = true;
   $("out-stage").innerHTML = `<span class="empty">${text}</span>`;
   $("out-meta").textContent = "";
   $("swatches").innerHTML = "";
@@ -539,12 +570,20 @@ async function runConvert() {
                                     : `横 ${d.width} マス（1 マス ${d.cell_size[0].toFixed(1)}×${d.cell_size[1].toFixed(1)}px）`;
     $("out-meta").textContent = `${how} → ${info.picture.width}×${info.picture.height} ドット、${result.colors.used} 色`
       + (result.canvas ? `、キャンバス ${result.width}×${result.height}` : "")
+      + (result.similar ? `、似た色をまとめた組 ${result.similar.merged}` : "")
+      + (result.tidy_dots ? `、孤立したドットを置き換えた数 ${result.tidy_dots.changed}` : "")
       + (result.pattern ? `、模様を整えた範囲 ${result.pattern.regions} か所（${result.pattern.changed} ドット）` : "");
     if (result.overlay_base64) {
       overlayUrl = URL.createObjectURL(new Blob([decodeBase64(result.overlay_base64)], { type: "image/png" }));
       overlayImg = await loadImage(overlayUrl);
       overlayImg.alt = "整えた範囲";
       $("show-overlay").disabled = false;
+    }
+    if (result.dots_overlay_base64) {
+      dotsOverlayUrl = URL.createObjectURL(new Blob([decodeBase64(result.dots_overlay_base64)], { type: "image/png" }));
+      dotsOverlayImg = await loadImage(dotsOverlayUrl);
+      dotsOverlayImg.alt = "置き換えたドット";
+      $("show-dots-overlay").disabled = false;
     }
     for (const p of result.palette) {
       const el = document.createElement("div");

@@ -1,7 +1,8 @@
 """Still App の入口（CLI とブラウザ版で共通）。1 枚絵を、決まった色数・格子の本物のドット絵にそろえる。
 
 工程: 読み込み（透明は黒で埋める）→ ドットに戻す（グリッド検出か --width）→ 大きさの上限を確かめる
-→ 減色（4 ビットの丸め・いちばん暗い色を取っておく）→ 模様を整える（--tidy-pattern のときだけ）→ キャンバス（--canvas のときだけ余白を足す）→ PNG（インデックスカラー）と JSON。
+→ 減色（4 ビットの丸め・いちばん暗い色を取っておく）→ 似た色をまとめる（今風モードの既定）
+→ 孤立したドットをそろえる（--tidy-dots のときだけ）→ 模様を整える（--tidy-pattern のときだけ）→ キャンバス（--canvas のときだけ余白を足す）→ PNG（インデックスカラー）と JSON。
 
 `--mode`（`MODES`）は初めの設定の組み合わせ（プリセット）で、強制ではない。個別の設定で上書きできる。
 同じ入力・同じ設定からは、CLI でもブラウザ版でも同じバイト列の PNG と JSON ができる（`convert_still_bytes()`）。
@@ -27,6 +28,7 @@ from PIL import Image
 from ..sprite.image import to_rgba
 from . import colors as colors_mod
 from . import dots as dots_mod
+from . import lone as lone_mod
 from . import pattern as pattern_mod
 
 APP = "still"
@@ -34,8 +36,14 @@ FORMAT_VERSION = 1
 # プリセット。値を変えると出力が変わる（足すのはよい）
 MODES = {
     "pc98": {"label": "PC-98 風（16 色・4096 色・640×400 まで）",
-             "colors": 16, "four_bit": True, "max_size": (640, 400), "keep_darkest": True},
+             "colors": 16, "four_bit": True, "max_size": (640, 400), "keep_darkest": True, "merge_similar": False},
+    # 今風（最近のインディーゲームの背景のようなドット絵の手直しの出発点）。色が多いと AI のにじみの色が残りやすいので、
+    # 見た目でほぼ同じ色はまとめる（色数は上限で、少なくなってよい）
+    "modern": {"label": "今風（32 色・丸めない・1920×1080 まで・似た色をまとめる）",
+               "colors": 32, "four_bit": False, "max_size": (1920, 1080), "keep_darkest": True, "merge_similar": True},
 }
+# ブラウザ版で今風モードのときに選べる色数（CLI の --colors は 2〜256 のまま）
+MODERN_COLOR_CHOICES = (16, 24, 32, 48, 64, 96, 128)
 DEFAULT_MODE = "pc98"
 MAX_SIDE = 4096   # 上限・キャンバスに指定できる 1 辺の最大
 
@@ -78,6 +86,8 @@ class StillSettings:
     canvas: tuple[int, int] | None = None    # 余白を足して、この大きさにする
     keep_darkest: bool = MODES[DEFAULT_MODE]["keep_darkest"]
     tidy_pattern: bool = False               # ざらついた範囲を 2 色の模様に整える（既定は切。プリセットには入れない）
+    merge_similar: bool = MODES[DEFAULT_MODE]["merge_similar"]   # 似た色をまとめる（今風モードだけ）
+    tidy_dots: bool = False                  # 孤立したドットをそろえる（既定は切。プリセットには入れない）
 
     @classmethod
     def from_mode(cls, mode: str = DEFAULT_MODE, **overrides) -> "StillSettings":
@@ -86,6 +96,7 @@ class StillSettings:
             raise ValueError(f"--mode は {', '.join(MODES)} のどれかです（{mode}）")
         base = {k: v for k, v in MODES[mode].items() if k != "label"}
         base["tidy_pattern"] = False
+        base["tidy_dots"] = False
         base.update({k: v for k, v in overrides.items() if v is not None})
         return cls(mode=mode, **base)
 
@@ -105,12 +116,14 @@ class StillSettings:
                 if isinstance(v[k], bool) or not isinstance(v[k], (int, float)) or int(v[k]) != v[k]:
                     raise ValueError(f"{k} は整数で指定してください（{v[k]}）")
                 v[k] = int(v[k])
-        for k in ("four_bit", "keep_darkest", "tidy_pattern"):
+        for k in ("four_bit", "keep_darkest", "tidy_pattern", "merge_similar", "tidy_dots"):
             if v[k] is not None and not isinstance(v[k], bool):
                 raise ValueError(f"{k} は true か false で指定してください（{v[k]}）")
         tidy = v.pop("tidy_pattern")
+        tidy_dots = v.pop("tidy_dots")
         s = cls.from_mode(values.get("mode") or DEFAULT_MODE, **v)
         s.tidy_pattern = bool(tidy)
+        s.tidy_dots = bool(tidy_dots)
         s.validate()
         return s
 
@@ -124,6 +137,8 @@ class StillSettings:
             raise ValueError(f"横のマス数は 1〜{MAX_SIDE} で指定してください（{self.width}）")
         if self.canvas is not None:
             self.canvas = parse_size(self.canvas, "キャンバス")
+        if self.merge_similar and not MODES[self.mode]["merge_similar"]:
+            raise ValueError(f"似た色をまとめるのは今風モード（--mode modern）だけです（--mode {self.mode}）")
 
     def to_json(self) -> dict:
         out = {"mode": self.mode, "colors": self.colors, "four_bit": self.four_bit,
@@ -131,6 +146,10 @@ class StillSettings:
                "canvas": None if self.canvas is None else list(self.canvas), "keep_darkest": self.keep_darkest}
         if self.tidy_pattern:   # 切のときは書かない（前の版と同じバイト列にするため）
             out["tidy_pattern"] = True
+        if MODES[self.mode]["merge_similar"]:   # 使えるモード（今風）のときだけ書く（98 モードは前と同じバイト列）
+            out["merge_similar"] = self.merge_similar
+        if self.tidy_dots:      # 切のときは書かない
+            out["tidy_dots"] = True
         return out
 
 
@@ -146,6 +165,8 @@ class StillResult:
     canvas_offset: tuple[int, int] | None = None
     warnings: list[str] = field(default_factory=list)
     tidied: pattern_mod.Tidied | None = None   # --tidy-pattern のときだけ
+    similar: colors_mod.Similar | None = None  # 似た色をまとめたときだけ
+    lone: lone_mod.Lone | None = None          # --tidy-dots のときだけ
 
     def overlay(self) -> np.ndarray:
         """整えた範囲の見える化（出力の大きさの RGBA。表示だけに使う）。整えていなければ全部透明。"""
@@ -157,6 +178,16 @@ class StillResult:
             label[oy:oy + th, ox:ox + tw] = self.tidied.label
         return pattern_mod.overlay_rgba(label)
 
+    def dots_overlay(self) -> np.ndarray:
+        """孤立したドットを置き換えた所の見える化（出力の大きさの RGBA。表示だけ）。置き換えていなければ全部透明。"""
+        h, w = self.index.shape
+        m = np.zeros((h, w), bool)
+        if self.lone is not None:
+            ox, oy = self.canvas_offset or (0, 0)
+            th, tw = self.lone.changed.shape
+            m[oy:oy + th, ox:ox + tw] = self.lone.changed
+        return lone_mod.overlay_rgba(m)
+
     @property
     def size(self) -> tuple[int, int]:
         return int(self.index.shape[1]), int(self.index.shape[0])
@@ -167,6 +198,22 @@ class StillResult:
 
 def _hex(c) -> str:
     return "#{:02X}{:02X}{:02X}".format(*(int(v) for v in c))
+
+
+def _dark_indices(palette: np.ndarray, darkest) -> list[int]:
+    """いちばん暗い色の番号（0 番と、取っておいたいちばん暗い色）。"""
+    dark = [0]
+    if darkest is not None:
+        dark += [int(i) for i in np.flatnonzero(np.all(palette == darkest, axis=1)) if int(i) != 0]
+    return dark
+
+
+def _drop_unused(index: np.ndarray, palette: np.ndarray):
+    """使われなくなった色をパレットから外す（暗い順のまま番号を詰める。新しい色は作らない）。"""
+    used, counts = np.unique(index, return_counts=True)
+    remap = np.zeros(len(palette), np.uint8)
+    remap[used] = np.arange(len(used), dtype=np.uint8)
+    return remap[index], palette[used], counts.astype(np.int64)
 
 
 def convert_still(rgba: np.ndarray, settings: StillSettings | None = None) -> StillResult:
@@ -205,20 +252,26 @@ def convert_still(rgba: np.ndarray, settings: StillSettings | None = None) -> St
     if red.merged:
         warnings.append(f"選んだ色を 4096 色に丸めたら {red.merged} 色が重なり、{red.chosen - red.merged} 色になりました"
                         f"（上限 {s.colors} 色）")
+    similar = None
+    if s.merge_similar:
+        similar = colors_mod.merge_similar(index, palette, counts, _dark_indices(palette, red.darkest))
+        index, palette, counts = similar.index, similar.palette, similar.counts
+        if similar.pairs:
+            warnings.append(f"見た目でほぼ同じ色 {len(similar.pairs)} 組をまとめ、{len(palette)} 色になりました（上限 {s.colors} 色）")
+    lone = None
+    if s.tidy_dots:
+        lone = lone_mod.tidy_lone_dots(index, _dark_indices(palette, red.darkest))
+        index = lone.index
+        if lone.count:
+            index, palette, counts = _drop_unused(index, palette)
     tidied = None
     if s.tidy_pattern:
         dark = [0]
         if red.darkest is not None:
             dark += [int(i) for i in np.flatnonzero(np.all(palette == red.darkest, axis=1))]
         tidied = pattern_mod.tidy_pattern(index, palette, dark)
-        index = tidied.index
         # 使われなくなった色はパレットから外す（暗い順のまま。新しい色は作らない）
-        used, counts = np.unique(index, return_counts=True)
-        remap = np.zeros(len(palette), np.uint8)
-        remap[used] = np.arange(len(used), dtype=np.uint8)
-        index = remap[index]
-        palette = palette[used]
-        counts = counts.astype(np.int64)
+        index, palette, counts = _drop_unused(tidied.index, palette)
     offset = None
     if s.canvas is not None:
         cw, ch = s.canvas
@@ -231,7 +284,7 @@ def convert_still(rgba: np.ndarray, settings: StillSettings | None = None) -> St
             index = big
             counts = counts.copy()
             counts[fill] += cw * ch - dw * dh
-    return StillResult(index, palette, counts, dots, red, s, (w, h), offset, warnings, tidied)
+    return StillResult(index, palette, counts, dots, red, s, (w, h), offset, warnings, tidied, similar, lone)
 
 
 # ---- ファイルの形 ----
@@ -286,6 +339,10 @@ def result_info(res: StillResult, source: str = "") -> dict:
         canvas = {"width": w, "height": h, "offset": list(res.canvas_offset),
                   "fill": {"index": 0, "hex": _hex(res.palette[0])}}
     red = res.reduced
+    colors = {"limit": s.colors, "used": len(res.palette), "chosen": red.chosen, "merged_by_4bit": red.merged,
+              "darkest_kept": None if red.darkest is None else _hex(red.darkest)}
+    if res.similar is not None:   # 似た色をまとめたときだけ（98 モードの JSON は前と同じ）
+        colors["merged_similar"] = len(res.similar.pairs)
     return {
         "app": APP, "version": FORMAT_VERSION, "source": source,
         "input": {"width": res.input_size[0], "height": res.input_size[1]},
@@ -294,13 +351,21 @@ def result_info(res: StillResult, source: str = "") -> dict:
         "pixel_aspect": "1:1",
         "dots": res.dots.describe(),
         "canvas": canvas,
-        "colors": {"limit": s.colors, "used": len(res.palette), "chosen": red.chosen, "merged_by_4bit": red.merged,
-                   "darkest_kept": None if red.darkest is None else _hex(red.darkest)},
+        "colors": colors,
         "palette": pal,
+        **({} if res.similar is None else {"similar": similar_info(res.similar)}),
+        **({} if res.lone is None else {"tidy_dots": {"changed": res.lone.count, "settings": res.lone.settings}}),
         **({} if res.tidied is None else {"pattern": pattern_info(res.tidied)}),
         "settings": s.to_json(),
         "warnings": list(res.warnings),
     }
+
+
+def similar_info(sim: colors_mod.Similar) -> dict:
+    """似た色をまとめた記録（まとめた組の数・しきい値・まとめた順の組）。"""
+    return {"merged": len(sim.pairs), "distance": colors_mod.SIMILAR_DISTANCE, "space": "OKLab",
+            "list": [{"from": _hex(p["from"]), "to": _hex(p["to"]), "count": p["count"],
+                      "distance": round(p["distance"], 4)} for p in sim.pairs]}
 
 
 def pattern_info(t: pattern_mod.Tidied) -> dict:
@@ -379,10 +444,18 @@ def still_for_web(data: bytes, name: str = "", settings_json: str = "{}") -> str
         return json.dumps(res, ensure_ascii=False)
     info = out["info"]
     extra = {}
-    if out["result"].tidied is not None:   # 見える化の重ね絵（表示だけ。保存する PNG には入らない）
+
+    def b64png(rgba):
         buf = io.BytesIO()
-        Image.fromarray(out["result"].overlay(), "RGBA").save(buf, "PNG")
-        extra = {"pattern": info["pattern"], "overlay_base64": base64.b64encode(buf.getvalue()).decode("ascii")}
+        Image.fromarray(rgba, "RGBA").save(buf, "PNG")
+        return base64.b64encode(buf.getvalue()).decode("ascii")
+
+    if out["result"].tidied is not None:   # 見える化の重ね絵（表示だけ。保存する PNG には入らない）
+        extra = {"pattern": info["pattern"], "overlay_base64": b64png(out["result"].overlay())}
+    if out["result"].lone is not None:
+        extra.update(tidy_dots=info["tidy_dots"], dots_overlay_base64=b64png(out["result"].dots_overlay()))
+    if out["result"].similar is not None:
+        extra["similar"] = info["similar"]
     return json.dumps({"ok": True, "png_base64": base64.b64encode(out["png"]).decode("ascii"), "json_text": out["json"],
                        "width": info["width"], "height": info["height"], "palette": info["palette"],
                        "dots": info["dots"], "colors": info["colors"], "canvas": info["canvas"],
@@ -395,4 +468,5 @@ def spec() -> dict:
                       for k, v in MODES.items()},
             "default_mode": DEFAULT_MODE,
             "colors": {"min": colors_mod.MIN_COLORS, "max": colors_mod.MAX_COLORS},
+            "modern_colors": list(MODERN_COLOR_CHOICES),
             "max_side": MAX_SIDE}
