@@ -170,11 +170,10 @@ def prepare_files(images: list, s, fs, on_step=None, match_height: bool = False)
             emit(bg.name, f"{name}: {bg.describe()}", cur, t0)
         t0 = time.perf_counter()
         try:
-            boxes, fnotes = F.find_frames(cur)
+            boxes, fnotes = F.find_frames(cur, rows=fs.frame_count is None)   # コマの数を入れたときは段に分けない
         except F.FramesError as e:
             raise F.FramesError(e.code, f"{name}: {e}", file=name, **e.extra) from None
-        emit("frames", f"{name}: コマの切り分け（{len(boxes)} コマ: "
-             + "、".join(f"{b.x0}〜{b.x1 - 1}" for b in boxes) + "）", cur, t0)
+        emit("frames", f"{name}: コマの切り分け（{F.frames_text(boxes)}）", cur, t0)
         notes.extend(f"{name}: {m}" for m in fnotes)
         subs = [F.frame_image(cur, b, boxes) for b in boxes]
         try:

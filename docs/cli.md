@@ -235,6 +235,10 @@ python -m apps.sprite chara.png -o out/sprite/chara.png --motion-spec apps/sprit
 ## コマが並んだ絵（`--frames`）
 
 横に何コマも並んだ 1 枚の絵（歩き・走りなど）を、1 つのキャラとしてそろえたシートにする。
+縦にも何段も並んだ絵（3 段 × 4 列の回転など）は、背景だけの行で段に分けてから、段ごとに背景だけの列でコマに分ける（自動。印は要らない）。
+コマは**左から右、上の段から下の段**の順で、全部で 1 本の動き（`--frame-order`・`--frame-shift-y`・`r`・`--same-from` の番号もこの順）。
+小さなかけら（離れた手・エフェクト・影）だけの段は作らずに近い段に入れ、段どうしが縦に重なっていない絵（横 1 列で跳んだコマだけが上にある）は分けない。
+`--frame-count` を付けたときは段に分けない（今までどおり。数が合わず、段に分けると合うときは、そう添える）
 
 ```bash
 python -m apps.sprite walk.png -o out/sprite/walk.png --frames --frame-count 4 --frame-name walk --gif
@@ -246,6 +250,7 @@ python -m apps.sprite 正面歩き.png --frames --frame-count 3 --frame-order 1,
 python -m apps.sprite dance1.png dance2.png dance3.png --frames --join -o out/sprite/dance.png --frame-name dance --flicker --gif
 python -m apps.sprite jump.png --frames --frame-count 4 --align-y keep --frame-name jump --gif
 python -m apps.sprite spin.png --frames --frame-count 3 --frame-order 1,2,3,2r --frame-name spin --gif
+python -m apps.sprite spin12.png --frames --dot-size 6.5 --frame-name spin --gif                     # 3 段 × 4 列の 12 コマ（コマの数は付けない）
 ```
 
 | オプション | 内容 |
@@ -253,12 +258,12 @@ python -m apps.sprite spin.png --frames --frame-count 3 --frame-order 1,2,3,2r -
 | `--frames` | コマが並んだ絵として変換する |
 | `--join` | 入力のファイル（何枚でも。フォルダなら中の画像を名前の順に）を、書いた順につなげて 1 つの動きにする（下の「別々のファイルの絵をつなげる」）。無いときは今までどおり 1 枚ずつ別々に変換する |
 | `--join-match-height` | `--join` で、キャラの高さをいちばん小さいファイルに合わせる（違いが 1 割までのとき）。付けないときは合わせず、高さの違いを警告するだけ |
-| `--frame-count N` | コマの数を確かめる（`--join` では全部のファイルの合計）。合わなければ作らずに警告し `<出力名>_<名前>_skipped.json`（`code: frame_count`）を書く（終了コード 1） |
+| `--frame-count N` | コマの数を確かめる（`--join` では全部のファイルの合計）。合わなければ作らずに警告し `<出力名>_<名前>_skipped.json`（`code: frame_count`）を書く（終了コード 1）。付けたときは段に分けない（列のすき間だけで数える） |
 | `--align` | 横のそろえ方。`match`（既定。上から 3 割の形が 1 コマ目といちばん重なる位置）/ `head`（上の方の横の中心）/ `center` / `none` |
 | `--align-y` | 縦のそろえ方。`foot`（既定。足元）/ `match`（上の方の形がいちばん重なる高さ。走り・跳び向け）/ `keep`（元の絵の高さを保つ。ジャンプなど宙に浮くコマ。下の「宙に浮くコマ」）/ `none` |
 | `--frame-shift-y DY,...` | 元のコマごとに、そろえた位置から上げ下げする（ドット。− が上）。数は元のコマの数（`--join` では合計）。− で始まるときは `--frame-shift-y=0,-3,-6,0` |
 | `--frame-grid` | グリッドの線の並び。`auto`（既定。形の似たコマだけ共通）/ `each`（コマごと。以前の動き）/ `shared`（いつも共通） |
-| `--frame-order 1,2,3,2` | 再生の順番（元の絵の左から 1, 2, …。同じコマを何度使ってもよい）。番号の後に `r` を付けたコマは左右に裏返して使う（`1,2,3,2r`。下の「コマごとの左右反転」） |
+| `--frame-order 1,2,3,2` | 再生の順番（元の絵の左から 1, 2, …。縦にも並んだ絵は上の段から。同じコマを何度使ってもよい）。番号の後に `r` を付けたコマは左右に裏返して使う（`1,2,3,2r`。下の「コマごとの左右反転」） |
 | `--frame-duration MS[,MS...]` | 表示時間（既定 150） |
 | `--frame-name NAME` | ファイル名と JSON の `motion`（既定 `frames`） |
 | `--frame-root-y DY,...` | フレームごとに体全体を上下にずらす（− が上。表の `root_y` と同じ）。− で始まるときは `--frame-root-y=-1,0,-1,0` |
@@ -321,6 +326,7 @@ python -m apps.sprite spin.png --frames --frame-count 3 --frame-order 1,2,3,2r -
 長い動き（ダンスなど）を AI に何枚かに分けて描かせたときに、ファイルを書いた順につなげて 1 つの動きにする。1 枚の中のコマは 1 つでも何コマでもよい。
 
 - コマの番号（`--frame-order`・`--same-from`・直し・ちらつき）は、1 つ目のファイルの左のコマから 1, 2, … と全部のファイルを通して数える
+- 縦にも並んだファイルは、ファイルごとに段に分ける（そのファイルの中で上の段から。`--frame-count` を付けたときは分けない）。動きをまとめる（`--anims`）でも同じで、1 ファイル = 1 つの動きは変わらない
 - グリッド（ドットの大きさ・線の位置）はファイルごとに見つけ、パレットは全部のファイルで 1 つ（`--colors`）、大きさと足元（`--align-y match` なら頭の高さ）は全部のコマでそろえる
 - `--frame-grid auto` で線の並びを共通にするのは、2 コマ以上のファイルの全部で共通にできるときだけ（どれかが合わなければ全部コマごと）
 - キャラの高さ（ファイルの中でいちばん高いコマ）は、**既定では合わせない**。いちばん小さいファイルより 2 ドット以上高いファイルがあれば警告する（`skipped` の `join_height`）。

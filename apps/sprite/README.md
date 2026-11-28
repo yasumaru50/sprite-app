@@ -98,6 +98,7 @@ AI の絵では本当のドットの 2 倍の所に推定が出ることが多�
 ### コマが並んだ絵（歩き・走りなど）
 
 同じキャラが横に何コマも並んだ絵を、1 つのキャラとしてそろえたシートにする（CLI の `--frames`）。
+縦にも何段も並んだ絵（3 段 × 4 列の回転など）は、自動で段に分けて、**左から右、上の段から下の段**の順に 1 本の動きにする（「コマの数」を入れたときは段に分けない）。
 
 1. 画像を選び、「**コマが並んだ絵**」を選ぶ。必要なら「必要なときに開く」の「コマの数」を入れる（空なら自動。入れておくと数え間違えたときに作らずに知らせる）
 2. 「必要なときに開く」の「縦のそろえ方」は歩きなら「足元」（既定）、足が地面から離れる走り・跳びは「頭の高さ」、ジャンプで宙に浮くコマがあるときは「元の絵の高さを保つ」
@@ -279,6 +280,7 @@ python -m apps.sprite 歩き.png --frames --frame-count 4 --frame-order 1,2,3,2 
 python -m apps.sprite 走り.png --frames --align-y match --frame-root-y=0,-1,0,-1 --flicker
 python -m apps.sprite 歩き.png --frames --frame-count 4 --steady on --same-as-first 0,0,53,53
 python -m apps.sprite dance1.png dance2.png --frames --join -o out/sprite/dance.png --gif # 別々のファイルの絵をつなげる
+python -m apps.sprite 回転12.png --frames --dot-size 6.5 --gif                             # 3 段 × 4 列に並んだ 12 コマ（自動で段に分ける）
 python -m apps.sprite 入力.png --motion breathe --fx surprise --gif                     # ！（驚き）を重ねる（別のシート）
 python -m apps.sprite 直した.piskel --readback 元.json --gif --mirror --piskel           # 手直しを読み戻す
 python -m apps.sprite compare hero.png slime.png walk.png walk.json --out compare.png   # 大きさをくらべる画像
