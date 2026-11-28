@@ -43,7 +43,7 @@
 | 手直しの読み戻し / .piskel | `retrocore/sprite/edit.py` / `piskel.py` |
 | 動き（表の形・表からフレーム・決まり・各プリセット・範囲・skipped・シート・GIF） | `retrocore/sprite/motion/`（`spec.py`・`timeline.py`・`base.py`・`breathe.py` ほか・`region.py`・`report.py`・`sheet.py`・`gif.py`） |
 | ブラウザ版 | `apps/sprite/web/template.html`（→ `tools/build_sprite_web.py` で `sprite-app.html` を作る。直接編集しない） |
-| 1 枚絵のアプリ（Still App。ドット絵風の 1 枚絵を決まった色数・格子にそろえる） | CLI `apps/still/cli.py`、処理 `retrocore/still/`（`dots.py` ドットに戻す・`colors.py` 減色と似た色をまとめる・`lone.py` 孤立したドットをそろえる・`pattern.py` ざらついた範囲を模様に整える・`convert.py` 入口。`--mode pc98`／`modern`）、ブラウザ版 `apps/still/web/template.html`（→ `tools/build_still_web.py` で `still-app.html`）、使い方 `apps/still/README.md`、テスト `tests/test_still*.py` |
+| 1 枚絵のアプリ（Still App。ドット絵風の 1 枚絵を決まった色数・格子にそろえる） | CLI `apps/still/cli.py`、処理 `retrocore/still/`（`dots.py` ドットに戻す・`colors.py` 減色と似た色をまとめる・`lone.py` 孤立したドットをそろえる・`pattern.py` ざらついた範囲を模様に整える・`photo.py` 写真の下書き（向き・縮める・色の塊をまとめる）・`outline.py` 輪郭の線・`convert.py` 入口。`--mode pc98`／`modern`／`photo`）、ブラウザ版 `apps/still/web/template.html`（→ `tools/build_still_web.py` で `still-app.html`）、使い方 `apps/still/README.md`、テスト `tests/test_still*.py` |
 | 動きの表の見本 | `apps/sprite/examples/*.motion.json`、テスト用は `tests/motion_specs/` |
 | 比較画像を作る道具 | `tools/compare_sprite_*.py`（背景・グリッド・縮小・単純化・クリーンアップ・縁取り・動き・コマ・ちらつき・範囲） |
 | テスト | `tests/`（テスト画像は `tests/synth_sprite.py`・`tests/synth_cg.py` で合成。`web_region/` は画面で保存した表・シート） |
