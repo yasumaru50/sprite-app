@@ -44,8 +44,12 @@ def _neighbors(index: np.ndarray) -> np.ndarray:
                      for dy in (-1, 0, 1) for dx in (-1, 0, 1) if (dy, dx) != (0, 0)])
 
 
-def tidy_lone_dots(index: np.ndarray, keep: list[int] | tuple[int, ...] = (0,)) -> Lone:
-    """孤立したドットを、まわりの多い色にそろえる（上の決まり。1 回だけ）。"""
+def tidy_lone_dots(index: np.ndarray, keep: list[int] | tuple[int, ...] = (0,),
+                   protect: np.ndarray | None = None) -> Lone:
+    """孤立したドットを、まわりの多い色にそろえる（上の決まり。1 回だけ）。
+
+    protect（高さ × 幅の bool）のドットは変えない（ディザの網目のドットが孤立したドットとして消されないように）。
+    """
     idx = np.asarray(index, np.uint8)
     h, w = idx.shape
     out = idx.copy()
@@ -66,6 +70,8 @@ def tidy_lone_dots(index: np.ndarray, keep: list[int] | tuple[int, ...] = (0,)) 
         best = np.where(hit, cand, best)
         ok |= hit
     take = lone & ok
+    if protect is not None:
+        take &= ~np.asarray(protect, bool)[1:-1, 1:-1]
     out[1:-1, 1:-1] = np.where(take, best, center)
     changed[1:-1, 1:-1] = take
     return Lone(out, changed)

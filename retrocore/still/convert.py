@@ -3,7 +3,7 @@
 工程は 1 本（項目 `ITEMS` の順）: 読み込み（透明は黒で埋める。`orient` のとき写真の向き（EXIF）を直す）
 → ドットに戻す（`find_grid` ならグリッド検出、でなければ横 `width` マス）→ 色の塊をまとめる（`smooth` が off でないとき。`photo.py`）
 → 大きさの上限を確かめる → 減色（4 ビットの丸め・いちばん暗い色を取っておく）→ 似た色をまとめる（`merge_similar`）
-→ 孤立したドットをそろえる（`tidy_dots`）→ 模様を整える（`tidy_pattern`）→ 輪郭の線（`outline`）→ キャンバス（`canvas`）
+→ ディザを作る（`dither`。`dither.py`）→ 孤立したドットをそろえる（`tidy_dots`）→ 模様を整える（`tidy_pattern`）→ 輪郭の線（`outline`）→ キャンバス（`canvas`）
 → PNG（インデックスカラー）と JSON。
 
 `--mode`（`MODES`）は初めの設定（項目の値の組み合わせ）で、強制ではない。どの項目も個別に変えられ、変えたときは
@@ -30,6 +30,7 @@ from PIL import Image
 
 from ..sprite.image import to_rgba
 from . import colors as colors_mod
+from . import dither as dither_mod
 from . import dots as dots_mod
 from . import lone as lone_mod
 from . import outline as outline_mod
@@ -40,8 +41,8 @@ APP = "still"
 FORMAT_VERSION = 1
 # 項目（工程の順）。初めの設定（MODES）は、この項目の値の組み合わせ。JSON の `preset.values` もこの順
 ITEMS = ("orient", "find_grid", "width", "max_size", "smooth", "colors", "four_bit", "keep_darkest", "merge_similar",
-         "tidy_dots", "tidy_pattern", "outline", "canvas")
-_OFF = {"tidy_pattern": False, "outline": False, "canvas": None}
+         "dither", "tidy_dots", "tidy_pattern", "outline", "canvas")
+_OFF = {"dither": "off", "tidy_pattern": False, "outline": False, "canvas": None}
 # 初めの設定（プリセット）。値を変えると出力が変わる（足すのはよい）。どの値も、項目（CLI のオプション・画面の
 # 「必要なときに開く」）で 1 つずつ変えられる
 MODES = {
@@ -54,9 +55,10 @@ MODES = {
                "colors": 32, "four_bit": False, "max_size": (1920, 1080), "keep_darkest": True, "merge_similar": True,
                "orient": False, "find_grid": True, "width": None, "smooth": "off", "tidy_dots": False, **_OFF},
     # 写真の下書き（自分で撮った写真を、手直しの出発点になる色を塗り分けた下絵にする）。写真の向きを直し、マス目は探さずに
-    # 横 320 マスに分け、色の塊をまとめる。減色は今風と同じ。写真は浮いた点が多いので、孤立したドットもそろえる
+    # 横 320 マスに分け、色の塊をまとめる。減色は今風と同じ。写真は浮いた点が多いので、孤立したドットもそろえる。
+    # 似た色はまとめない（写真では近い色が段として要る。まとめると photo03 の 16 色が 11 色に減り、空の段が粗くなった）
     "photo": {"label": "写真の下書き（横 320・32 色・色の塊をまとめる・孤立したドットをそろえる）",
-              "colors": 32, "four_bit": False, "max_size": (1920, 1080), "keep_darkest": True, "merge_similar": True,
+              "colors": 32, "four_bit": False, "max_size": (1920, 1080), "keep_darkest": True, "merge_similar": False,
               "tidy_dots": True, "width": photo_mod.DEFAULT_WIDTH, "smooth": photo_mod.DEFAULT_SMOOTH,
               "orient": True, "find_grid": False, **_OFF},
 }
@@ -64,6 +66,7 @@ SMOOTH_LEVELS = tuple(photo_mod.SMOOTH)
 SMOOTH_CHOICES = ("off",) + SMOOTH_LEVELS   # 色の塊をまとめる: しない・弱・中・強
 # ブラウザ版の色数の欄で、候補として出す数（CLI の --colors と同じく 2〜256 のどれでも入れられる）
 MODERN_COLOR_CHOICES = (16, 24, 32, 48, 64, 96, 128)
+DITHER_CHOICES = dither_mod.CHOICES   # ディザを作る: しない・2×2・4×4
 DEFAULT_MODE = "pc98"
 MAX_SIDE = 4096   # 上限・キャンバスに指定できる 1 辺の最大
 
@@ -110,7 +113,8 @@ class StillSettings:
     canvas: tuple[int, int] | None = None    # 余白を足して、この大きさにする
     keep_darkest: bool = MODES[DEFAULT_MODE]["keep_darkest"]
     tidy_pattern: bool = False               # ざらついた範囲を 2 色の模様に整える（どの初めの設定でも切）
-    merge_similar: bool = MODES[DEFAULT_MODE]["merge_similar"]   # 似た色をまとめる（今風・写真の下書きは入）
+    merge_similar: bool = MODES[DEFAULT_MODE]["merge_similar"]   # 似た色をまとめる（今風だけ入）
+    dither: str = "off"                      # ディザを作る（off・2x2・4x4。どの初めの設定でも off）
     tidy_dots: bool = False                  # 孤立したドットをそろえる（写真の下書きだけ入）
     smooth: str | None = None                # 色の塊をまとめる強さ（off・weak・medium・strong。None は mode の既定）
     outline: bool = False                    # 輪郭の線を引く（どの初めの設定でも切）
@@ -167,6 +171,8 @@ class StillSettings:
                 raise ValueError(f"{k} は true か false で指定してください（{v[k]}）")
         if v["smooth"] is not None and not isinstance(v["smooth"], str):
             raise ValueError(f"smooth は {', '.join(SMOOTH_CHOICES)} のどれかです（{v['smooth']}）")
+        if v["dither"] is not None and not isinstance(v["dither"], str):
+            raise ValueError(f"dither は {', '.join(DITHER_CHOICES)} のどれかです（{v['dither']}）")
         s = cls.from_mode(values.get("mode") or DEFAULT_MODE, **v)
         s.validate()
         return s
@@ -192,6 +198,8 @@ class StillSettings:
             self.canvas = parse_size(self.canvas, "キャンバス")
         if self.smooth not in SMOOTH_CHOICES:
             raise ValueError(f"色の塊のまとめの強さ（--smooth）は {', '.join(SMOOTH_CHOICES)} のどれかです（{self.smooth}）")
+        if self.dither not in DITHER_CHOICES:
+            raise ValueError(f"ディザ（--dither）は {', '.join(DITHER_CHOICES)} のどれかです（{self.dither}）")
 
     def values(self) -> dict:
         """項目の値すべて（工程の順。JSON の `preset.values`）。"""
@@ -222,8 +230,10 @@ class StillSettings:
                "canvas": None if self.canvas is None else list(self.canvas), "keep_darkest": self.keep_darkest}
         if self.tidy_pattern:   # 切のときは書かない（前の版と同じバイト列にするため）
             out["tidy_pattern"] = True
-        if MODES[self.mode]["merge_similar"]:   # 今風・写真の下書きのときだけ書く（98 モードは前と同じバイト列）
+        if self.mode in ("modern", "photo"):   # 今風・写真の下書きのときだけ書く（98 モードは前と同じバイト列）
             out["merge_similar"] = self.merge_similar
+        if self.dither != "off":   # off のときは書かない（前と同じバイト列にするため）
+            out["dither"] = self.dither
         if self.tidy_dots or MODES[self.mode].get("tidy_dots"):   # 切のときは書かない（写真の下書きでは切も書く）
             out["tidy_dots"] = self.tidy_dots
         if self.mode == "photo":
@@ -250,6 +260,7 @@ class StillResult:
     outline: outline_mod.Outline | None = None  # --outline のときだけ
     photo: photo_mod.PhotoWork | None = None   # 写真の下書きのときだけ
     orientation: int = 1                       # 写真の向き（EXIF の Orientation。写真の下書きで読んだときだけ 1 以外）
+    dither: dither_mod.Dither | None = None    # --dither が off でないときだけ
 
     def overlay(self) -> np.ndarray:
         """整えた範囲の見える化（出力の大きさの RGBA。表示だけに使う）。整えていなければ全部透明。"""
@@ -270,6 +281,18 @@ class StillResult:
             th, tw = self.lone.changed.shape
             m[oy:oy + th, ox:ox + tw] = self.lone.changed
         return lone_mod.overlay_rgba(m)
+
+    def dither_overlay(self) -> np.ndarray:
+        """網目を入れたドットの見える化（出力の大きさの RGBA。表示だけ）。入れていなければ全部透明。"""
+        h, w = self.index.shape
+        m = np.zeros((h, w), bool)
+        ar = np.zeros((h, w), bool)
+        if self.dither is not None:
+            ox, oy = self.canvas_offset or (0, 0)
+            th, tw = self.dither.changed.shape
+            m[oy:oy + th, ox:ox + tw] = self.dither.changed
+            ar[oy:oy + th, ox:ox + tw] = self.dither.area
+        return dither_mod.overlay_rgba(m, ar)
 
     def outline_overlay(self) -> np.ndarray:
         """輪郭の線を引いたドットの見える化（出力の大きさの RGBA。表示だけ）。引いていなければ全部透明。"""
@@ -373,9 +396,18 @@ def convert_still(rgba: np.ndarray, settings: StillSettings | None = None) -> St
         index, palette, counts = similar.index, similar.palette, similar.counts
         if similar.pairs:
             warnings.append(f"見た目でほぼ同じ色 {len(similar.pairs)} 組をまとめ、{len(palette)} 色になりました（上限 {s.colors} 色）")
+    dither = None
+    if s.dither != "off":
+        # 減色する前のドットの色から、近い 2 色の間に網目を入れる（パレットは変えない。いちばん暗い色は混ぜない）
+        dither = dither_mod.make_dither(dots.rgb, index, palette, s.dither, _dark_indices(palette, red.darkest))
+        index = dither.index
+        if dither.count:
+            index, palette, counts = _drop_unused(index, palette)
     lone = None
     if s.tidy_dots:
-        lone = lone_mod.tidy_lone_dots(index, _dark_indices(palette, red.darkest))
+        # ディザの網目の範囲のドットは変えない（網目が孤立したドットとして消されないように）
+        lone = lone_mod.tidy_lone_dots(index, _dark_indices(palette, red.darkest),
+                                       None if dither is None else dither.area)
         index = lone.index
         if lone.count:
             index, palette, counts = _drop_unused(index, palette)
@@ -384,7 +416,7 @@ def convert_still(rgba: np.ndarray, settings: StillSettings | None = None) -> St
         dark = [0]
         if red.darkest is not None:
             dark += [int(i) for i in np.flatnonzero(np.all(palette == red.darkest, axis=1))]
-        tidied = pattern_mod.tidy_pattern(index, palette, dark)
+        tidied = pattern_mod.tidy_pattern(index, palette, dark, None if dither is None else dither.area)
         # 使われなくなった色はパレットから外す（暗い順のまま。新しい色は作らない）
         index, palette, counts = _drop_unused(tidied.index, palette)
     outline = None
@@ -406,7 +438,7 @@ def convert_still(rgba: np.ndarray, settings: StillSettings | None = None) -> St
             counts = counts.copy()
             counts[fill] += cw * ch - dw * dh
     return StillResult(index, palette, counts, dots, red, s, (w, h), offset, warnings, tidied, similar, lone,
-                       outline, photo)
+                       outline, photo, dither=dither)
 
 
 # ---- ファイルの形 ----
@@ -477,6 +509,7 @@ def result_info(res: StillResult, source: str = "") -> dict:
         "colors": colors,
         "palette": pal,
         **({} if res.similar is None else {"similar": similar_info(res.similar)}),
+        **({} if res.dither is None else {"dither": res.dither.describe()}),
         **({} if res.lone is None else {"tidy_dots": {"changed": res.lone.count, "settings": res.lone.settings}}),
         **({} if res.tidied is None else {"pattern": pattern_info(res.tidied)}),
         **({} if res.outline is None else {"outline": {"drawn": res.outline.count, "settings": res.outline.settings}}),
@@ -591,6 +624,8 @@ def still_for_web(data: bytes, name: str = "", settings_json: str = "{}") -> str
         extra.update(tidy_dots=info["tidy_dots"], dots_overlay_base64=b64png(out["result"].dots_overlay()))
     if out["result"].similar is not None:
         extra["similar"] = info["similar"]
+    if out["result"].dither is not None:
+        extra.update(dither=info["dither"], dither_overlay_base64=b64png(out["result"].dither_overlay()))
     if out["result"].outline is not None:
         extra.update(outline=info["outline"], outline_overlay_base64=b64png(out["result"].outline_overlay()))
     if out["result"].photo is not None:
@@ -611,5 +646,6 @@ def spec() -> dict:
             "smooth_levels": [{"value": k, "label": photo_mod.SMOOTH_LABELS[k]} for k in SMOOTH_LEVELS],
             "smooth_choices": [{"value": k, "label": "しない" if k == "off" else photo_mod.SMOOTH_LABELS[k]}
                                for k in SMOOTH_CHOICES],
+            "dither_choices": [{"value": k, "label": dither_mod.LABELS[k]} for k in DITHER_CHOICES],
             "items": list(ITEMS),
             "max_side": MAX_SIDE}

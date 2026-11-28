@@ -155,8 +155,12 @@ def line_mask(index: np.ndarray, dark: list[int]) -> np.ndarray:
     return m & np.isin(lab, big)
 
 
-def tidy_pattern(index: np.ndarray, palette: np.ndarray, dark: list[int] | None = None) -> Tidied:
-    """ざらついた範囲を 2 色の模様に整える。index は絵の部分（キャンバスの余白を足す前）。"""
+def tidy_pattern(index: np.ndarray, palette: np.ndarray, dark: list[int] | None = None,
+                 exclude: np.ndarray | None = None) -> Tidied:
+    """ざらついた範囲を 2 色の模様に整える。index は絵の部分（キャンバスの余白を足す前）。
+
+    exclude（高さ × 幅の bool）のドットは候補にしない（ディザで網目を入れた範囲。網目を作り直さないように）。
+    """
     idx = np.asarray(index)
     h, w = idx.shape
     k = len(palette)
@@ -192,10 +196,12 @@ def tidy_pattern(index: np.ndarray, palette: np.ndarray, dark: list[int] | None 
     rate = change / np.maximum(pairs, 1)
     cand = ((rate >= CHANGE_MIN) & (cnt1 + cnt2 >= TOP2_MIN * inside) & (cnt2 >= SECOND_MIN) & (best2 >= 0)
             & ~protected)
+    if exclude is not None:
+        cand &= ~np.asarray(exclude, bool)
     lo = np.minimum(best1, best2)
     hi = np.maximum(best1, best2)
     key = np.where(cand, lo * k + hi, -1)
-    cand, key = _fill_holes(cand, key, protected)
+    cand, key = _fill_holes(cand, key, protected if exclude is None else protected | np.asarray(exclude, bool))
     lab = label_regions(key, cand)
     # 3 色目として数えるかたまり（同じ色が 4 近傍で THIRD_CLUMP〜MIN_REGION − 1 ドット。大きいのはとなりの面）
     same = label_regions(idx, np.ones((h, w), bool))

@@ -93,7 +93,7 @@ def test_photo_preset():
     s = StillSettings.from_mode("photo")
     s.validate()
     assert (s.colors, s.four_bit, s.max_size, s.keep_darkest, s.merge_similar, s.tidy_dots, s.width, s.smooth,
-            s.outline, s.tidy_pattern) == (32, False, (1920, 1080), True, True, True, 320, "medium", False, False)
+            s.outline, s.tidy_pattern) == (32, False, (1920, 1080), True, False, True, 320, "medium", False, False)
     assert set(MODES) == {"pc98", "modern", "photo"}
     assert SMOOTH_LEVELS == ("weak", "medium", "strong")
     assert [x["value"] for x in spec()["smooth_levels"]] == list(SMOOTH_LEVELS)
@@ -128,7 +128,7 @@ def test_photo_json_records_mode_and_settings(photo):
     info = convert_still_bytes(_png(photo), "p.png", {"mode": "photo", "width": 80})["info"]
     st = info["settings"]
     assert st["mode"] == "photo" and st["smooth"] == "medium" and st["tidy_dots"] is True and st["outline"] is False
-    assert st["width"] == 80 and st["colors"] == 32 and st["merge_similar"] is True
+    assert st["width"] == 80 and st["colors"] == 32 and st["merge_similar"] is False
     assert info["dots"]["method"] == "photo" and info["dots"]["cells"] == [80, 60]
     assert info["dots"]["cell_size"] == [12.0, 12.0]
     p = info["photo"]
@@ -210,7 +210,8 @@ def test_kuwahara_keeps_edges_and_flattens_noise():
 def test_stronger_smooth_gives_flatter_result(photo):
     counts = []
     for level in SMOOTH_LEVELS:
-        r = _photo(photo, width=120, smooth=level, tidy_dots=False)
+        # 似た色をまとめる（写真の下書きの前の既定）で比べる（まとめないと、近い色の段の境目も数に入る）
+        r = _photo(photo, width=120, smooth=level, tidy_dots=False, merge_similar=True)
         # となりのドットと色が違う所の数（少ないほど塊が大きい）
         idx = r.index
         counts.append(int((idx[:, 1:] != idx[:, :-1]).sum() + (idx[1:] != idx[:-1]).sum()))

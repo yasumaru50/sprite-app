@@ -6,6 +6,7 @@
     python -m apps.still 入力.png --width 600 --tidy-pattern                # ざらついた範囲を 2 色の模様に整える
     python -m apps.still 入力.png --mode modern --tidy-dots                  # 今風（32 色）。孤立したドットをそろえる
     python -m apps.still 写真.jpg --mode photo --smooth strong --outline     # 写真の下書き（横 320）。輪郭の線も引く
+    python -m apps.still 写真.jpg --mode photo --width 640 --colors 16 --4bit --dither 2x2   # 空などに 2×2 の網目
 
 --mode は初めの設定（項目の値の組み合わせ）で、どの値も個別のオプション（項目）で変えられる。
     python -m apps.still 入力.png --mode modern --width 600 --smooth weak     # 今風＋色の塊を弱くまとめる
@@ -21,7 +22,8 @@ from pathlib import Path
 
 from retrocore.still import convert as convert_mod
 from retrocore.still.colors import MAX_COLORS, MIN_COLORS
-from retrocore.still.convert import DEFAULT_MODE, MODES, SMOOTH_CHOICES, StillError, StillSettings, parse_size
+from retrocore.still.convert import (DEFAULT_MODE, DITHER_CHOICES, MODES, SMOOTH_CHOICES, StillError, StillSettings,
+                                     parse_size)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -34,7 +36,7 @@ def build_parser() -> argparse.ArgumentParser:
                    help="初めの設定の組み合わせ（既定 pc98: " + MODES["pc98"]["label"] + "、modern: "
                    + MODES["modern"]["label"] + "、photo: " + MODES["photo"]["label"]
                    + "）。初めの設定（項目の値の組み合わせ）で、下の項目で 1 つずつ変えられる")
-    # ここから下は工程の順（向き → マス目 → 色の塊 → 減色 → 似た色 → 孤立したドット → 模様 → 輪郭 → 余白）。
+    # ここから下は工程の順（向き → マス目 → 色の塊 → 減色 → 似た色 → ディザ → 孤立したドット → 模様 → 輪郭 → 余白）。
     # どれも初めの設定（--mode）の値を 1 つずつ変える
     g = p.add_argument_group("項目（初めの設定の値を 1 つずつ変える。工程の順）")
     g.add_argument("--orient", dest="orient", action="store_const", const=True, default=None,
@@ -59,9 +61,12 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("--no-keep-darkest", dest="keep_darkest", action="store_const", const=False,
                    help="いちばん暗い色をパレットに取っておかない")
     g.add_argument("--merge-similar", dest="merge_similar", action="store_const", const=True, default=None,
-                   help="見た目でほぼ同じ色をまとめる（今風・写真の下書きの既定。98 でも使える）")
+                   help="見た目でほぼ同じ色をまとめる（今風の既定。98・写真の下書きでも使える）")
     g.add_argument("--no-merge-similar", dest="merge_similar", action="store_const", const=False,
                    help="見た目でほぼ同じ色をまとめない")
+    g.add_argument("--dither", choices=list(DITHER_CHOICES), default=None,
+                   help="なめらかに色が変わる所（空など）で、近い 2 色の間を決まった網目でつなぐ（off しない・2x2 5 段・"
+                   "4x4 17 段。どの初めの設定でも既定は off）。新しい色は作らない")
     g.add_argument("--tidy-dots", dest="tidy_dots", action="store_const", const=True, default=None,
                    help="孤立したドット（まわり 8 ドットに同じ色が無く、7 つ以上が同じ色）を、まわりの色にそろえる"
                    "（写真の下書きでは既定で入）")
@@ -83,7 +88,7 @@ def settings_from_args(args) -> StillSettings:
         args.mode, orient=args.orient, find_grid=args.find_grid, width=args.width,
         max_size=None if args.max_size is None else parse_size(args.max_size, "大きさの上限"),
         smooth=args.smooth, colors=args.colors, four_bit=args.four_bit, keep_darkest=args.keep_darkest,
-        merge_similar=args.merge_similar, tidy_dots=args.tidy_dots, tidy_pattern=args.tidy_pattern,
+        merge_similar=args.merge_similar, dither=args.dither, tidy_dots=args.tidy_dots, tidy_pattern=args.tidy_pattern,
         outline=args.outline, canvas=None if args.canvas is None else parse_size(args.canvas, "キャンバス"))
     s.validate()
     return s
@@ -139,6 +144,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  初めの設定（{info['preset']['name']}）から変えた項目: {', '.join(info['preset']['changed'])}")
         if "similar" in info:
             print(f"  似た色をまとめた組 {info['similar']['merged']}")
+        if "dither" in info:
+            print(f"  網目を入れたドット {info['dither']['changed']}（網目の範囲 {info['dither']['area']}）")
         if "tidy_dots" in info:
             print(f"  孤立したドットを置き換えた数 {info['tidy_dots']['changed']}")
         if "outline" in info:

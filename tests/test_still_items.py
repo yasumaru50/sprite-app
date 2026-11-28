@@ -59,10 +59,13 @@ def _web_values(mode: str) -> dict:
 
 # ---- 初めの設定のままの出力は前と同じ（この整理の前の版で作った PNG・JSON の SHA-256 の先頭） ----
 
+# 写真の下書きは、ディザを足したときに「似た色をまとめる」の既定を切にしたので、その後の版のハッシュ。
+# 前の版のハッシュ（a04756a0ff752417・d3835b004e48f60a）は、写真の下書き＋似た色をまとめる 入 で一致する
+# （test_photo_with_merge_similar_matches_before）
 DEFAULTS = [
     ("scene", "pc98", "b6ceb690bd3e53f3", "17f26a957ee16a30"),
     ("scene", "modern", "a9d46f4a1f461da1", "e6d08d86972bea33"),
-    ("photo", "photo", "a04756a0ff752417", "d3835b004e48f60a"),
+    ("photo", "photo", "5069b3e86137a409", "1f6522442637ad79"),
 ]
 
 
@@ -83,6 +86,25 @@ def test_preset_output_is_unchanged(tmp_path, inputs, name, mode, png_hash, json
     assert cli.main([str(src), "--out", str(tmp_path / "c"), "-q", *args]) == 0
     assert _sha((tmp_path / "c.png").read_bytes()) == png_hash
     assert _sha((tmp_path / "c.json").read_bytes()) == json_hash
+
+
+def test_photo_with_merge_similar_matches_before(tmp_path, inputs):
+    """写真の下書きの前の既定（似た色をまとめる 入）は、前の版とバイト単位で同じ（preset を除く）。"""
+    data = inputs["photo"]
+    out = convert_still_bytes(data, "photo.png", {"mode": "photo", "merge_similar": True})
+    assert _sha(out["png"]) == "a04756a0ff752417"
+    assert _sha(legacy_json(out["json"]).encode("utf-8")) == "d3835b004e48f60a"
+    assert list(out["info"]["preset"]["changed"]) == ["merge_similar"]
+    assert out["info"]["preset"]["changed"]["merge_similar"] == {"preset": False, "used": True}
+    src = tmp_path / "photo.png"
+    src.write_bytes(data)
+    assert cli.main([str(src), "--out", str(tmp_path / "c"), "-q", "--mode", "photo", "--merge-similar"]) == 0
+    assert (tmp_path / "c.png").read_bytes() == out["png"]
+    assert (tmp_path / "c.json").read_text(encoding="utf-8") == out["json"]
+    # 既定（まとめない）では似た色の記録が無く、settings には merge_similar: false を書く
+    off = convert_still_bytes(data, "photo.png", {"mode": "photo"})["info"]
+    assert "similar" not in off and off["settings"]["merge_similar"] is False
+    assert off["colors"]["used"] >= out["info"]["colors"]["used"]
 
 
 # ---- 初めの設定 = 項目の値の組み合わせ ----
