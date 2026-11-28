@@ -163,18 +163,28 @@ def prepare_files(images: list, s, fs, on_step=None, match_height: bool = False)
 
     per = []   # ファイルごと: (名前, 背景を除いた絵, コマの範囲, 切り出したコマ, _grid_cells の結果)
     notes: list[str] = []
+    # 切り分け: ファイルごとに段に分ける。コマの数（全部のファイルの合計）を入れたときは、段に分けた合計がその数と合うときだけ
+    # 段に分け、合わなければ今までどおり段に分けない（列のすき間だけで数える）
+    cuts = []
     for name, (_, rgba) in zip(names, images):
         t0 = time.perf_counter()
         cur, bg = F._remove_background(rgba, s)
-        if bg is not None:
-            emit(bg.name, f"{name}: {bg.describe()}", cur, t0)
-        t0 = time.perf_counter()
+        t1 = time.perf_counter()
         try:
-            boxes, fnotes = F.find_frames(cur)
+            got_rows = F.find_frames(cur, rows=True)
+            got_cols = F.find_frames(cur, rows=False) if fs.frame_count is not None else None
         except F.FramesError as e:
             raise F.FramesError(e.code, f"{name}: {e}", file=name, **e.extra) from None
-        emit("frames", f"{name}: コマの切り分け（{len(boxes)} コマ: "
-             + "、".join(f"{b.x0}〜{b.x1 - 1}" for b in boxes) + "）", cur, t0)
+        cuts.append((name, cur, bg, t1 - t0, got_rows, got_cols, time.perf_counter() - t1))
+    rows_total = sum(len(c[4][0]) for c in cuts)
+    use_rows = fs.frame_count is None or rows_total == fs.frame_count
+    for name, cur, bg, bg_sec, got_rows, got_cols, cut_sec in cuts:
+        if bg is not None:
+            emit(bg.name, f"{name}: {bg.describe()}", cur, time.perf_counter() - bg_sec)
+        boxes, fnotes = got_rows if use_rows else got_cols
+        if fs.frame_count is not None and use_rows and any(b.band is not None for b in boxes):
+            fnotes = fnotes + [f"入れたコマの数（{fs.frame_count}）が段に分けた数と合うので、段に分けました"]
+        emit("frames", f"{name}: コマの切り分け（{F.frames_text(boxes)}）", cur, time.perf_counter() - cut_sec)
         notes.extend(f"{name}: {m}" for m in fnotes)
         subs = [F.frame_image(cur, b, boxes) for b in boxes]
         try:
@@ -203,7 +213,10 @@ def prepare_files(images: list, s, fs, on_step=None, match_height: bool = False)
         found = "、".join(f"{p[0]} {len(p[2])}" for p in per)
         raise F.FramesError("frame_count",
                             f"コマの数が合いません: 指定 {fs.frame_count}、見つかったのは全部で {total}（{found}）。"
-                            "コマが重なっている（すき間が無い）か、離れた部品をコマと数えた可能性があります",
+                            + (f"縦にも並んだファイルがあるようです（段に分けると全部で {rows_total} コマ）。"
+                               f"段に分けるときは、コマの数を {rows_total} にするか、空（自動）にしてください。"
+                               if rows_total != total else "")
+                            + "コマが重なっている（すき間が無い）か、離れた部品をコマと数えた可能性があります",
                             expected=int(fs.frame_count), found=total, files=[[p[0], len(p[2])] for p in per])
 
     # キャラの高さを、いちばん小さいファイルに合わせる（ドット絵に戻すときの格子の大きさを変える）

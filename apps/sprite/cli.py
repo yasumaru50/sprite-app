@@ -308,7 +308,7 @@ def canvas_of(args: argparse.Namespace) -> tuple[int, str]:
 
 
 def _frame_order(text: str) -> list:
-    """コマの順番: 1,2,3,2（元の絵の左から 1, 2, …）。r を付けたコマは左右に裏返して使う（1,2,3,2r）。
+    """コマの順番: 1,2,3,2（元の絵の左から 1, 2, …。縦にも並んだ絵は上の段から）。r を付けたコマは左右に裏返して使う（1,2,3,2r）。
     戻り値は数の並び（r が無いとき。今までと同じ）か、"2r" のような文字を混ぜた並び。"""
     try:
         nums, flips = frames_mod.parse_order_flips(text, None)
@@ -691,7 +691,8 @@ def build_parser() -> argparse.ArgumentParser:
         "コマを切り分けてそろえる（--frames。何コマも横に並んだ 1 枚の絵（AI が描いた歩き・走りなど）を、"
         "同じグリッド・同じパレット・同じ大きさ・同じ足元にそろえて 1 枚のシートにする）")
     fr.add_argument("--frames", action="store_const", const=True, default=None,
-                    help="背景を除いたあと、透明な列のすき間でコマに分け、全部のコマを 1 つのキャラとして変換する"
+                    help="背景を除いたあと、透明な列のすき間でコマに分け（縦にも何段も並んだ絵は、先に背景だけの行で段に分け、"
+                         "段ごとに列で分ける。コマは左から右、上の段から下の段の順）、全部のコマを 1 つのキャラとして変換する"
                          "（ドットの大きさは絵全体で 1 つ。線の位置はコマごとに合わせるか全部のコマで共通（--frame-grid）。"
                          "パレットは全部のコマで共通）。"
                          "<出力名>.png にそろえたコマを元の順に並べた絵、<出力名>_<名前>_<幅>x<高さ>_<N>f.png / .json にシートを書く"
@@ -704,11 +705,12 @@ def build_parser() -> argparse.ArgumentParser:
                          "出力名は 1 つ目のファイルの名前（-o で変えられる）。--join が無いときは、今までどおり 1 枚ずつ別々に変換する")
     fr.add_argument("--join-match-height", action="store_const", const=True, default=None,
                     help="--join で、キャラの高さ（ファイルの中でいちばん高いコマ）をいちばん小さいファイルに合わせる"
-                         f"（違いが {round(join_mod.HEIGHT_MAX_RATIO * 100)}% までのとき。ドット絵に戻すときの格子の大きさを"
+                         f"（違いが {round(join_mod.HEIGHT_MAX_RATIO * 100)}%% までのとき。ドット絵に戻すときの格子の大きさを"
                          "ファイルごとに少し変える。完成したドット絵の拡大・縮小はしない）。既定は合わせず、高さの違いを警告するだけ"
                          "（しゃがみ・ジャンプのコマだけのファイルが混ざっても、ほかのファイルを小さくしないため）")
     fr.add_argument("--frame-count", type=_frame_count, default=None, metavar="N",
-                    help="コマの数。見つかった数が違えば作らずに警告し、理由を <出力名>_<名前>_skipped.json に書く")
+                    help="コマの数。見つかった数が違えば作らずに警告し、理由を <出力名>_<名前>_skipped.json に書く。"
+                         "段に分けた数と合うときは段に分け、合わなければ段に分けない（列のすき間だけで数える。今までどおり）")
     fr.add_argument("--align", choices=list(frames_mod.ALIGNS), default=None,
                     help="横のそろえ方。" + "、".join(f"{k} = {v}" for k, v in frames_mod.ALIGNS.items()))
     fr.add_argument("--align-y", choices=list(frames_mod.ALIGNS_Y), default=None,
@@ -716,7 +718,7 @@ def build_parser() -> argparse.ArgumentParser:
     fr.add_argument("--frame-grid", choices=list(frames_mod.GRID_MODES), default=None,
                     help="グリッドの線の並び。" + "、".join(f"{k} = {v}" for k, v in frames_mod.GRID_MODES.items()))
     fr.add_argument("--frame-order", type=_frame_order, default=None, metavar="1,2,3,2",
-                    help="シートに並べるコマの順番（元の絵の左から 1, 2, …。同じコマを何度使ってもよい）。既定は 1, 2, …。"
+                    help="シートに並べるコマの順番（元の絵の左から 1, 2, …。縦にも並んだ絵は、上の段の左から右、次の段の左から右の順。同じコマを何度使ってもよい）。既定は 1, 2, …。"
                          "番号の後に r を付けると、そのコマを左右に裏返して使う（1,2,3,2r。回る動きなど。そろえた基準を軸に裏返すので"
                          "キャラは横にずれない。左右で違う物は反対側に移る）")
     fr.add_argument("--frame-duration", type=_durations, default=None, metavar="MS[,MS...]",
@@ -766,7 +768,7 @@ def build_parser() -> argparse.ArgumentParser:
                     help=f"1 コマ目と同じにする範囲の位置を探す幅（上下左右のドット。{same_mod.MIN_SEARCH}〜{same_mod.MAX_SEARCH}、"
                          f"既定 {same_mod.DEFAULT_SEARCH}）")
     fr.add_argument("--same-from", type=_positive_int, default=None, metavar="K",
-                    help="範囲の元にするコマ（元の絵の左から K 番目。既定 1）")
+                    help="範囲の元にするコマ（元の絵の左から K 番目。縦にも並んだ絵は上の段から数える。既定 1）")
     fr.add_argument("--edits", type=Path, default=None, metavar="JSON",
                     help="手の直しの一覧（ブラウザ版の「ドットを直す」で保存した <出力名>_<名前>_edits.json）を最後に当てる"
                          "（1 コマ目と同じにする範囲・ちらつきを減らすの後）。直しは元のコマごとなので、1,2,3,2 の 2 と 4 の両方に入る。"

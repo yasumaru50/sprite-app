@@ -1,4 +1,4 @@
-"""何コマも横に並んだ 1 枚の絵（AI が描いた歩き・走りなど）を、コマに切り分けて 1 つのキャラとしてそろえる。
+"""何コマも横に並んだ 1 枚の絵（AI が描いた歩き・走りなど。縦にも何段も並んだ絵も）を、コマに切り分けて 1 つのキャラとしてそろえる。
 
     from retrocore.sprite.frames import FrameSettings, convert_frames, assemble_frames
     res = convert_frames(rgba, SpriteSettings(), FrameSettings(frame_count=4))
@@ -11,7 +11,11 @@
 1. **背景除去**: 絵全体で 1 回（`BackgroundStep`。1 枚の絵の変換と同じ）
 2. **切り分け**（`find_frames()`）: 透明な列のすき間でコマを分ける。体から離れた小さな部品（髪の先など。いちばん大きいコマの
    `PART_RATIO` 未満）は、列がいちばん近いコマに入れる。ごく小さなもの（`NOISE_RATIO` 未満。背景の消し残し）は捨てる。
-   数を指定したとき（`frame_count`）に合わなければ作らない（`FramesError`。迷ったら何もしない）
+   数を指定したとき（`frame_count`）に合わなければ作らない（`FramesError`。迷ったら何もしない）。
+   縦にも何段も並んだ絵（3 段 × 4 列の回転など）は、先に絵全体で背景だけの行を探して段に分け（`find_rows()`）、段ごとに
+   列で分ける（腕を広げたコマなどで、全体の列ではそろわないため）。コマは左から右、上の段から下の段の順で、全部で 1 本の動き。
+   小さなかけら（離れた手・エフェクト・影）だけの段は作らず、近い段に入れる。段どうしが縦に重なっていない（横 1 列の絵で、
+   跳んだコマだけが上にある）ときも分けない。数を指定したときは、段に分けた数がその数と合うときだけ段に分ける
 3. **グリッド**（`detect_frame_grids()`）: ドットの大きさは**全部のコマをまとめて 1 回だけ**推定し、全部のコマで同じ大きさを使う。
    ただし線の位置（ずれ・位相）はコマごとに合わせる。AI はコマを別々に描くので、試した 3 枚ではコマごとに位相が
    横・縦とも 0〜5 画素（ドット 1 個ぶん近く）違った。1 つの位相を全部のコマに当てると、あるコマでは線がドットの真ん中を通り、
@@ -71,6 +75,7 @@ DEFAULT_DURATION = 150         # 歩きの 1 コマの表示時間（ミリ秒�
 HEAD_RATIO = 0.3               # 「上の方」: コマの高さ（中央値）の上から 3 割の行
 MATCH_RANGE = 0.25             # match で試す横のずれ: コマの幅（最大）の ±25% まで
 PART_RATIO = 0.15              # これ未満の画素数のかたまり（列のすき間で分けたもの）は、いちばん大きいコマに対する小さな部品
+ROW_HEIGHT_RATIO = 0.3         # 段とみなす高さ（いちばん高い段に対する割合）。これより低い段（影・エフェクト）は近い段に入れる
 NOISE_RATIO = 0.002            # これ未満は背景の消し残しとして捨てる
 WORK_GAP = 4                   # 単純化などで 1 枚に並べるときのコマのすき間（ドット）。縁取りで両側に 1 ドット付いても離れている
 MARGIN_PX = 8                  # グリッドを合わせるときにコマの周りに付ける透明の余白（画素）
@@ -166,6 +171,8 @@ class FrameBox:
     y1: int
     pixels: int
     parts: list[tuple[int, int]] = field(default_factory=list)
+    row: int = 0                     # 何段目か（0 から。縦にも並んだ絵で段に分けたとき。1 段の絵はいつも 0）
+    band: tuple[int, int] | None = None   # 段の行の範囲 [始め, 終わり)（段に分けたときだけ。1 段の絵は None）
 
     @property
     def center_x(self) -> float:
@@ -252,19 +259,127 @@ def _runs(mask: np.ndarray) -> list[tuple[int, int]]:
     return [(int(d[i]), int(d[i + 1])) for i in range(0, len(d), 2)]
 
 
-def find_frames(rgba: np.ndarray, frame_count: int | None = None) -> tuple[list[FrameBox], list[str]]:
-    """背景を除いた絵（RGBA）からコマの範囲を見つける。戻り値は (左から順のコマ, 説明の並び)。
+def find_frames(rgba: np.ndarray, frame_count: int | None = None,
+                rows: bool | None = None) -> tuple[list[FrameBox], list[str]]:
+    """背景を除いた絵（RGBA）からコマの範囲を見つける。戻り値は (コマ, 説明の並び)。コマは左から右、上の段から下の段の順。
 
-    透明な列のすき間で分け、小さなかたまりは列がいちばん近いコマに入れる（同じ距離なら左）。ごく小さなものは捨てる。
+    まず絵全体で背景だけの行を探して段に分け（`find_rows()`。縦にも並んだ絵。段が 1 つなら今までと同じ）、段ごとに
+    透明な列のすき間でコマに分ける。小さなかたまりは列がいちばん近いコマに入れる（同じ距離なら左）。ごく小さなものは捨てる。
+    `frame_count` を指定したときは、段に分けた数がその数と合うときだけ段に分け、合わなければ段に分けない（今までどおり列だけで数える）。
+    `rows` で決めることもできる（True はいつも段に分ける、False は分けない、None は上のとおり）。
     コマが見つからない・数が `frame_count` と合わないときは `FramesError`。
     """
     a = to_rgba(rgba)
     op = a[..., 3] >= ALPHA_OPAQUE
+    bands = find_rows(op) if rows is not False else None
+    out = notes = None
+    if bands is not None:
+        out, notes = _split_rows(op, bands)
+        if rows is None and frame_count is not None and len(out) != frame_count:
+            out = notes = None   # 段に分けた数が入れた数と合わない: 今までどおり段に分けない
+        elif frame_count is not None and rows is None:
+            notes.append(f"入れたコマの数（{frame_count}）が段に分けた数と合うので、段に分けました")
+    rows_count = None if bands is None else len(_split_rows(op, bands)[0]) if out is None else len(out)
+    if out is None:
+        out, notes = _split_columns(op)
+    if frame_count is not None and len(out) != frame_count:
+        found = "、".join(f"{b.x0}〜{b.x1 - 1}" for b in out)
+        hint = ""
+        if bands is not None and rows_count != len(out):
+            hint = (f"縦にも {len(bands)} 段に並んでいるようです（段に分けると {rows_count} コマ）。"
+                    f"段に分けるときは、コマの数を {rows_count} にするか、空（自動）にしてください。")
+        raise FramesError("frame_count",
+                          f"コマの数が合いません: 指定 {frame_count}、見つかったのは {len(out)}（列 {found}）。"
+                          + hint
+                          + "コマが重なっている（すき間が無い）か、離れた部品をコマと数えた可能性があります。"
+                          "コマとコマの間に背景だけの列があるかを確かめてください",
+                          expected=int(frame_count), found=len(out),
+                          boxes=[[b.x0, b.y0, b.x1, b.y1] for b in out])
+    return out, notes
+
+
+def find_rows(op: np.ndarray) -> list[tuple[int, int]] | None:
+    """背景だけの行で分けた段（行の範囲 [始め, 終わり) の上からの並び）。段が 2 つ以上見つからなければ None（段に分けない）。
+
+    迷ったら分けない:
+    - 段とみなすのは、その段の中にほかのコマと同じくらいのかたまり（列のすき間で分けたもの）があり（いちばん大きいかたまりの
+      `PART_RATIO` 以上。コマと小さな部品を分けるのと同じ目安）、高さもいちばん高い段の `ROW_HEIGHT_RATIO` 以上の所。
+      それより小さい段（離れた手・エフェクト・影など）は、行がいちばん近い段に入れる（同じ距離なら上）
+    - 段どうしが縦に重なって（同じ列を使って）いなければ分けない。横に 1 列に並んだ絵で、跳んだコマだけがほかのコマより
+      上にあるとき（背景だけの行で分かれて見える）に、段に分けて順番が変わるのを防ぐため
+    """
+    op = np.asarray(op, bool)
+    runs = _runs(op.any(1))
+    if len(runs) < 2:
+        return None
+    # 段ごとの、列のすき間で分けたかたまりの画素数のうち、いちばん大きいもの
+    biggest = []
+    for s, e in runs:
+        sub = op[s:e]
+        biggest.append(max(int(sub[:, cs:ce].sum()) for cs, ce in _runs(sub.any(0))))
+    top = max(biggest)
+    tall = max(e - s for s, e in runs)
+    big = [i for i, (n, (s, e)) in enumerate(zip(biggest, runs))
+           if n >= PART_RATIO * top and e - s >= ROW_HEIGHT_RATIO * tall]
+    if len(big) < 2:
+        return None
+    bands = {i: list(runs[i]) for i in big}
+    for i, (s, e) in enumerate(runs):
+        if i in bands:
+            continue
+
+        def dist(j: int) -> int:
+            bs, be = runs[j]
+            return bs - e if bs >= e else s - be
+
+        j = min(big, key=lambda k: (dist(k), k))
+        bands[j][0], bands[j][1] = min(bands[j][0], s), max(bands[j][1], e)
+    out = [tuple(bands[i]) for i in big]
+    cols = [op[s:e].any(0) for s, e in out]
+    for k, c in enumerate(cols):
+        if not any((c & d).any() for m, d in enumerate(cols) if m != k):
+            return None
+    return out
+
+
+def _split_rows(op: np.ndarray, bands: list[tuple[int, int]]) -> tuple[list[FrameBox], list[str]]:
+    """段ごとに列のすき間でコマに分ける（小さな部品・消し残しの目安は、全部の段でいちばん大きいかたまりに対して）。"""
+    top = 0
+    for s, e in bands:
+        sub = op[s:e]
+        top = max([top] + [int(sub[:, cs:ce].sum()) for cs, ce in _runs(sub.any(0))])
+    out: list[FrameBox] = []
+    notes: list[str] = []
+    dropped = 0
+    for r, (s, e) in enumerate(bands):
+        boxes, bnotes, d = _split_columns(op[s:e], top=top, first=len(out) + 1, label=f"{r + 1} 段目、")
+        for b in boxes:
+            b.y0, b.y1 = b.y0 + s, b.y1 + s
+            b.row, b.band = r, (int(s), int(e))
+        out.extend(boxes)
+        notes.extend(bnotes)
+        dropped += d
+    if dropped:
+        notes.append(f"ごく小さなかたまり（合わせて {dropped} 画素）は背景の消し残しとして使いませんでした")
+    notes.insert(0, f"背景だけの行で {len(bands)} 段に分けました（行 "
+                 + "、".join(f"{s}〜{e - 1}" for s, e in bands) + "）。コマは左から右、上の段から下の段の順です")
+    return out, notes
+
+
+def _split_columns(op: np.ndarray, top: int | None = None, first: int | None = None,
+                   label: str = "") -> tuple[list[FrameBox], list[str]] | tuple[list[FrameBox], list[str], int]:
+    """透明な列のすき間でコマに分ける（1 段の絵の切り分け。段に分けたときは段ごと）。
+
+    `top` を渡したとき（段ごと）は、小さな部品・消し残しの目安をその数に対して決め、戻り値に捨てた画素数を足す
+    （説明はまとめて出すため）。`first` はこの段の最初のコマの番号（説明用）。
+    """
     runs = _runs(op.any(0))
     if not runs:
         raise FramesError("no_frames", "不透明な画素がありません（背景除去で全部消えた可能性があります）")
     sizes = [int(op[:, s:e].sum()) for s, e in runs]
-    top = max(sizes)
+    banded = top is not None
+    if top is None:
+        top = max(sizes)
     notes: list[str] = []
     big = [i for i, n in enumerate(sizes) if n >= PART_RATIO * top]
     boxes = {i: FrameBox(runs[i][0], runs[i][1], 0, 0, sizes[i]) for i in big}
@@ -272,7 +387,7 @@ def find_frames(rgba: np.ndarray, frame_count: int | None = None) -> tuple[list[
     for i, n in enumerate(sizes):
         if i in boxes:
             continue
-        if n < NOISE_RATIO * top:
+        if n < NOISE_RATIO * top or not big:
             dropped += n
             continue
         s, e = runs[i]
@@ -286,22 +401,27 @@ def find_frames(rgba: np.ndarray, frame_count: int | None = None) -> tuple[list[
         b.x0, b.x1 = min(b.x0, s), max(b.x1, e)
         b.pixels += n
         b.parts.append((s, e))
-        notes.append(f"小さな部品（列 {s}〜{e - 1}、{n} 画素）を {big.index(j) + 1} コマ目に入れました")
-    if dropped:
-        notes.append(f"ごく小さなかたまり（合わせて {dropped} 画素）は背景の消し残しとして使いませんでした")
+        notes.append(f"小さな部品（{label}列 {s}〜{e - 1}、{n} 画素）を {big.index(j) + (first or 1)} コマ目に入れました")
     out = [boxes[i] for i in big]
     for b in out:
         rows = np.flatnonzero(op[:, b.x0:b.x1].any(1))
         b.y0, b.y1 = int(rows[0]), int(rows[-1]) + 1
-    if frame_count is not None and len(out) != frame_count:
-        found = "、".join(f"{b.x0}〜{b.x1 - 1}" for b in out)
-        raise FramesError("frame_count",
-                          f"コマの数が合いません: 指定 {frame_count}、見つかったのは {len(out)}（列 {found}）。"
-                          "コマが重なっている（すき間が無い）か、離れた部品をコマと数えた可能性があります。"
-                          "コマとコマの間に背景だけの列があるかを確かめてください",
-                          expected=int(frame_count), found=len(out),
-                          boxes=[[b.x0, b.y0, b.x1, b.y1] for b in out])
+    if banded:
+        return out, notes, dropped
+    if dropped:
+        notes.append(f"ごく小さなかたまり（合わせて {dropped} 画素）は背景の消し残しとして使いませんでした")
     return out, notes
+
+
+def frames_text(boxes: list[FrameBox]) -> str:
+    """切り分けの説明（工程の表示）。1 段の絵は今までどおり列の範囲だけ、段に分けたときは段ごとに。"""
+    if not any(b.band is not None for b in boxes):
+        return f"{len(boxes)} コマ: " + "、".join(f"{b.x0}〜{b.x1 - 1}" for b in boxes)
+    rows: dict = {}
+    for b in boxes:
+        rows.setdefault(b.row, []).append(b)
+    return (f"{len(boxes)} コマ、{len(rows)} 段: "
+            + "／".join(f"{r + 1} 段目 " + "、".join(f"{b.x0}〜{b.x1 - 1}" for b in bs) for r, bs in rows.items()))
 
 
 def frame_image(rgba: np.ndarray, box: FrameBox, others: list[FrameBox] | None = None,
@@ -313,7 +433,7 @@ def frame_image(rgba: np.ndarray, box: FrameBox, others: list[FrameBox] | None =
     out[margin:margin + box.y1 - box.y0, margin:margin + box.x1 - box.x0] = a[box.y0:box.y1, box.x0:box.x1]
     # 小さな部品を入れて列の範囲が広がり、ほかのコマの列と重なったときは、そこを透明にする
     for o in others or []:
-        if o is box:
+        if o is box or o.row != box.row:   # ほかの段のコマは行が重ならないので、そのまま
             continue
         s, e = max(o.x0, box.x0) - x0, min(o.x1, box.x1) - x0
         if s < e:
@@ -712,8 +832,26 @@ def _work_frames(raw, src, periods, s, steps, on_step):
 def _source_pos(boxes, src, period) -> list[tuple[float, float]]:
     """元の絵での位置（ドット単位）。none のために、コマが等間隔に並んでいるとみなした分を引く。"""
     n = len(boxes)
-    pitch = (boxes[-1].center_x - boxes[0].center_x) / (n - 1) if n > 1 else 0.0
-    return [((sx - i * pitch) / period[0], sy / period[1]) for i, (sx, sy) in enumerate(src)]
+    if not any(b.row for b in boxes):
+        pitch = (boxes[-1].center_x - boxes[0].center_x) / (n - 1) if n > 1 else 0.0
+        return [((sx - i * pitch) / period[0], sy / period[1]) for i, (sx, sy) in enumerate(src)]
+    # 段に分けたとき: 段ごとに、その段の最初のコマを 1 段目の最初のコマの位置に、段のいちばん低い足元を 1 段目の足元に重ねる
+    rows: dict = {}
+    for i, b in enumerate(boxes):
+        rows.setdefault(b.row, []).append(i)
+    first = rows[min(rows)]
+    pitch0 = (boxes[first[-1]].center_x - boxes[first[0]].center_x) / (len(first) - 1) if len(first) > 1 else 0.0
+    x_ref, foot_ref = boxes[first[0]].center_x, max(boxes[i].y1 for i in first)
+    out: list = [None] * n
+    for idx in rows.values():
+        m = len(idx)
+        pitch = (boxes[idx[-1]].center_x - boxes[idx[0]].center_x) / (m - 1) if m > 1 else pitch0
+        dx = boxes[idx[0]].center_x - x_ref
+        dy = max(boxes[i].y1 for i in idx) - foot_ref
+        for j, i in enumerate(idx):
+            sx, sy = src[i]
+            out[i] = ((sx - dx - j * pitch) / period[0], (sy - dy) / period[1])
+    return out
 
 
 def convert_frames(rgba: np.ndarray, settings=None, frame_settings: FrameSettings | None = None,
@@ -744,8 +882,7 @@ def convert_frames(rgba: np.ndarray, settings=None, frame_settings: FrameSetting
         emit(bg.name, bg.describe(), cur, t0)
     t0 = time.perf_counter()
     boxes, notes = find_frames(cur, fs.frame_count)
-    emit("frames", f"コマの切り分け（{len(boxes)} コマ: "
-         + "、".join(f"{b.x0}〜{b.x1 - 1}" for b in boxes) + "）", cur, t0)
+    emit("frames", f"コマの切り分け（{frames_text(boxes)}）", cur, t0)
 
     t0 = time.perf_counter()
     subs = [frame_image(cur, b, boxes) for b in boxes]
