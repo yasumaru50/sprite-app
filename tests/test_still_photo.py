@@ -19,6 +19,7 @@ from retrocore.still import outline as outline_mod
 from retrocore.still import photo as photo_mod
 from retrocore.still.convert import (MODES, SMOOTH_LEVELS, StillError, StillSettings, convert_still,
                                      convert_still_bytes, spec, still_for_web)
+from still_legacy import legacy_json
 from synth_still import enlarge_scene, make_modern_scene, make_scene, noisy_scene_rgba
 
 
@@ -80,7 +81,7 @@ def test_modern_and_pc98_output_is_unchanged(name, settings, png_hash, json_hash
             "noisy": lambda: _png(noisy_scene_rgba())}[name]()
     out = convert_still_bytes(data, f"{name}.png", settings)
     assert hashlib.sha256(out["png"]).hexdigest()[:16] == png_hash
-    assert hashlib.sha256(out["json"].encode("utf-8")).hexdigest()[:16] == json_hash
+    assert hashlib.sha256(legacy_json(out["json"]).encode("utf-8")).hexdigest()[:16] == json_hash
     info = out["info"]
     assert "photo" not in info and "outline" not in info
     assert "smooth" not in info["settings"] and "outline" not in info["settings"]
@@ -100,7 +101,7 @@ def test_photo_preset():
     # 98・今風は孤立したドット・輪郭とも既定は切
     for mode in ("pc98", "modern"):
         m = StillSettings.from_mode(mode)
-        assert (m.tidy_dots, m.outline, m.smooth) == (False, False, None)
+        assert (m.tidy_dots, m.outline, m.smooth, m.orient, m.find_grid) == (False, False, "off", False, True)
 
 
 def test_photo_width_null_means_320():
@@ -111,8 +112,10 @@ def test_photo_width_null_means_320():
 
 @pytest.mark.parametrize("values, words", [
     ({"mode": "photo", "smooth": "max"}, "まとめの強さ"),
-    ({"mode": "modern", "smooth": "weak"}, "写真の下書き"),
-    ({"smooth": "weak"}, "写真の下書き"),
+    ({"smooth": "max"}, "まとめの強さ"),
+    ({"find_grid": True, "width": 100}, "一緒"),
+    ({"find_grid": False}, "横のマス数"),
+    ({"orient": 1}, "true"),
     ({"mode": "photo", "smooth": 2}, "smooth"),
     ({"outline": "yes"}, "true"),
 ])

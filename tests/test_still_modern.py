@@ -19,6 +19,7 @@ from retrocore.still import colors as colors_mod
 from retrocore.still import lone as lone_mod
 from retrocore.still.convert import (MODERN_COLOR_CHOICES, MODES, StillError, StillSettings, convert_still,
                                      convert_still_bytes, spec, still_for_web)
+from still_legacy import legacy_json
 from synth_still import (MODERN_SKY, MODERN_SPECK, MODERN_WALL, enlarge_scene, make_modern_scene, make_scene,
                          noisy_scene_rgba)
 
@@ -52,7 +53,7 @@ def test_pc98_output_is_unchanged(name, settings, png_hash, json_hash):
     data = _png(enlarge_scene(make_scene(), seed=1)) if name == "scene" else _png(noisy_scene_rgba())
     out = convert_still_bytes(data, f"{name}.png", settings)
     assert hashlib.sha256(out["png"]).hexdigest()[:16] == png_hash
-    assert hashlib.sha256(out["json"].encode("utf-8")).hexdigest()[:16] == json_hash
+    assert hashlib.sha256(legacy_json(out["json"]).encode("utf-8")).hexdigest()[:16] == json_hash
     info = out["info"]
     assert "similar" not in info and "tidy_dots" not in info and "merged_similar" not in info["colors"]
     assert "merge_similar" not in info["settings"] and "tidy_dots" not in info["settings"]
@@ -79,9 +80,10 @@ def test_modern_json_records_mode_and_settings(modern):
     assert off["settings"]["merge_similar"] is False and "similar" not in off
 
 
-def test_merge_similar_is_only_for_modern():
-    with pytest.raises(ValueError, match="今風モード"):
-        StillSettings.from_dict({"merge_similar": True})
+def test_merge_similar_can_be_used_in_pc98():
+    # 前は 98 モードでは使えなかった。項目として 98 でも使える（JSON の preset に変えた項目として残る）
+    s = StillSettings.from_dict({"merge_similar": True})
+    assert s.mode == "pc98" and s.merge_similar is True and s.changed() == ["merge_similar"]
     with pytest.raises(ValueError, match="merge_similar"):
         StillSettings.from_dict({"mode": "modern", "merge_similar": "yes"})
 

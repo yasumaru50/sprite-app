@@ -16,6 +16,7 @@ from apps.still import cli
 from int32_numpy import AVAILABLE, emulate_int32
 from retrocore.still import pattern as pattern_mod
 from retrocore.still.convert import StillSettings, convert_still, convert_still_bytes, still_for_web
+from still_legacy import legacy_json
 from synth_still import NOISY_PALETTE, enlarge_scene, make_noisy_scene, make_scene, noisy_scene_rgba, shuffled_level
 
 PAL = NOISY_PALETTE
@@ -172,8 +173,8 @@ def test_off_output_is_unchanged(settings, png_hash, json_hash):
     for s in (settings, {**settings, "tidy_pattern": False}):
         out = convert_still_bytes(data, "scene.png", s)
         assert hashlib.sha256(out["png"]).hexdigest()[:16] == png_hash
-        assert hashlib.sha256(out["json"].encode("utf-8")).hexdigest()[:16] == json_hash
-        assert '"pattern"' not in out["json"] and "tidy_pattern" not in out["json"]
+        assert hashlib.sha256(legacy_json(out["json"]).encode("utf-8")).hexdigest()[:16] == json_hash
+        assert '"pattern"' not in out["json"] and "tidy_pattern" not in legacy_json(out["json"])
 
 
 def test_off_web_has_no_overlay():

@@ -34,7 +34,7 @@ SMOOTH = {
     "medium": {"radius": 4, "passes": 2},
     "strong": {"radius": 5, "passes": 3},
 }
-DEFAULT_SMOOTH = "medium"
+DEFAULT_SMOOTH = "medium"   # 写真の下書きの既定（ほかの初めの設定は "off"＝まとめない）
 SMOOTH_LABELS = {"weak": "弱", "medium": "中", "strong": "強"}
 # 明るさ（ばらつきを測る値）の重み（ITU-R BT.601 を 256 倍した整数。合計 256）
 GRAY_WEIGHTS = (77, 150, 29)
@@ -149,11 +149,14 @@ def smooth(rgb: np.ndarray, level: str) -> np.ndarray:
 class PhotoWork:
     """写真の下書きの途中の記録（JSON に書く）。"""
 
-    work_size: tuple[int, int]    # 色の塊をまとめた大きさ（縮めた後）
-    prescaled: bool               # 先に縮めたか
-    level: str
+    work_size: tuple[int, int] | None   # 色の塊をまとめた大きさ（縮めた後。まとめないときは None）
+    prescaled: bool                     # 先に縮めたか
+    level: str                          # まとめの強さ（まとめないときは "off"）
 
-    def describe(self, orientation: int) -> dict:
+    def describe(self, orientation: int | None) -> dict:
+        """orientation は EXIF の Orientation の値（向きを直さないときは None）。"""
+        if self.level == "off":
+            return {"orientation": orientation, "prescale": None, "work_size": None, "smooth": None}
         p = SMOOTH[self.level]
         return {"orientation": orientation, "prescale": PRESCALE if self.prescaled else None,
                 "work_size": list(self.work_size),
@@ -179,3 +182,42 @@ def photo_dots(rgb: np.ndarray, width: int, level: str) -> tuple[dots_mod.Dots, 
     small = dots_mod.mode_colors(work, _edges(ww, width), _edges(wh, height))
     xs, ys = _edges(w, width), _edges(h, height)
     return dots_mod.Dots(small, "photo", xs, ys), PhotoWork((int(ww), int(wh)), prescaled, level)
+
+
+def _sub_edges(edges: np.ndarray, k: int) -> np.ndarray:
+    """各マス（edges[i]〜edges[i+1]）を k 等分した境目（整数の四捨五入。長さ (len(edges)-1)·k + 1）。"""
+    e = np.asarray(edges, np.int64)
+    a, d = e[:-1, None], np.diff(e)[:, None]
+    j = np.arange(k, dtype=np.int64)[None, :]
+    return np.concatenate([(a + (j * 2 * d + k) // (2 * k)).ravel(), e[-1:]])
+
+
+def smooth_grid_dots(rgb: np.ndarray, dots: dots_mod.Dots, level: str) -> tuple[dots_mod.Dots, PhotoWork]:
+    """マス目を探した後（グリッド検出の Dots）に、色の塊をまとめてマスの色を決め直す。
+
+    写真の下書きと同じ考え方: 各マスを PRESCALE × PRESCALE の画素に縮め（マスの中の画素の平均）、桑原フィルタをかけ、
+    マスの色はいちばん多い色にする。マスが PRESCALE px より小さいときは縮めずに、元の画素のまま まとめる。
+    マスの区切り（xs・ys）と JSON の dots は、グリッド検出のまま。
+    """
+    a = np.asarray(rgb, np.uint8)
+    xs, ys = np.asarray(dots.xs, np.int64), np.asarray(dots.ys, np.int64)
+    nx, ny = len(xs) - 1, len(ys) - 1
+    if int(np.diff(xs).min()) >= PRESCALE and int(np.diff(ys).min()) >= PRESCALE:
+        sx, sy = _sub_edges(xs, PRESCALE), _sub_edges(ys, PRESCALE)
+        area = (np.diff(sy)[:, None] * np.diff(sx)[None, :]).astype(np.int64)
+        work = np.empty((ny * PRESCALE, nx * PRESCALE, 3), np.uint8)
+        for c in range(3):
+            s = _sum_cells(_sum_cells(a[..., c], sx, 1), sy, 0)
+            work[..., c] = ((2 * s + area) // (2 * area)).astype(np.uint8)
+        cx = np.arange(nx + 1, dtype=np.int64) * PRESCALE
+        cy = np.arange(ny + 1, dtype=np.int64) * PRESCALE
+        prescaled = True
+    else:
+        work = np.ascontiguousarray(a[ys[0]:ys[-1], xs[0]:xs[-1]])
+        cx, cy = xs - xs[0], ys - ys[0]
+        prescaled = False
+    work = smooth(work, level)
+    small = dots_mod.mode_colors(work, cx, cy)
+    wh, ww = work.shape[:2]
+    return (dots_mod.Dots(small, dots.method, dots.xs, dots.ys, dots.dot_size, dots.trimmed),
+            PhotoWork((int(ww), int(wh)), prescaled, level))
