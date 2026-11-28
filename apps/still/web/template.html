@@ -93,6 +93,16 @@
   button.help-btn[aria-expanded=true] { background: var(--accent); color: var(--accent-text); }
   #help-all { padding: 4px 14px; font-size: 0.9em; }
   .lead.help { margin-top: -6px; }
+  /* 「？」の説明の 3 行（文は retrocore/still/guide.py。CLI の --help と共通） */
+  .field small.guide { max-width: 26em; color: var(--text); background: var(--bg); border: 1px solid var(--line);
+                       border-radius: 6px; padding: 6px 8px; line-height: 1.5; }
+  .guide .guide-line { display: block; }
+  .guide .guide-line b { color: var(--accent); font-weight: 600; }
+  .guide .guide-cli { display: block; color: var(--muted); margin-top: 2px; }
+  .guide .guide-mode { display: block; margin-top: 6px; padding-left: 8px; border-left: 3px solid var(--line); }
+  .guide .guide-mode.current { border-left-color: var(--accent); }
+  .guide .guide-mode-name { display: block; font-weight: 700; }
+  .field small.guide-modes { max-width: 34em; }
   /* 折りたたむ欄（Sprite App と同じ） */
   details.fold { margin-top: 14px; color: var(--text); border: 1px solid var(--line); border-radius: 6px; background: var(--bg); }
   details.fold > summary { cursor: pointer; padding: 8px 12px; font-weight: 600; display: flex; flex-wrap: wrap; align-items: baseline;
@@ -122,7 +132,7 @@
       <div class="field">
         <span class="help-row"><label for="mode">初めの設定</label><span class="fold-mark mode-mark" id="mode-mark" hidden>（変更あり）</span></span>
         <select id="mode"></select>
-        <small class="help">項目の値の組み合わせです（CLI の --mode）。決まりではないので、下の「必要なときに開く」で 1 つずつ変えられます。変えると「（変更あり）」と出て、JSON に変えた項目が残ります。「今風」は最近のインディーゲームの背景のようなドット絵の手直しの出発点で、32 色・4096 色に丸めない・1920×1080 まで・似た色をまとめる です。「写真の下書き」は自分で撮った写真を、塗り直しの出発点になる色を塗り分けた下絵にします（写真の向きを直す・マス目は探さずに横 320 マス・色の塊をまとめる（中）・減色は今風と同じ（ただし似た色はまとめない）・孤立したドットをそろえる）</small>
+        <small class="help guide guide-modes" data-guide-modes>項目の値の組み合わせです（CLI の --mode）。決まりではないので、下の「必要なときに開く」で 1 つずつ変えられます。変えると「（変更あり）」と出て、JSON に変えた項目が残ります。</small>
       </div>
       <div class="field">
         <button type="button" id="run" disabled>② 変換する</button>
@@ -130,12 +140,12 @@
     </div>
 
     <details class="fold" id="fold-need">
-      <summary><span class="fold-name">必要なときに開く</span><span class="fold-mark" hidden>（変更あり）</span><small class="fold-what">工程の順: 向き・マス目・比率・色の塊・減色・似た色・孤立したドット・模様・輪郭・余白</small></summary>
+      <summary><span class="fold-name">必要なときに開く</span><span class="fold-mark" hidden>（変更あり）</span><small class="fold-what">工程の順: 向き・マス目・比率・色の塊・減色・似た色・ディザ・孤立したドット・模様・輪郭・余白</small></summary>
       <div class="fold-body">
         <div class="controls">
           <div class="field">
             <label class="check"><input type="checkbox" id="orient"> 写真の向きを直す</label>
-            <small class="help">写真に記録された向き（EXIF）を見て、正しい向きに回してから読みます。写真の下書きでは初めから入（CLI の --orient・--no-orient）</small>
+            <small class="help guide" data-guide="orient"></small>
           </div>
         </div>
         <div class="controls" style="margin-top:10px">
@@ -145,17 +155,17 @@
               <option value="grid">マス目を探す</option>
               <option value="width">横のマス数で分ける</option>
             </select>
-            <small class="help">「マス目を探す」は AI が描いたドットのマス目を自動で見つけます（98・今風の初めの設定。CLI の --grid）。「横のマス数で分ける」はマス目を探さずに、横を決まった数のマスに分けます（縦は縦横の比から。写真の下書きの初めの設定。CLI の --width）</small>
+            <small class="help guide" data-guide="find_grid"></small>
           </div>
           <div class="field">
             <label for="width">横のマス数</label>
             <input type="number" id="width" min="1" step="1">
-            <small class="help">「横のマス数で分ける」のときのマスの数です（CLI の --width）</small>
+            <small class="help guide" data-guide="width"></small>
           </div>
           <div class="field">
             <span class="label" id="max-label">大きさの上限</span>
             <span class="pair"><input type="number" id="max-w" min="1" step="1" aria-label="上限の幅">×<input type="number" id="max-h" min="1" step="1" aria-label="上限の高さ"></span>
-            <small class="help" data-help-at="max-label">ドット数（幅×高さ）。超えたら出力せずに、収まる「横のマス数」の候補を出します。CLI の --max-size</small>
+            <small class="help guide" data-help-at="max-label" data-guide="max_size"></small>
           </div>
         </div>
         <div class="controls" style="margin-top:10px">
@@ -163,7 +173,7 @@
             <label for="aspect">比率に合わせて切り抜く</label>
             <select id="aspect"></select>
             <span class="pair" id="aspect-custom" hidden><input type="number" id="aspect-w" min="1" step="1" aria-label="比率の幅">:<input type="number" id="aspect-h" min="1" step="1" aria-label="比率の高さ"></span>
-            <small class="help">拡大・縮小はせず、切り抜くだけで この比率にします（余白を足すときは下の「余白（キャンバス）」）。「横のマス数で分ける」ときは入力の画像を先に切り抜くので、横 320・16:9 ならちょうど 320×180 ドットです。「マス目を探す」ときは見つけたマス目のまま、マス単位で切ります（格子はずれません）。「数値で入れる」は正の整数どうし（例 21:9・1200:630）。CLI の --aspect</small>
+            <small class="help guide" data-guide="aspect"></small>
             <span class="width-picks" id="aspect-widths" hidden></span>
           </div>
           <div class="field" id="anchor-field">
@@ -175,14 +185,14 @@
                 <span class="pair">縦 <input type="number" id="anchor-y" min="0" max="100" step="1" aria-label="切る位置の縦（%）">%</span>
               </span>
             </span>
-            <small class="help" data-help-at="anchor-label">どこを残すか（横・縦それぞれ 0〜100 の%）。50・50 は中央、横 50・縦 0 は上寄せ、横 0・縦 50 は左寄せ。ボタンは 0・50・100 の組み合わせで、ほかの数は欄に入れます。比率が「元のまま」のときは使いません。CLI の --anchor</small>
+            <small class="help guide" data-help-at="anchor-label" data-guide="anchor"></small>
           </div>
         </div>
         <div class="controls" style="margin-top:10px">
           <div class="field">
             <label for="smooth">色の塊をまとめる</label>
             <select id="smooth"></select>
-            <small class="help">境目は残したまま、似た色の近所をならして色の塊にします（桑原フィルタ）。強いほど塊が大きく、細かい所が消えます。作業用に 1 マスを 4×4 の画素に縮めてから まとめます。写真の下書きでは初めから「中」、ほかは「しない」（CLI の --smooth off・weak・medium・strong）</small>
+            <small class="help guide" data-guide="smooth"></small>
           </div>
         </div>
         <div class="controls" style="margin-top:10px">
@@ -190,45 +200,45 @@
             <label for="colors">色数</label>
             <input type="number" id="colors" step="1" list="colors-list">
             <datalist id="colors-list"></datalist>
-            <small class="help" id="colors-help"></small>
+            <small class="help guide" data-guide="colors"></small>
           </div>
           <div class="field">
             <label class="check"><input type="checkbox" id="four-bit"> 4096 色に丸める</label>
-            <small class="help">パレットの色を RGB 各 16 段階（4 ビット）の 4096 色の中から選びます。98 の初めの設定で入（CLI の --4bit・--no-4bit）</small>
+            <small class="help guide" data-guide="four_bit"></small>
           </div>
           <div class="field">
             <label class="check"><input type="checkbox" id="keep-darkest"> いちばん暗い色を取っておく</label>
-            <small class="help">パレットの 1 色を絵の中のいちばん暗い色にして、暗い線が中間の色に吸われて消えないようにします（CLI の --keep-darkest・--no-keep-darkest）</small>
+            <small class="help guide" data-guide="keep_darkest"></small>
           </div>
         </div>
         <div class="controls" style="margin-top:10px">
           <div class="field">
             <label class="check"><input type="checkbox" id="merge-similar"> 似た色をまとめる</label>
-            <small class="help">減色のあと、見た目でほぼ区別できない色どうし（OKLab の距離 0.04 未満）を、ドット数の多い方の色に合わせます。いちばん暗い色は残します。色数は上限なので、少なくなることがあります。今風の初めの設定で入。写真の下書きでは、近い色が空などの段として要るので切（CLI の --merge-similar・--no-merge-similar）</small>
+            <small class="help guide" data-guide="merge_similar"></small>
           </div>
           <div class="field">
             <label for="dither">ディザを作る</label>
             <select id="dither"></select>
-            <small class="help">空のようになめらかに色が変わる所で、明るさの近い 2 色の間を決まった網目（2×2 は 5 段、4×4 は 17 段）でつなぎ、グラデーションにします。新しい色は作らず、どのドットにどちらの色を置くかだけを変えます。輪郭・はっきりした境目・細かい描き込み・いちばん暗い色には入れません。網目のドットは「孤立したドットをそろえる」で消されません。どの初めの設定でも「しない」（CLI の --dither off・2x2・4x4）</small>
+            <small class="help guide" data-guide="dither"></small>
           </div>
           <div class="field">
             <label class="check"><input type="checkbox" id="tidy-dots"> 孤立したドットをそろえる</label>
-            <small class="help">まわりの 8 ドットに同じ色が 1 つも無く、まわりの 7 つ以上が同じ色のドットを、その色にします（AI のにじみの点を消すため）。いちばん暗い色のドットと絵の端のドットは変えません。1 回だけ通します。写真の下書きの初めの設定で入（CLI の --tidy-dots・--no-tidy-dots）</small>
+            <small class="help guide" data-guide="tidy_dots"></small>
           </div>
           <div class="field">
             <label class="check"><input type="checkbox" id="tidy-pattern"> ざらついた範囲を模様に整える</label>
-            <small class="help">AI が描いたディザ風の所は、減色するとばらばらの点になります。そういう所を、その場所の多い 2 色だけを使った 2×2 の決まった模様（濃さ 5 段。50% は市松）に置き換えます。輪郭・平塗りの面・小さい所・3 色目が多い所は変えません（CLI の --tidy-pattern）</small>
+            <small class="help guide" data-guide="tidy_pattern"></small>
           </div>
           <div class="field">
             <label class="check"><input type="checkbox" id="outline"> 輪郭の線を引く</label>
-            <small class="help">明るさの差が大きい色の境目に、暗い方の側へ 1 ドットの線を引きます。線の色はパレットのいちばん暗い色で、新しい色は作りません（CLI の --outline）</small>
+            <small class="help guide" data-guide="outline"></small>
           </div>
         </div>
         <div class="controls" style="margin-top:10px">
           <div class="field">
             <span class="label" id="canvas-label">余白（キャンバス）</span>
             <span class="pair"><input type="number" id="canvas-w" min="1" step="1" placeholder="なし" aria-label="キャンバスの幅">×<input type="number" id="canvas-h" min="1" step="1" placeholder="なし" aria-label="キャンバスの高さ"></span>
-            <small class="help" data-help-at="canvas-label">空ならなし。入れると、絵を真ん中に置いて余白を足し、この大きさにします。余白はパレットのいちばん暗い色。CLI の --canvas</small>
+            <small class="help guide" data-help-at="canvas-label" data-guide="canvas"></small>
           </div>
         </div>
       </div>
@@ -336,6 +346,44 @@ self.onmessage = async (ev) => {
 const PYODIDE_URL = "https://cdn.jsdelivr.net/pyodide/v__PYODIDE_VERSION__/full/";
 const SPEC = JSON.parse(document.getElementById("settings-spec").textContent);
 const $ = (id) => document.getElementById(id);
+
+// ---- 説明の文（項目・初めの設定ごとの 3 行。Python の retrocore/still/guide.py から埋め込み、CLI の --help と共通） ----
+function guideLines(box, lines) {
+  for (const [head, text] of lines) {
+    const line = document.createElement("span");
+    line.className = "guide-line";
+    const b = document.createElement("b");
+    b.textContent = `${head}：`;
+    line.append(b, text);
+    box.appendChild(line);
+  }
+}
+for (const el of document.querySelectorAll("[data-guide]")) {
+  const g = SPEC.guide.items[el.dataset.guide];
+  guideLines(el, g.lines);
+  const cli = document.createElement("span");
+  cli.className = "guide-cli";
+  cli.textContent = `CLI の ${g.cli}`;
+  el.appendChild(cli);
+}
+for (const el of document.querySelectorAll("[data-guide-modes]")) {
+  for (const key of SPEC.guide.mode_order) {
+    const g = SPEC.guide.modes[key];
+    const box = document.createElement("span");
+    box.className = "guide-mode";
+    box.dataset.mode = key;
+    const name = document.createElement("span");
+    name.className = "guide-mode-name";
+    name.textContent = SPEC.modes[key].label.split("（")[0];
+    box.appendChild(name);
+    guideLines(box, g.lines);
+    el.appendChild(box);
+  }
+}
+// 選んでいる初めの設定の説明に印を付ける
+function guideModeMark() {
+  for (const el of document.querySelectorAll(".guide-mode")) el.classList.toggle("current", el.dataset.mode === $("mode").value);
+}
 
 // ---- 説明の文（ふだんは隠し、「？」を押したときだけ出す。Sprite App と同じしくみ） ----
 const HELP = { all: false, seq: 0, buttons: [] };
@@ -452,7 +500,6 @@ $("aspect").addEventListener("change", () => {
   if ($("aspect").value === "custom" && !$("aspect-w").value) $("aspect-w").focus();
 });
 for (const id of ["aspect-w", "aspect-h", "anchor-x", "anchor-y"]) $(id).addEventListener("input", syncAspect);
-$("colors-help").textContent = `パレットの色数の上限（${SPEC.colors.min}〜${SPEC.colors.max}。よく使う数: ${SPEC.modern_colors.join("・")}）。似た色が多いときは、これより少なくなることがあります。CLI の --colors`;
 for (const z of [1, 2, 3, 4, 6, 8]) $("zoom").add(new Option(`${z} 倍`, String(z)));
 $("zoom").value = "3";
 // 初めの設定（項目の値の組み合わせ）を、「必要なときに開く」の項目に入れる。どの項目も、どの初めの設定でも変えられる
@@ -483,6 +530,7 @@ function applyMode(key) {
   syncGrid();
   syncAspect();
   foldRefresh();
+  guideModeMark();
 }
 // 「マス目を探す」のときは横のマス数を使わない（入れられないようにする）
 function syncGrid() {
