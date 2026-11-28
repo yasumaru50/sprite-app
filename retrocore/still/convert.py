@@ -29,6 +29,7 @@ import numpy as np
 from PIL import Image
 
 from ..sprite.image import to_rgba
+from . import aspect as aspect_mod
 from . import colors as colors_mod
 from . import dither as dither_mod
 from . import dots as dots_mod
@@ -40,9 +41,12 @@ from . import photo as photo_mod
 APP = "still"
 FORMAT_VERSION = 1
 # 項目（工程の順）。初めの設定（MODES）は、この項目の値の組み合わせ。JSON の `preset.values` もこの順
-ITEMS = ("orient", "find_grid", "width", "max_size", "smooth", "colors", "four_bit", "keep_darkest", "merge_similar",
+ITEMS = ("orient", "find_grid", "width", "aspect", "anchor", "max_size", "smooth", "colors", "four_bit", "keep_darkest", "merge_similar",
          "dither", "tidy_dots", "tidy_pattern", "outline", "canvas")
-_OFF = {"dither": "off", "tidy_pattern": False, "outline": False, "canvas": None}
+_OFF = {"aspect": None, "anchor": aspect_mod.DEFAULT_ANCHOR, "dither": "off", "tidy_pattern": False, "outline": False,
+        "canvas": None}
+# 比率に合わせて切り抜く（aspect）が「元のまま」のときは、JSON の `preset.values` に aspect・anchor を書かない（前と同じバイト列）
+_ASPECT_ITEMS = ("aspect", "anchor")
 # 初めの設定（プリセット）。値を変えると出力が変わる（足すのはよい）。どの値も、項目（CLI のオプション・画面の
 # 「必要なときに開く」）で 1 つずつ変えられる
 MODES = {
@@ -120,6 +124,8 @@ class StillSettings:
     outline: bool = False                    # 輪郭の線を引く（どの初めの設定でも切）
     orient: bool | None = None               # 写真の向き（EXIF）を直して読む（None は mode の既定。写真の下書きだけ入）
     find_grid: bool | None = None            # マス目を探す（False なら横 width マスに分ける。None は width から決める）
+    aspect: tuple[int, int] | None = None    # 比率に合わせて切り抜く（幅:高さ。None は元のまま）
+    anchor: tuple[int, int] = aspect_mod.DEFAULT_ANCHOR   # 切る位置（横・縦の%。比率が元のままのときは使わない）
 
     def __post_init__(self):
         # 直接作ったとき（StillSettings(width=40) など）の、決まっていない値を埋める（前の版と同じ意味になるように）
@@ -160,6 +166,10 @@ class StillSettings:
         for k in ("max_size", "canvas"):
             if v[k] is not None:
                 v[k] = parse_size(v[k], "大きさの上限" if k == "max_size" else "キャンバス")
+        if v["aspect"] is not None:
+            v["aspect"] = aspect_mod.parse_aspect(v["aspect"])
+        if v["anchor"] is not None:
+            v["anchor"] = aspect_mod.parse_anchor(v["anchor"])
         for k in ("colors", "width"):
             if v[k] is not None:
                 if isinstance(v[k], bool) or not isinstance(v[k], (int, float)) or int(v[k]) != v[k]:
@@ -200,16 +210,26 @@ class StillSettings:
             raise ValueError(f"色の塊のまとめの強さ（--smooth）は {', '.join(SMOOTH_CHOICES)} のどれかです（{self.smooth}）")
         if self.dither not in DITHER_CHOICES:
             raise ValueError(f"ディザ（--dither）は {', '.join(DITHER_CHOICES)} のどれかです（{self.dither}）")
+        self.aspect = aspect_mod.parse_aspect(self.aspect)
+        # 比率が元のままなら切る位置は使わないので、既定に戻す（「変えた項目」にも数えない）
+        self.anchor = aspect_mod.parse_anchor(self.anchor) if self.aspect is not None else aspect_mod.DEFAULT_ANCHOR
+
+    def _all_values(self) -> dict:
+        return {k: _json_value(getattr(self, k)) for k in ITEMS}
 
     def values(self) -> dict:
-        """項目の値すべて（工程の順。JSON の `preset.values`）。"""
-        return {k: _json_value(getattr(self, k)) for k in ITEMS}
+        """項目の値すべて（工程の順。JSON の `preset.values`）。比率が元のままなら aspect・anchor は書かない。"""
+        v = self._all_values()
+        if self.aspect is None:
+            for k in _ASPECT_ITEMS:
+                v.pop(k)
+        return v
 
     def changed(self) -> list[str]:
         """初めの設定から変えた項目（工程の順）。"""
         base = StillSettings.from_mode(self.mode)
         base.validate()
-        mine, ref = self.values(), base.values()
+        mine, ref = self._all_values(), base._all_values()
         return [k for k in ITEMS if mine[k] != ref[k]]
 
     def preset_info(self) -> dict | None:
@@ -219,9 +239,9 @@ class StillSettings:
             return None
         ref = StillSettings.from_mode(self.mode)
         ref.validate()
-        mine, base = self.values(), ref.values()
+        mine, base = self._all_values(), ref._all_values()
         return {"name": self.mode, "changed": {k: {"preset": base[k], "used": mine[k]} for k in changed},
-                "values": mine}
+                "values": self.values()}
 
     def to_json(self) -> dict:
         """JSON の `settings`（前の版と同じ形。項目の値すべては `preset.values`）。"""
@@ -240,6 +260,9 @@ class StillSettings:
             out["smooth"] = self.smooth
         if self.outline or self.mode == "photo":   # 98・今風モードでは、切のときは書かない
             out["outline"] = self.outline
+        if self.aspect is not None:   # 元のままのときは書かない（前と同じバイト列にするため）
+            out["aspect"] = list(self.aspect)
+            out["anchor"] = list(self.anchor)
         return out
 
 
@@ -261,6 +284,7 @@ class StillResult:
     photo: photo_mod.PhotoWork | None = None   # 写真の下書きのときだけ
     orientation: int = 1                       # 写真の向き（EXIF の Orientation。写真の下書きで読んだときだけ 1 以外）
     dither: dither_mod.Dither | None = None    # --dither が off でないときだけ
+    aspect: dict | None = None                 # 比率に合わせて切り抜いたときだけ（JSON の `aspect`）
 
     def overlay(self) -> np.ndarray:
         """整えた範囲の見える化（出力の大きさの RGBA。表示だけに使う）。整えていなければ全部透明。"""
@@ -343,9 +367,20 @@ def convert_still(rgba: np.ndarray, settings: StillSettings | None = None) -> St
     else:
         rgb = dots_mod.flatten_black(a)
     h, w = rgb.shape[:2]
+    in_w, in_h = w, h
     max_w, max_h = s.max_size
     smoothing = s.smooth != "off"
     what = "写真" if s.mode == "photo" else "画像"
+    box = None
+    if s.aspect is not None and not s.find_grid:
+        # 横のマス数で分けるとき: 入力の段階で比率に切り抜いてから工程に通す（拡大・縮小はしない）
+        box, want_h = aspect_mod.input_box(w, h, s.width, s.aspect, s.anchor)
+        x0, y0, x1, y1 = box
+        rgb = rgb[y0:y1, x0:x1]
+        h, w = rgb.shape[:2]
+        what = f"比率 {s.aspect[0]}:{s.aspect[1]} に切り抜いた{what}"
+        if s.width <= w and dots_mod.height_for_width(s.width, w, h) != want_h:   # 起きないはず（テストで確かめる）
+            raise ValueError(f"比率に切り抜いた大きさ（{w}×{h}）から、縦のマス数 {want_h} が出ませんでした")
     if not s.find_grid and smoothing:
         # 横のマス数で分けて色の塊をまとめる（写真の下書きの工程）。重い処理の前に大きさを確かめる
         if s.width > w:
@@ -367,6 +402,21 @@ def convert_still(rgba: np.ndarray, settings: StillSettings | None = None) -> St
             raise StillError(f"横のマス数（{s.width}）が、{what}の幅（{w}px）より多くなっています。",
                              dots_mod.size_candidates(w, h, max_w, max_h), "width")
         dots = dots_mod.width_dots(rgb, s.width)
+    aspect_info = None
+    if box is not None:
+        # マスの境目を入力の画像の座標に戻す（JSON の dots.area が元の画像の画素で出るように）
+        dots = dots_mod.Dots(dots.rgb, dots.method, dots.xs + box[0], dots.ys + box[1], dots.dot_size, dots.trimmed)
+        aspect_info = aspect_mod.describe(s.aspect, s.anchor, "input", (0, 0, in_w, in_h), box, dots.size)
+    elif s.aspect is not None:
+        # マス目を探したとき: 見つけたマス目のまま、マス単位で切る（格子をずらさない）
+        nx, ny = dots.size
+        cells = aspect_mod.cell_box(nx, ny, s.aspect, s.anchor)
+        c0, r0, c1, r1 = cells
+        area = (int(dots.xs[0]), int(dots.ys[0]), int(dots.xs[-1]), int(dots.ys[-1]))
+        dots = dots_mod.Dots(np.ascontiguousarray(dots.rgb[r0:r1, c0:c1]), dots.method, dots.xs[c0:c1 + 1],
+                             dots.ys[r0:r1 + 1], dots.dot_size, dots.trimmed)
+        box = (int(dots.xs[0]), int(dots.ys[0]), int(dots.xs[-1]), int(dots.ys[-1]))
+        aspect_info = aspect_mod.describe(s.aspect, s.anchor, "cells", area, box, dots.size, cells, (nx, ny))
     dw, dh = dots.size
     if dw > max_w or dh > max_h:
         how = "グリッド検出" if dots.method == "grid" else f"--width {s.width}"
@@ -437,8 +487,8 @@ def convert_still(rgba: np.ndarray, settings: StillSettings | None = None) -> St
             index = big
             counts = counts.copy()
             counts[fill] += cw * ch - dw * dh
-    return StillResult(index, palette, counts, dots, red, s, (w, h), offset, warnings, tidied, similar, lone,
-                       outline, photo, dither=dither)
+    return StillResult(index, palette, counts, dots, red, s, (in_w, in_h), offset, warnings, tidied, similar, lone,
+                       outline, photo, dither=dither, aspect=aspect_info)
 
 
 # ---- ファイルの形 ----
@@ -504,6 +554,7 @@ def result_info(res: StillResult, source: str = "") -> dict:
         "picture": {"width": res.dots.size[0], "height": res.dots.size[1]},
         "pixel_aspect": "1:1",
         "dots": res.dots.describe(),
+        **({} if res.aspect is None else {"aspect": res.aspect}),
         **({} if res.photo is None else {"photo": res.photo.describe(res.orientation if s.orient else None)}),
         "canvas": canvas,
         "colors": colors,
@@ -630,6 +681,8 @@ def still_for_web(data: bytes, name: str = "", settings_json: str = "{}") -> str
         extra.update(outline=info["outline"], outline_overlay_base64=b64png(out["result"].outline_overlay()))
     if out["result"].photo is not None:
         extra["photo"] = info["photo"]
+    if out["result"].aspect is not None:
+        extra["aspect"] = info["aspect"]
     return json.dumps({"ok": True, "png_base64": base64.b64encode(out["png"]).decode("ascii"), "json_text": out["json"],
                        "width": info["width"], "height": info["height"], "palette": info["palette"],
                        "dots": info["dots"], "colors": info["colors"], "canvas": info["canvas"],
@@ -647,5 +700,8 @@ def spec() -> dict:
             "smooth_choices": [{"value": k, "label": "しない" if k == "off" else photo_mod.SMOOTH_LABELS[k]}
                                for k in SMOOTH_CHOICES],
             "dither_choices": [{"value": k, "label": dither_mod.LABELS[k]} for k in DITHER_CHOICES],
+            "aspect_choices": [list(a) for a in aspect_mod.CHOICES],
+            "aspect_widths": [{"aspect": list(k), "widths": list(v)} for k, v in aspect_mod.WIDTH_CHOICES.items()],
+            "default_anchor": list(aspect_mod.DEFAULT_ANCHOR),
             "items": list(ITEMS),
             "max_side": MAX_SIDE}

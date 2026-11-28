@@ -5,6 +5,7 @@
 - `dots.py`: 透明を黒で埋め、ドットに戻す（Sprite App と同じグリッド検出か、横のマス数の指定）。マスの色はいちばん多い色
 - `colors.py`: 減色（4 ビットの丸め・いちばん暗い色を取っておく・Sprite App の単純化で色を選ぶ）
 - `pattern.py`: ざらついた範囲を 2 色の決まった模様（2×2）に整える（`--tidy-pattern`。既定は切）
+- `aspect.py`: 比率に合わせて切り抜く（`--aspect W:H`・`--anchor X,Y`。拡大・縮小はしない）
 - `convert.py`: 入口（設定・プリセット `--mode`・大きさの上限・キャンバス・PNG と JSON・ブラウザ版向け）
 
 Sprite App の処理（`retrocore.sprite`）は使うだけで、変えない。

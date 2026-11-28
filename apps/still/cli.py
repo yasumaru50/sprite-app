@@ -7,6 +7,7 @@
     python -m apps.still 入力.png --mode modern --tidy-dots                  # 今風（32 色）。孤立したドットをそろえる
     python -m apps.still 写真.jpg --mode photo --smooth strong --outline     # 写真の下書き（横 320）。輪郭の線も引く
     python -m apps.still 写真.jpg --mode photo --width 640 --colors 16 --4bit --dither 2x2   # 空などに 2×2 の網目
+    python -m apps.still 写真.jpg --mode photo --aspect 16:9 --anchor 50,20  # 16:9（320×180）に切り抜く（上寄り）
 
 --mode は初めの設定（項目の値の組み合わせ）で、どの値も個別のオプション（項目）で変えられる。
     python -m apps.still 入力.png --mode modern --width 600 --smooth weak     # 今風＋色の塊を弱くまとめる
@@ -20,6 +21,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from retrocore.still import aspect as aspect_mod
 from retrocore.still import convert as convert_mod
 from retrocore.still.colors import MAX_COLORS, MIN_COLORS
 from retrocore.still.convert import (DEFAULT_MODE, DITHER_CHOICES, MODES, SMOOTH_CHOICES, StillError, StillSettings,
@@ -47,6 +49,12 @@ def build_parser() -> argparse.ArgumentParser:
                    help="ドットのマス目を探す（98・今風の既定。写真の下書きで使うとき。--width とは一緒に使えない）")
     g.add_argument("--width", type=int, default=None,
                    help="マス目を探さずに、横 N マスに分ける（縦は縦横の比から。写真の下書きの既定は 320）")
+    g.add_argument("--aspect", default=None,
+                   help="比率に合わせて切り抜く 幅:高さ（正の整数どうし。例 16:9・16:10・4:3・3:2・1:1・21:9・1200:630）。"
+                   "拡大・縮小はせず、切り抜くだけ（余白を足すときは --canvas）。既定は元のまま。横のマス数で分けるときは"
+                   "入力の段階で、マス目を探すときは見つけたマス目のままマス単位で切る")
+    g.add_argument("--anchor", default=None,
+                   help="切る位置 横,縦（それぞれ 0〜100 の%%。既定 50,50 は中央、50,0 は上寄せ、0,50 は左寄せ）。--aspect のときだけ使う")
     g.add_argument("--max-size", default=None, help="大きさの上限 幅x高さ（例 640x400）。超えたら出力せずに知らせる")
     g.add_argument("--smooth", choices=list(SMOOTH_CHOICES), default=None,
                    help="色の塊をまとめる強さ（off しない・weak 弱・medium 中・strong 強。写真の下書きの既定は medium、"
@@ -82,11 +90,15 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def settings_from_args(args) -> StillSettings:
+    if args.anchor is not None and args.aspect is None:
+        raise ValueError("切る位置（--anchor）は、比率（--aspect）と一緒に使ってください")
     if args.find_grid and args.width is not None:
         raise ValueError(f"--grid（マス目を探す）と --width {args.width}（横のマス数で分ける）は一緒に使えません")
     s = StillSettings.from_mode(
         args.mode, orient=args.orient, find_grid=args.find_grid, width=args.width,
         max_size=None if args.max_size is None else parse_size(args.max_size, "大きさの上限"),
+        aspect=None if args.aspect is None else aspect_mod.parse_aspect(args.aspect),
+        anchor=None if args.anchor is None else aspect_mod.parse_anchor(args.anchor),
         smooth=args.smooth, colors=args.colors, four_bit=args.four_bit, keep_darkest=args.keep_darkest,
         merge_similar=args.merge_similar, dither=args.dither, tidy_dots=args.tidy_dots, tidy_pattern=args.tidy_pattern,
         outline=args.outline, canvas=None if args.canvas is None else parse_size(args.canvas, "キャンバス"))
@@ -140,6 +152,11 @@ def main(argv: list[str] | None = None) -> int:
             how = f"{name}（まとめの強さ {info['photo']['smooth']['level']}）、" + how
         print(f"{args.input.name}: {how} → {info['picture']['width']}×{info['picture']['height']} ドット、"
               f"{info['colors']['used']} 色" + (f"、キャンバス {info['width']}×{info['height']}" if info["canvas"] else ""))
+        if "aspect" in info:
+            a, c = info["aspect"], info["aspect"]["cut"]
+            where = "入力の段階" if a["stage"] == "input" else "マス単位"
+            print(f"  比率 {a['ratio'][0]}:{a['ratio'][1]} に{where}で切り抜き（切る位置 {a['anchor'][0]},{a['anchor'][1]}。"
+                  f"切り落とした画素 左 {c['left']}・上 {c['top']}・右 {c['right']}・下 {c['bottom']}）")
         if "preset" in info:
             print(f"  初めの設定（{info['preset']['name']}）から変えた項目: {', '.join(info['preset']['changed'])}")
         if "similar" in info:
