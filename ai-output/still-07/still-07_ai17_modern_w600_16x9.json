@@ -1,0 +1,325 @@
+{
+  "app": "still",
+  "version": 1,
+  "source": "ai17_room_fine.png",
+  "input": {
+    "width": 1586,
+    "height": 992
+  },
+  "width": 600,
+  "height": 338,
+  "picture": {
+    "width": 600,
+    "height": 338
+  },
+  "pixel_aspect": "1:1",
+  "dots": {
+    "method": "width",
+    "cells": [600, 338],
+    "width": 600,
+    "cell_size": [2.643, 2.642],
+    "area": [0, 50, 1586, 943]
+  },
+  "aspect": {
+    "ratio": [16, 9],
+    "anchor": [50, 50],
+    "stage": "input",
+    "box": [0, 50, 1586, 943],
+    "cut": {
+      "left": 0,
+      "top": 50,
+      "right": 0,
+      "bottom": 49
+    },
+    "exact": false
+  },
+  "canvas": null,
+  "colors": {
+    "limit": 32,
+    "used": 32,
+    "chosen": 32,
+    "merged_by_4bit": 0,
+    "darkest_kept": "#000000",
+    "merged_similar": 0
+  },
+  "palette": [
+    {
+      "index": 0,
+      "rgb4": [0, 0, 0],
+      "rgb": [0, 0, 0],
+      "hex": "#000000",
+      "count": 6139
+    },
+    {
+      "index": 1,
+      "rgb4": null,
+      "rgb": [4, 5, 14],
+      "hex": "#04050E",
+      "count": 19725
+    },
+    {
+      "index": 2,
+      "rgb4": null,
+      "rgb": [23, 9, 7],
+      "hex": "#170907",
+      "count": 7885
+    },
+    {
+      "index": 3,
+      "rgb4": null,
+      "rgb": [4, 9, 42],
+      "hex": "#04092A",
+      "count": 5108
+    },
+    {
+      "index": 4,
+      "rgb4": null,
+      "rgb": [8, 33, 69],
+      "hex": "#082145",
+      "count": 5131
+    },
+    {
+      "index": 5,
+      "rgb4": null,
+      "rgb": [16, 39, 43],
+      "hex": "#10272B",
+      "count": 8390
+    },
+    {
+      "index": 6,
+      "rgb4": null,
+      "rgb": [63, 20, 13],
+      "hex": "#3F140D",
+      "count": 6056
+    },
+    {
+      "index": 7,
+      "rgb4": null,
+      "rgb": [13, 39, 107],
+      "hex": "#0D276B",
+      "count": 9421
+    },
+    {
+      "index": 8,
+      "rgb4": null,
+      "rgb": [95, 27, 64],
+      "hex": "#5F1B40",
+      "count": 346
+    },
+    {
+      "index": 9,
+      "rgb4": null,
+      "rgb": [96, 35, 18],
+      "hex": "#602312",
+      "count": 13788
+    },
+    {
+      "index": 10,
+      "rgb4": null,
+      "rgb": [44, 63, 50],
+      "hex": "#2C3F32",
+      "count": 20288
+    },
+    {
+      "index": 11,
+      "rgb4": null,
+      "rgb": [67, 64, 109],
+      "hex": "#43406D",
+      "count": 4156
+    },
+    {
+      "index": 12,
+      "rgb4": null,
+      "rgb": [129, 59, 36],
+      "hex": "#813B24",
+      "count": 5451
+    },
+    {
+      "index": 13,
+      "rgb4": null,
+      "rgb": [97, 88, 130],
+      "hex": "#615882",
+      "count": 4058
+    },
+    {
+      "index": 14,
+      "rgb4": null,
+      "rgb": [96, 99, 68],
+      "hex": "#606344",
+      "count": 18373
+    },
+    {
+      "index": 15,
+      "rgb4": null,
+      "rgb": [118, 103, 125],
+      "hex": "#76677D",
+      "count": 4784
+    },
+    {
+      "index": 16,
+      "rgb4": null,
+      "rgb": [115, 112, 70],
+      "hex": "#737046",
+      "count": 14443
+    },
+    {
+      "index": 17,
+      "rgb4": null,
+      "rgb": [70, 127, 29],
+      "hex": "#467F1D",
+      "count": 35
+    },
+    {
+      "index": 18,
+      "rgb4": null,
+      "rgb": [161, 105, 108],
+      "hex": "#A1696C",
+      "count": 2980
+    },
+    {
+      "index": 19,
+      "rgb4": null,
+      "rgb": [198, 81, 35],
+      "hex": "#C65123",
+      "count": 1457
+    },
+    {
+      "index": 20,
+      "rgb4": null,
+      "rgb": [210, 90, 116],
+      "hex": "#D25A74",
+      "count": 157
+    },
+    {
+      "index": 21,
+      "rgb4": null,
+      "rgb": [155, 130, 121],
+      "hex": "#9B8279",
+      "count": 2648
+    },
+    {
+      "index": 22,
+      "rgb4": null,
+      "rgb": [147, 138, 85],
+      "hex": "#938A55",
+      "count": 14035
+    },
+    {
+      "index": 23,
+      "rgb4": null,
+      "rgb": [202, 130, 100],
+      "hex": "#CA8264",
+      "count": 2522
+    },
+    {
+      "index": 24,
+      "rgb4": null,
+      "rgb": [187, 158, 144],
+      "hex": "#BB9E90",
+      "count": 2405
+    },
+    {
+      "index": 25,
+      "rgb4": null,
+      "rgb": [247, 132, 63],
+      "hex": "#F7843F",
+      "count": 6057
+    },
+    {
+      "index": 26,
+      "rgb4": null,
+      "rgb": [247, 155, 73],
+      "hex": "#F79B49",
+      "count": 8136
+    },
+    {
+      "index": 27,
+      "rgb4": null,
+      "rgb": [228, 186, 142],
+      "hex": "#E4BA8E",
+      "count": 2408
+    },
+    {
+      "index": 28,
+      "rgb4": null,
+      "rgb": [227, 183, 203],
+      "hex": "#E3B7CB",
+      "count": 99
+    },
+    {
+      "index": 29,
+      "rgb4": null,
+      "rgb": [251, 195, 112],
+      "hex": "#FBC370",
+      "count": 5584
+    },
+    {
+      "index": 30,
+      "rgb4": null,
+      "rgb": [249, 219, 170],
+      "hex": "#F9DBAA",
+      "count": 682
+    },
+    {
+      "index": 31,
+      "rgb4": null,
+      "rgb": [254, 245, 108],
+      "hex": "#FEF56C",
+      "count": 53
+    }
+  ],
+  "similar": {
+    "merged": 0,
+    "distance": 0.04,
+    "space": "OKLab",
+    "list": []
+  },
+  "settings": {
+    "mode": "modern",
+    "colors": 32,
+    "four_bit": false,
+    "max_size": [1920, 1080],
+    "width": 600,
+    "canvas": null,
+    "keep_darkest": true,
+    "merge_similar": true,
+    "aspect": [16, 9],
+    "anchor": [50, 50]
+  },
+  "preset": {
+    "name": "modern",
+    "changed": {
+      "find_grid": {
+        "preset": true,
+        "used": false
+      },
+      "width": {
+        "preset": null,
+        "used": 600
+      },
+      "aspect": {
+        "preset": null,
+        "used": [16, 9]
+      }
+    },
+    "values": {
+      "orient": false,
+      "find_grid": false,
+      "width": 600,
+      "aspect": [16, 9],
+      "anchor": [50, 50],
+      "max_size": [1920, 1080],
+      "smooth": "off",
+      "colors": 32,
+      "four_bit": false,
+      "keep_darkest": true,
+      "merge_similar": true,
+      "dither": "off",
+      "tidy_dots": false,
+      "tidy_pattern": false,
+      "outline": false,
+      "canvas": null
+    }
+  },
+  "warnings": []
+}

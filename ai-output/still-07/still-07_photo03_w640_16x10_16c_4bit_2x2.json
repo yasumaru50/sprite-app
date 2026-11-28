@@ -1,0 +1,255 @@
+{
+  "app": "still",
+  "version": 1,
+  "source": "photo03.JPG",
+  "input": {
+    "width": 3840,
+    "height": 2160
+  },
+  "width": 640,
+  "height": 400,
+  "picture": {
+    "width": 640,
+    "height": 400
+  },
+  "pixel_aspect": "1:1",
+  "dots": {
+    "method": "photo",
+    "cells": [640, 400],
+    "width": 640,
+    "cell_size": [5.4, 5.4],
+    "area": [192, 0, 3648, 2160]
+  },
+  "aspect": {
+    "ratio": [16, 10],
+    "anchor": [50, 50],
+    "stage": "input",
+    "box": [192, 0, 3648, 2160],
+    "cut": {
+      "left": 192,
+      "top": 0,
+      "right": 192,
+      "bottom": 0
+    },
+    "exact": true
+  },
+  "photo": {
+    "orientation": 1,
+    "prescale": 4,
+    "work_size": [2560, 1600],
+    "smooth": {
+      "level": "medium",
+      "method": "kuwahara",
+      "radius": 4,
+      "passes": 2
+    }
+  },
+  "canvas": null,
+  "colors": {
+    "limit": 16,
+    "used": 16,
+    "chosen": 16,
+    "merged_by_4bit": 0,
+    "darkest_kept": "#111111"
+  },
+  "palette": [
+    {
+      "index": 0,
+      "rgb4": [1, 1, 1],
+      "rgb": [17, 17, 17],
+      "hex": "#111111",
+      "count": 22962
+    },
+    {
+      "index": 1,
+      "rgb4": [1, 1, 3],
+      "rgb": [17, 17, 51],
+      "hex": "#111133",
+      "count": 179
+    },
+    {
+      "index": 2,
+      "rgb4": [2, 1, 1],
+      "rgb": [34, 17, 17],
+      "hex": "#221111",
+      "count": 10095
+    },
+    {
+      "index": 3,
+      "rgb4": [3, 1, 1],
+      "rgb": [51, 17, 17],
+      "hex": "#331111",
+      "count": 1421
+    },
+    {
+      "index": 4,
+      "rgb4": [2, 2, 2],
+      "rgb": [34, 34, 34],
+      "hex": "#222222",
+      "count": 22310
+    },
+    {
+      "index": 5,
+      "rgb4": [3, 3, 2],
+      "rgb": [51, 51, 34],
+      "hex": "#333322",
+      "count": 14656
+    },
+    {
+      "index": 6,
+      "rgb4": [4, 4, 4],
+      "rgb": [68, 68, 68],
+      "hex": "#444444",
+      "count": 22441
+    },
+    {
+      "index": 7,
+      "rgb4": [4, 5, 5],
+      "rgb": [68, 85, 85],
+      "hex": "#445555",
+      "count": 9732
+    },
+    {
+      "index": 8,
+      "rgb4": [5, 6, 7],
+      "rgb": [85, 102, 119],
+      "hex": "#556677",
+      "count": 7483
+    },
+    {
+      "index": 9,
+      "rgb4": [6, 6, 5],
+      "rgb": [102, 102, 85],
+      "hex": "#666655",
+      "count": 2590
+    },
+    {
+      "index": 10,
+      "rgb4": [7, 8, 10],
+      "rgb": [119, 136, 170],
+      "hex": "#7788AA",
+      "count": 37219
+    },
+    {
+      "index": 11,
+      "rgb4": [9, 9, 9],
+      "rgb": [153, 153, 153],
+      "hex": "#999999",
+      "count": 826
+    },
+    {
+      "index": 12,
+      "rgb4": [8, 10, 11],
+      "rgb": [136, 170, 187],
+      "hex": "#88AABB",
+      "count": 83364
+    },
+    {
+      "index": 13,
+      "rgb4": [9, 10, 11],
+      "rgb": [153, 170, 187],
+      "hex": "#99AABB",
+      "count": 17996
+    },
+    {
+      "index": 14,
+      "rgb4": [12, 13, 13],
+      "rgb": [204, 221, 221],
+      "hex": "#CCDDDD",
+      "count": 2694
+    },
+    {
+      "index": 15,
+      "rgb4": [14, 14, 14],
+      "rgb": [238, 238, 238],
+      "hex": "#EEEEEE",
+      "count": 32
+    }
+  ],
+  "dither": {
+    "kind": "2x2",
+    "changed": 31906,
+    "area": 102884,
+    "pairs": 21,
+    "settings": {
+      "tile": "bayer2x2",
+      "levels": 5,
+      "window": 5,
+      "edge_max": 0.03,
+      "min_area": 64,
+      "pair_max": 0.15,
+      "off_line_max": 0.5,
+      "space": "OKLab"
+    }
+  },
+  "tidy_dots": {
+    "changed": 192,
+    "settings": {
+      "min_same": 7,
+      "neighbors": 8,
+      "passes": 1,
+      "keep_darkest": true,
+      "keep_edges": true
+    }
+  },
+  "settings": {
+    "mode": "photo",
+    "colors": 16,
+    "four_bit": true,
+    "max_size": [1920, 1080],
+    "width": 640,
+    "canvas": null,
+    "keep_darkest": true,
+    "merge_similar": false,
+    "dither": "2x2",
+    "tidy_dots": true,
+    "smooth": "medium",
+    "outline": false,
+    "aspect": [16, 10],
+    "anchor": [50, 50]
+  },
+  "preset": {
+    "name": "photo",
+    "changed": {
+      "width": {
+        "preset": 320,
+        "used": 640
+      },
+      "aspect": {
+        "preset": null,
+        "used": [16, 10]
+      },
+      "colors": {
+        "preset": 32,
+        "used": 16
+      },
+      "four_bit": {
+        "preset": false,
+        "used": true
+      },
+      "dither": {
+        "preset": "off",
+        "used": "2x2"
+      }
+    },
+    "values": {
+      "orient": true,
+      "find_grid": false,
+      "width": 640,
+      "aspect": [16, 10],
+      "anchor": [50, 50],
+      "max_size": [1920, 1080],
+      "smooth": "medium",
+      "colors": 16,
+      "four_bit": true,
+      "keep_darkest": true,
+      "merge_similar": false,
+      "dither": "2x2",
+      "tidy_dots": true,
+      "tidy_pattern": false,
+      "outline": false,
+      "canvas": null
+    }
+  },
+  "warnings": []
+}
