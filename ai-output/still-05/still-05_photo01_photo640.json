@@ -1,0 +1,323 @@
+{
+  "app": "still",
+  "version": 1,
+  "source": "photo01.jpg",
+  "input": {
+    "width": 2448,
+    "height": 3264
+  },
+  "width": 640,
+  "height": 853,
+  "picture": {
+    "width": 640,
+    "height": 853
+  },
+  "pixel_aspect": "1:1",
+  "dots": {
+    "method": "photo",
+    "cells": [640, 853],
+    "width": 640,
+    "cell_size": [3.825, 3.826],
+    "area": [0, 0, 2448, 3264]
+  },
+  "photo": {
+    "orientation": 1,
+    "prescale": null,
+    "work_size": [2448, 3264],
+    "smooth": {
+      "level": "medium",
+      "method": "kuwahara",
+      "radius": 4,
+      "passes": 2
+    }
+  },
+  "canvas": null,
+  "colors": {
+    "limit": 32,
+    "used": 32,
+    "chosen": 32,
+    "merged_by_4bit": 0,
+    "darkest_kept": "#0D0D0D",
+    "merged_similar": 0
+  },
+  "palette": [
+    {
+      "index": 0,
+      "rgb4": null,
+      "rgb": [13, 13, 13],
+      "hex": "#0D0D0D",
+      "count": 21111
+    },
+    {
+      "index": 1,
+      "rgb4": null,
+      "rgb": [31, 31, 16],
+      "hex": "#1F1F10",
+      "count": 9108
+    },
+    {
+      "index": 2,
+      "rgb4": null,
+      "rgb": [70, 26, 15],
+      "hex": "#461A0F",
+      "count": 2575
+    },
+    {
+      "index": 3,
+      "rgb4": null,
+      "rgb": [52, 50, 42],
+      "hex": "#34322A",
+      "count": 9792
+    },
+    {
+      "index": 4,
+      "rgb4": null,
+      "rgb": [61, 62, 23],
+      "hex": "#3D3E17",
+      "count": 13616
+    },
+    {
+      "index": 5,
+      "rgb4": null,
+      "rgb": [69, 71, 58],
+      "hex": "#45473A",
+      "count": 14335
+    },
+    {
+      "index": 6,
+      "rgb4": null,
+      "rgb": [80, 83, 38],
+      "hex": "#505326",
+      "count": 20696
+    },
+    {
+      "index": 7,
+      "rgb4": null,
+      "rgb": [123, 76, 61],
+      "hex": "#7B4C3D",
+      "count": 3168
+    },
+    {
+      "index": 8,
+      "rgb4": null,
+      "rgb": [106, 97, 101],
+      "hex": "#6A6165",
+      "count": 36610
+    },
+    {
+      "index": 9,
+      "rgb4": null,
+      "rgb": [99, 105, 61],
+      "hex": "#63693D",
+      "count": 29592
+    },
+    {
+      "index": 10,
+      "rgb4": null,
+      "rgb": [179, 69, 71],
+      "hex": "#B34547",
+      "count": 419
+    },
+    {
+      "index": 11,
+      "rgb4": null,
+      "rgb": [52, 120, 154],
+      "hex": "#34789A",
+      "count": 62
+    },
+    {
+      "index": 12,
+      "rgb4": null,
+      "rgb": [159, 106, 83],
+      "hex": "#9F6A53",
+      "count": 4590
+    },
+    {
+      "index": 13,
+      "rgb4": null,
+      "rgb": [114, 130, 52],
+      "hex": "#728234",
+      "count": 3826
+    },
+    {
+      "index": 14,
+      "rgb4": null,
+      "rgb": [122, 125, 86],
+      "hex": "#7A7D56",
+      "count": 21441
+    },
+    {
+      "index": 15,
+      "rgb4": null,
+      "rgb": [133, 134, 122],
+      "hex": "#85867A",
+      "count": 33025
+    },
+    {
+      "index": 16,
+      "rgb4": null,
+      "rgb": [224, 72, 80],
+      "hex": "#E04850",
+      "count": 741
+    },
+    {
+      "index": 17,
+      "rgb4": null,
+      "rgb": [88, 156, 23],
+      "hex": "#589C17",
+      "count": 12
+    },
+    {
+      "index": 18,
+      "rgb4": null,
+      "rgb": [137, 153, 66],
+      "hex": "#899942",
+      "count": 4123
+    },
+    {
+      "index": 19,
+      "rgb4": null,
+      "rgb": [147, 147, 107],
+      "hex": "#93936B",
+      "count": 70111
+    },
+    {
+      "index": 20,
+      "rgb4": null,
+      "rgb": [189, 147, 141],
+      "hex": "#BD938D",
+      "count": 1982
+    },
+    {
+      "index": 21,
+      "rgb4": null,
+      "rgb": [166, 168, 156],
+      "hex": "#A6A89C",
+      "count": 92191
+    },
+    {
+      "index": 22,
+      "rgb4": null,
+      "rgb": [115, 176, 209],
+      "hex": "#73B0D1",
+      "count": 123
+    },
+    {
+      "index": 23,
+      "rgb4": null,
+      "rgb": [128, 191, 41],
+      "hex": "#80BF29",
+      "count": 193
+    },
+    {
+      "index": 24,
+      "rgb4": null,
+      "rgb": [231, 163, 62],
+      "hex": "#E7A33E",
+      "count": 1321
+    },
+    {
+      "index": 25,
+      "rgb4": null,
+      "rgb": [192, 192, 153],
+      "hex": "#C0C099",
+      "count": 11322
+    },
+    {
+      "index": 26,
+      "rgb4": null,
+      "rgb": [196, 203, 203],
+      "hex": "#C4CBCB",
+      "count": 54962
+    },
+    {
+      "index": 27,
+      "rgb4": null,
+      "rgb": [255, 195, 189],
+      "hex": "#FFC3BD",
+      "count": 76
+    },
+    {
+      "index": 28,
+      "rgb4": null,
+      "rgb": [196, 226, 179],
+      "hex": "#C4E2B3",
+      "count": 382
+    },
+    {
+      "index": 29,
+      "rgb4": null,
+      "rgb": [245, 223, 186],
+      "hex": "#F5DFBA",
+      "count": 3177
+    },
+    {
+      "index": 30,
+      "rgb4": null,
+      "rgb": [215, 230, 236],
+      "hex": "#D7E6EC",
+      "count": 23890
+    },
+    {
+      "index": 31,
+      "rgb4": null,
+      "rgb": [250, 253, 253],
+      "hex": "#FAFDFD",
+      "count": 57348
+    }
+  ],
+  "similar": {
+    "merged": 0,
+    "distance": 0.04,
+    "space": "OKLab",
+    "list": []
+  },
+  "tidy_dots": {
+    "changed": 443,
+    "settings": {
+      "min_same": 7,
+      "neighbors": 8,
+      "passes": 1,
+      "keep_darkest": true,
+      "keep_edges": true
+    }
+  },
+  "settings": {
+    "mode": "photo",
+    "colors": 32,
+    "four_bit": false,
+    "max_size": [1920, 1080],
+    "width": 640,
+    "canvas": null,
+    "keep_darkest": true,
+    "merge_similar": true,
+    "tidy_dots": true,
+    "smooth": "medium",
+    "outline": false
+  },
+  "preset": {
+    "name": "photo",
+    "changed": {
+      "width": {
+        "preset": 320,
+        "used": 640
+      }
+    },
+    "values": {
+      "orient": true,
+      "find_grid": false,
+      "width": 640,
+      "max_size": [1920, 1080],
+      "smooth": "medium",
+      "colors": 32,
+      "four_bit": false,
+      "keep_darkest": true,
+      "merge_similar": true,
+      "tidy_dots": true,
+      "tidy_pattern": false,
+      "outline": false,
+      "canvas": null
+    }
+  },
+  "warnings": []
+}
