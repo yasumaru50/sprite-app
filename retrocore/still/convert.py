@@ -33,6 +33,7 @@ from . import aspect as aspect_mod
 from . import colors as colors_mod
 from . import dither as dither_mod
 from . import dots as dots_mod
+from . import guide as guide_mod
 from . import lone as lone_mod
 from . import outline as outline_mod
 from . import pattern as pattern_mod
@@ -704,4 +705,5 @@ def spec() -> dict:
             "aspect_widths": [{"aspect": list(k), "widths": list(v)} for k, v in aspect_mod.WIDTH_CHOICES.items()],
             "default_anchor": list(aspect_mod.DEFAULT_ANCHOR),
             "items": list(ITEMS),
-            "max_side": MAX_SIDE}
+            "max_side": MAX_SIDE,
+            "guide": guide_mod.spec()}   # 「？」の説明の文（CLI の --help と共通。retrocore/still/guide.py）

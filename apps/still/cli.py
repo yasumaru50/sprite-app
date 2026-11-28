@@ -23,7 +23,7 @@ from pathlib import Path
 
 from retrocore.still import aspect as aspect_mod
 from retrocore.still import convert as convert_mod
-from retrocore.still.colors import MAX_COLORS, MIN_COLORS
+from retrocore.still import guide
 from retrocore.still.convert import (DEFAULT_MODE, DITHER_CHOICES, MODES, SMOOTH_CHOICES, StillError, StillSettings,
                                      parse_size)
 
@@ -35,56 +35,52 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--out", "-o", default=None,
                    help="出力名（拡張子なし。<出力名>.png と <出力名>.json を書く。既定 out/still/<入力の名前>）")
     p.add_argument("--mode", choices=list(MODES), default=DEFAULT_MODE,
-                   help="初めの設定の組み合わせ（既定 pc98: " + MODES["pc98"]["label"] + "、modern: "
-                   + MODES["modern"]["label"] + "、photo: " + MODES["photo"]["label"]
-                   + "）。初めの設定（項目の値の組み合わせ）で、下の項目で 1 つずつ変えられる")
+                   help="初めの設定（項目の値の組み合わせ）。下の項目で 1 つずつ変えられる。pc98（既定）: " + guide.mode_help("pc98")
+                   + "。modern: " + guide.mode_help("modern") + "。photo: " + guide.mode_help("photo"))
     # ここから下は工程の順（向き → マス目 → 色の塊 → 減色 → 似た色 → ディザ → 孤立したドット → 模様 → 輪郭 → 余白）。
     # どれも初めの設定（--mode）の値を 1 つずつ変える
     g = p.add_argument_group("項目（初めの設定の値を 1 つずつ変える。工程の順）")
     g.add_argument("--orient", dest="orient", action="store_const", const=True, default=None,
-                   help="写真の向き（EXIF）を直して読む（写真の下書きでは既定で入）")
+                   help=guide.cli_help("orient", "写真の下書きでは既定で入"))
     g.add_argument("--no-orient", dest="orient", action="store_const", const=False,
                    help="写真の向き（EXIF）を直さない")
     g.add_argument("--grid", dest="find_grid", action="store_const", const=True, default=None,
-                   help="ドットのマス目を探す（98・今風の既定。写真の下書きで使うとき。--width とは一緒に使えない）")
+                   help="ドットのマス目を自動で見つける（98・今風の既定。写真の下書きで使うとき。--width とは一緒に使えない）")
     g.add_argument("--width", type=int, default=None,
-                   help="マス目を探さずに、横 N マスに分ける（縦は縦横の比から。写真の下書きの既定は 320）")
+                   help=guide.cli_help("width", "写真の下書きの既定は 320"))
     g.add_argument("--aspect", default=None,
-                   help="比率に合わせて切り抜く 幅:高さ（正の整数どうし。例 16:9・16:10・4:3・3:2・1:1・21:9・1200:630）。"
-                   "拡大・縮小はせず、切り抜くだけ（余白を足すときは --canvas）。既定は元のまま。横のマス数で分けるときは"
-                   "入力の段階で、マス目を探すときは見つけたマス目のままマス単位で切る")
+                   help=guide.cli_help("aspect", "幅:高さ を正の整数どうしで。例 16:9・16:10・4:3・3:2・1:1・21:9・1200:630。"
+                                       "既定は元のまま（余白を足すときは --canvas）。横のマス数で分けるときは入力の段階で、"
+                                       "マス目を探すときは見つけたマス目のままマス単位で切る"))
     g.add_argument("--anchor", default=None,
-                   help="切る位置 横,縦（それぞれ 0〜100 の%%。既定 50,50 は中央、50,0 は上寄せ、0,50 は左寄せ）。--aspect のときだけ使う")
-    g.add_argument("--max-size", default=None, help="大きさの上限 幅x高さ（例 640x400）。超えたら出力せずに知らせる")
+                   help=guide.cli_help("anchor", "横,縦 で。既定 50,50。50,0 は上寄せ、0,50 は左寄せ。--aspect のときだけ使う"))
+    g.add_argument("--max-size", default=None, help=guide.cli_help("max_size", "幅x高さ。例 640x400"))
     g.add_argument("--smooth", choices=list(SMOOTH_CHOICES), default=None,
-                   help="色の塊をまとめる強さ（off しない・weak 弱・medium 中・strong 強。写真の下書きの既定は medium、"
-                   "ほかは off）")
-    g.add_argument("--colors", type=int, default=None, help=f"色数の上限（{MIN_COLORS}〜{MAX_COLORS}）")
+                   help=guide.cli_help("smooth", "off しない・weak 弱・medium 中・strong 強。写真の下書きの既定は medium、ほかは off"))
+    g.add_argument("--colors", type=int, default=None, help=guide.cli_help("colors"))
     g.add_argument("--4bit", dest="four_bit", action="store_const", const=True, default=None,
-                   help="色を 4096 色（RGB 各 4 ビット）に丸める（98 の既定）")
+                   help=guide.cli_help("four_bit", "98 の既定"))
     g.add_argument("--no-4bit", dest="four_bit", action="store_const", const=False,
                    help="色を 4096 色に丸めない（今風・写真の下書きの既定）")
     g.add_argument("--keep-darkest", dest="keep_darkest", action="store_const", const=True, default=None,
-                   help="いちばん暗い色をパレットに取っておく（どの初めの設定でも既定で入）")
+                   help=guide.cli_help("keep_darkest", "どの初めの設定でも既定で入"))
     g.add_argument("--no-keep-darkest", dest="keep_darkest", action="store_const", const=False,
                    help="いちばん暗い色をパレットに取っておかない")
     g.add_argument("--merge-similar", dest="merge_similar", action="store_const", const=True, default=None,
-                   help="見た目でほぼ同じ色をまとめる（今風の既定。98・写真の下書きでも使える）")
+                   help=guide.cli_help("merge_similar", "今風の既定。98・写真の下書きでも使える"))
     g.add_argument("--no-merge-similar", dest="merge_similar", action="store_const", const=False,
                    help="見た目でほぼ同じ色をまとめない")
     g.add_argument("--dither", choices=list(DITHER_CHOICES), default=None,
-                   help="なめらかに色が変わる所（空など）で、近い 2 色の間を決まった網目でつなぐ（off しない・2x2 5 段・"
-                   "4x4 17 段。どの初めの設定でも既定は off）。新しい色は作らない")
+                   help=guide.cli_help("dither", "off しない・2x2 5 段・4x4 17 段。どの初めの設定でも既定は off"))
     g.add_argument("--tidy-dots", dest="tidy_dots", action="store_const", const=True, default=None,
-                   help="孤立したドット（まわり 8 ドットに同じ色が無く、7 つ以上が同じ色）を、まわりの色にそろえる"
-                   "（写真の下書きでは既定で入）")
+                   help=guide.cli_help("tidy_dots", "まわり 8 ドットに同じ色が無く、7 つ以上が同じ色のドット。写真の下書きでは既定で入"))
     g.add_argument("--no-tidy-dots", dest="tidy_dots", action="store_const", const=False,
                    help="孤立したドットをそろえない（写真の下書きで切にするとき）")
     g.add_argument("--tidy-pattern", dest="tidy_pattern", action="store_const", const=True, default=None,
-                   help="ざらついた範囲（減色でばらばらの点になったディザ風の所）を、2 色の決まった模様（2×2）に整える")
+                   help=guide.cli_help("tidy_pattern", "2×2 の模様。既定は切"))
     g.add_argument("--outline", dest="outline", action="store_const", const=True, default=None,
-                   help="明るさの差が大きい色の境目に、暗い方の側へ 1 ドットの線を引く（線はパレットのいちばん暗い色）")
-    g.add_argument("--canvas", default=None, help="余白を足してこの大きさ（幅x高さ）にする。余白はいちばん暗い色")
+                   help=guide.cli_help("outline", "暗い方の側に引く。既定は切"))
+    g.add_argument("--canvas", default=None, help=guide.cli_help("canvas", "幅x高さ"))
     p.add_argument("-q", "--quiet", action="store_true", help="結果の表示を減らす")
     return p
 
