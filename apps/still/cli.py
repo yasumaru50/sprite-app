@@ -5,6 +5,7 @@
     python -m apps.still 入力.png --colors 8 --no-4bit --max-size 320x200 --canvas 320x200
     python -m apps.still 入力.png --width 600 --tidy-pattern                # ざらついた範囲を 2 色の模様に整える
     python -m apps.still 入力.png --mode modern --tidy-dots                  # 今風（32 色）。孤立したドットをそろえる
+    python -m apps.still 写真.jpg --mode photo --smooth strong --outline     # 写真の下書き（横 320）。輪郭の線も引く
 
 --mode はプリセット（初めの設定の組み合わせ）で、個別のオプションで上書きできる。変換は retrocore.still（ブラウザ版と共通）。
 """
@@ -17,24 +18,25 @@ from pathlib import Path
 
 from retrocore.still import convert as convert_mod
 from retrocore.still.colors import MAX_COLORS, MIN_COLORS
-from retrocore.still.convert import DEFAULT_MODE, MODES, StillError, StillSettings, parse_size
+from retrocore.still.convert import DEFAULT_MODE, MODES, SMOOTH_LEVELS, StillError, StillSettings, parse_size
 
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="python -m apps.still",
                                 description="AI が描いたドット絵風の 1 枚絵を、決まった色数・格子のドット絵にそろえる")
-    p.add_argument("input", type=Path, help="入力の画像（PNG・JPG）")
+    p.add_argument("input", type=Path, help="入力の画像（PNG・JPEG。HEIC は読めない）")
     p.add_argument("--out", "-o", default=None,
                    help="出力名（拡張子なし。<出力名>.png と <出力名>.json を書く。既定 out/still/<入力の名前>）")
     p.add_argument("--mode", choices=list(MODES), default=DEFAULT_MODE,
                    help="初めの設定の組み合わせ（既定 pc98: " + MODES["pc98"]["label"] + "、modern: "
-                   + MODES["modern"]["label"] + "）。下のオプションで個別に変えられる")
+                   + MODES["modern"]["label"] + "、photo: " + MODES["photo"]["label"]
+                   + "）。下のオプションで個別に変えられる")
     p.add_argument("--colors", type=int, default=None, help=f"色数の上限（{MIN_COLORS}〜{MAX_COLORS}）")
     p.add_argument("--no-4bit", dest="four_bit", action="store_const", const=False, default=None,
                    help="色を 4096 色（RGB 各 4 ビット）に丸めない")
     p.add_argument("--max-size", default=None, help="大きさの上限 幅x高さ（例 640x400）。超えたら出力せずに知らせる")
     p.add_argument("--width", type=int, default=None,
-                   help="グリッド検出の代わりに、横 N マスに縮める（縦は縦横の比から）")
+                   help="グリッド検出の代わりに、横 N マスに縮める（縦は縦横の比から。写真の下書きの既定は 320）")
     p.add_argument("--canvas", default=None, help="余白を足してこの大きさ（幅x高さ）にする。余白はいちばん暗い色")
     p.add_argument("--no-keep-darkest", dest="keep_darkest", action="store_const", const=False, default=None,
                    help="いちばん暗い色をパレットに取っておかない")
@@ -42,8 +44,15 @@ def build_parser() -> argparse.ArgumentParser:
                    help="ざらついた範囲（減色でばらばらの点になったディザ風の所）を、2 色の決まった模様（2×2）に整える")
     p.add_argument("--no-merge-similar", dest="merge_similar", action="store_const", const=False, default=None,
                    help="今風モードで、見た目でほぼ同じ色をまとめない（98 モードではもともとまとめない）")
-    p.add_argument("--tidy-dots", dest="tidy_dots", action="store_true",
-                   help="孤立したドット（まわり 8 ドットに同じ色が無く、7 つ以上が同じ色）を、まわりの色にそろえる")
+    p.add_argument("--tidy-dots", dest="tidy_dots", action="store_const", const=True, default=None,
+                   help="孤立したドット（まわり 8 ドットに同じ色が無く、7 つ以上が同じ色）を、まわりの色にそろえる"
+                   "（写真の下書きでは既定で入）")
+    p.add_argument("--no-tidy-dots", dest="tidy_dots", action="store_const", const=False,
+                   help="孤立したドットをそろえない（写真の下書きで切にするとき）")
+    p.add_argument("--smooth", choices=list(SMOOTH_LEVELS), default=None,
+                   help="写真の下書きで、色の塊をまとめる強さ（weak 弱・medium 中・strong 強。既定 medium）")
+    p.add_argument("--outline", dest="outline", action="store_const", const=True, default=None,
+                   help="明るさの差が大きい色の境目に、暗い方の側へ 1 ドットの線を引く（線はパレットのいちばん暗い色）")
     p.add_argument("-q", "--quiet", action="store_true", help="結果の表示を減らす")
     return p
 
@@ -53,9 +62,9 @@ def settings_from_args(args) -> StillSettings:
         args.mode, colors=args.colors, four_bit=args.four_bit,
         max_size=None if args.max_size is None else parse_size(args.max_size, "大きさの上限"),
         width=args.width, keep_darkest=args.keep_darkest, merge_similar=args.merge_similar,
+        tidy_dots=args.tidy_dots, smooth=args.smooth, outline=args.outline,
         canvas=None if args.canvas is None else parse_size(args.canvas, "キャンバス"))
     s.tidy_pattern = bool(args.tidy_pattern)
-    s.tidy_dots = bool(args.tidy_dots)
     s.validate()
     return s
 
@@ -101,12 +110,16 @@ def main(argv: list[str] | None = None) -> int:
         d = info["dots"]
         how = (f"グリッド検出（1 ドット {d['dot_size']:.1f}px）" if d["method"] == "grid"
                else f"--width {d['width']}（1 マス {d['cell_size'][0]:.1f}×{d['cell_size'][1]:.1f}px）")
+        if "photo" in info:
+            how = f"写真の下書き（まとめの強さ {info['photo']['smooth']['level']}）、" + how
         print(f"{args.input.name}: {how} → {info['picture']['width']}×{info['picture']['height']} ドット、"
               f"{info['colors']['used']} 色" + (f"、キャンバス {info['width']}×{info['height']}" if info["canvas"] else ""))
         if "similar" in info:
             print(f"  似た色をまとめた組 {info['similar']['merged']}")
         if "tidy_dots" in info:
             print(f"  孤立したドットを置き換えた数 {info['tidy_dots']['changed']}")
+        if "outline" in info:
+            print(f"  輪郭の線を引いたドット {info['outline']['drawn']}")
         if "pattern" in info:
             t = info["pattern"]
             print(f"  模様を整えた範囲 {t['regions']} か所、変えたドット {t['changed']}")

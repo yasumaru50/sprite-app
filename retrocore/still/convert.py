@@ -2,7 +2,11 @@
 
 工程: 読み込み（透明は黒で埋める）→ ドットに戻す（グリッド検出か --width）→ 大きさの上限を確かめる
 → 減色（4 ビットの丸め・いちばん暗い色を取っておく）→ 似た色をまとめる（今風モードの既定）
-→ 孤立したドットをそろえる（--tidy-dots のときだけ）→ 模様を整える（--tidy-pattern のときだけ）→ キャンバス（--canvas のときだけ余白を足す）→ PNG（インデックスカラー）と JSON。
+→ 孤立したドットをそろえる（--tidy-dots のとき。写真の下書きでは既定）→ 模様を整える（--tidy-pattern のときだけ）
+→ 輪郭の線（--outline のときだけ）→ キャンバス（--canvas のときだけ余白を足す）→ PNG（インデックスカラー）と JSON。
+
+写真の下書き（`--mode photo`）では、読み込みで写真の向き（EXIF）を直し、ドットに戻す所でグリッド検出の代わりに
+`photo.py`（先に縮める → 色の塊をまとめる → 横 `--width` マスに縮める）を使う。減色からあとは同じ工程。
 
 `--mode`（`MODES`）は初めの設定の組み合わせ（プリセット）で、強制ではない。個別の設定で上書きできる。
 同じ入力・同じ設定からは、CLI でもブラウザ版でも同じバイト列の PNG と JSON ができる（`convert_still_bytes()`）。
@@ -29,7 +33,9 @@ from ..sprite.image import to_rgba
 from . import colors as colors_mod
 from . import dots as dots_mod
 from . import lone as lone_mod
+from . import outline as outline_mod
 from . import pattern as pattern_mod
+from . import photo as photo_mod
 
 APP = "still"
 FORMAT_VERSION = 1
@@ -41,7 +47,13 @@ MODES = {
     # 見た目でほぼ同じ色はまとめる（色数は上限で、少なくなってよい）
     "modern": {"label": "今風（32 色・丸めない・1920×1080 まで・似た色をまとめる）",
                "colors": 32, "four_bit": False, "max_size": (1920, 1080), "keep_darkest": True, "merge_similar": True},
+    # 写真の下書き（自分で撮った写真を、手直しの出発点になる色を塗り分けた下絵にする）。グリッド検出はせず、横 320 マスに縮める。
+    # 減色は今風と同じ。写真は浮いた点が多いので、孤立したドットをそろえるのもこのモードでは既定で入
+    "photo": {"label": "写真の下書き（横 320・32 色・色の塊をまとめる・孤立したドットをそろえる）",
+              "colors": 32, "four_bit": False, "max_size": (1920, 1080), "keep_darkest": True, "merge_similar": True,
+              "tidy_dots": True, "width": photo_mod.DEFAULT_WIDTH, "smooth": photo_mod.DEFAULT_SMOOTH},
 }
+SMOOTH_LEVELS = tuple(photo_mod.SMOOTH)
 # ブラウザ版で今風モードのときに選べる色数（CLI の --colors は 2〜256 のまま）
 MODERN_COLOR_CHOICES = (16, 24, 32, 48, 64, 96, 128)
 DEFAULT_MODE = "pc98"
@@ -87,7 +99,9 @@ class StillSettings:
     keep_darkest: bool = MODES[DEFAULT_MODE]["keep_darkest"]
     tidy_pattern: bool = False               # ざらついた範囲を 2 色の模様に整える（既定は切。プリセットには入れない）
     merge_similar: bool = MODES[DEFAULT_MODE]["merge_similar"]   # 似た色をまとめる（今風モードだけ）
-    tidy_dots: bool = False                  # 孤立したドットをそろえる（既定は切。プリセットには入れない）
+    tidy_dots: bool = False                  # 孤立したドットをそろえる（既定は切。写真の下書きだけ入）
+    smooth: str | None = None                # 色の塊をまとめる強さ（写真の下書きだけ。weak・medium・strong）
+    outline: bool = False                    # 輪郭の線を引く（どのモードでも既定は切）
 
     @classmethod
     def from_mode(cls, mode: str = DEFAULT_MODE, **overrides) -> "StillSettings":
@@ -96,7 +110,8 @@ class StillSettings:
             raise ValueError(f"--mode は {', '.join(MODES)} のどれかです（{mode}）")
         base = {k: v for k, v in MODES[mode].items() if k != "label"}
         base["tidy_pattern"] = False
-        base["tidy_dots"] = False
+        base.setdefault("tidy_dots", False)
+        base["outline"] = False
         base.update({k: v for k, v in overrides.items() if v is not None})
         return cls(mode=mode, **base)
 
@@ -116,14 +131,14 @@ class StillSettings:
                 if isinstance(v[k], bool) or not isinstance(v[k], (int, float)) or int(v[k]) != v[k]:
                     raise ValueError(f"{k} は整数で指定してください（{v[k]}）")
                 v[k] = int(v[k])
-        for k in ("four_bit", "keep_darkest", "tidy_pattern", "merge_similar", "tidy_dots"):
+        for k in ("four_bit", "keep_darkest", "tidy_pattern", "merge_similar", "tidy_dots", "outline"):
             if v[k] is not None and not isinstance(v[k], bool):
                 raise ValueError(f"{k} は true か false で指定してください（{v[k]}）")
+        if v["smooth"] is not None and not isinstance(v["smooth"], str):
+            raise ValueError(f"smooth は {', '.join(SMOOTH_LEVELS)} のどれかです（{v['smooth']}）")
         tidy = v.pop("tidy_pattern")
-        tidy_dots = v.pop("tidy_dots")
         s = cls.from_mode(values.get("mode") or DEFAULT_MODE, **v)
         s.tidy_pattern = bool(tidy)
-        s.tidy_dots = bool(tidy_dots)
         s.validate()
         return s
 
@@ -138,7 +153,17 @@ class StillSettings:
         if self.canvas is not None:
             self.canvas = parse_size(self.canvas, "キャンバス")
         if self.merge_similar and not MODES[self.mode]["merge_similar"]:
-            raise ValueError(f"似た色をまとめるのは今風モード（--mode modern）だけです（--mode {self.mode}）")
+            raise ValueError(f"似た色をまとめるのは今風モード（--mode modern）と写真の下書き（--mode photo）だけです"
+                             f"（--mode {self.mode}）")
+        if self.mode == "photo":
+            if self.width is None:   # 写真の下書きはグリッド検出をしない
+                self.width = photo_mod.DEFAULT_WIDTH
+            if self.smooth is None:
+                self.smooth = photo_mod.DEFAULT_SMOOTH
+            if self.smooth not in photo_mod.SMOOTH:
+                raise ValueError(f"まとめの強さは {', '.join(SMOOTH_LEVELS)} のどれかです（{self.smooth}）")
+        elif self.smooth is not None:
+            raise ValueError(f"まとめの強さ（--smooth）は写真の下書き（--mode photo）だけです（--mode {self.mode}）")
 
     def to_json(self) -> dict:
         out = {"mode": self.mode, "colors": self.colors, "four_bit": self.four_bit,
@@ -148,8 +173,12 @@ class StillSettings:
             out["tidy_pattern"] = True
         if MODES[self.mode]["merge_similar"]:   # 使えるモード（今風）のときだけ書く（98 モードは前と同じバイト列）
             out["merge_similar"] = self.merge_similar
-        if self.tidy_dots:      # 切のときは書かない
-            out["tidy_dots"] = True
+        if self.tidy_dots or MODES[self.mode].get("tidy_dots"):   # 切のときは書かない（写真の下書きでは切も書く）
+            out["tidy_dots"] = self.tidy_dots
+        if self.mode == "photo":
+            out["smooth"] = self.smooth
+        if self.outline or self.mode == "photo":   # 98・今風モードでは、切のときは書かない
+            out["outline"] = self.outline
         return out
 
 
@@ -167,6 +196,9 @@ class StillResult:
     tidied: pattern_mod.Tidied | None = None   # --tidy-pattern のときだけ
     similar: colors_mod.Similar | None = None  # 似た色をまとめたときだけ
     lone: lone_mod.Lone | None = None          # --tidy-dots のときだけ
+    outline: outline_mod.Outline | None = None  # --outline のときだけ
+    photo: photo_mod.PhotoWork | None = None   # 写真の下書きのときだけ
+    orientation: int = 1                       # 写真の向き（EXIF の Orientation。写真の下書きで読んだときだけ 1 以外）
 
     def overlay(self) -> np.ndarray:
         """整えた範囲の見える化（出力の大きさの RGBA。表示だけに使う）。整えていなければ全部透明。"""
@@ -187,6 +219,16 @@ class StillResult:
             th, tw = self.lone.changed.shape
             m[oy:oy + th, ox:ox + tw] = self.lone.changed
         return lone_mod.overlay_rgba(m)
+
+    def outline_overlay(self) -> np.ndarray:
+        """輪郭の線を引いたドットの見える化（出力の大きさの RGBA。表示だけ）。引いていなければ全部透明。"""
+        h, w = self.index.shape
+        m = np.zeros((h, w), bool)
+        if self.outline is not None:
+            ox, oy = self.canvas_offset or (0, 0)
+            th, tw = self.outline.drawn.shape
+            m[oy:oy + th, ox:ox + tw] = self.outline.drawn
+        return outline_mod.overlay_rgba(m)
 
     @property
     def size(self) -> tuple[int, int]:
@@ -220,10 +262,25 @@ def convert_still(rgba: np.ndarray, settings: StillSettings | None = None) -> St
     """RGBA（か RGB）の配列を変換する。止めるときは `StillError`。"""
     s = settings or StillSettings()
     s.validate()
-    rgb = dots_mod.flatten_black(rgba)
+    a = np.asarray(rgba)
+    photo = None
+    if s.mode == "photo" and a.ndim == 3 and a.shape[2] == 3 and a.dtype == np.uint8:
+        rgb = a   # 写真は大きいので、写しを作らずにそのまま使う（中身は変えない）
+    else:
+        rgb = dots_mod.flatten_black(a)
     h, w = rgb.shape[:2]
     max_w, max_h = s.max_size
-    if s.width is None:
+    if s.mode == "photo":
+        if s.width > w:
+            raise StillError(f"横のマス数（{s.width}）が、写真の幅（{w}px）より多くなっています。",
+                             dots_mod.size_candidates(w, h, max_w, max_h), "width")
+        if dots_mod.height_for_width(s.width, w, h) > max_h or s.width > max_w:
+            dw, dh = s.width, dots_mod.height_for_width(s.width, w, h)
+            raise StillError(f"--width {s.width} で {dw}×{dh} ドットになり、大きさの上限 {max_w}×{max_h} を超えたので、"
+                             "出力しませんでした。--width で横のマス数を小さくするか、--max-size で上限を変えてください。",
+                             dots_mod.size_candidates(w, h, max_w, max_h), "size")
+        dots, photo = photo_mod.photo_dots(rgb, s.width, s.smooth)
+    elif s.width is None:
         try:
             dots = dots_mod.grid_dots(rgb, s.max_size)
         except dots_mod.StillGridError as e:
@@ -272,6 +329,12 @@ def convert_still(rgba: np.ndarray, settings: StillSettings | None = None) -> St
         tidied = pattern_mod.tidy_pattern(index, palette, dark)
         # 使われなくなった色はパレットから外す（暗い順のまま。新しい色は作らない）
         index, palette, counts = _drop_unused(tidied.index, palette)
+    outline = None
+    if s.outline:
+        outline = outline_mod.draw_outline(index, palette)
+        index = outline.index
+        if outline.count:
+            index, palette, counts = _drop_unused(index, palette)
     offset = None
     if s.canvas is not None:
         cw, ch = s.canvas
@@ -284,7 +347,8 @@ def convert_still(rgba: np.ndarray, settings: StillSettings | None = None) -> St
             index = big
             counts = counts.copy()
             counts[fill] += cw * ch - dw * dh
-    return StillResult(index, palette, counts, dots, red, s, (w, h), offset, warnings, tidied, similar, lone)
+    return StillResult(index, palette, counts, dots, red, s, (w, h), offset, warnings, tidied, similar, lone,
+                       outline, photo)
 
 
 # ---- ファイルの形 ----
@@ -350,12 +414,14 @@ def result_info(res: StillResult, source: str = "") -> dict:
         "picture": {"width": res.dots.size[0], "height": res.dots.size[1]},
         "pixel_aspect": "1:1",
         "dots": res.dots.describe(),
+        **({} if res.photo is None else {"photo": res.photo.describe(res.orientation)}),
         "canvas": canvas,
         "colors": colors,
         "palette": pal,
         **({} if res.similar is None else {"similar": similar_info(res.similar)}),
         **({} if res.lone is None else {"tidy_dots": {"changed": res.lone.count, "settings": res.lone.settings}}),
         **({} if res.tidied is None else {"pattern": pattern_info(res.tidied)}),
+        **({} if res.outline is None else {"outline": {"drawn": res.outline.count, "settings": res.outline.settings}}),
         "settings": s.to_json(),
         "warnings": list(res.warnings),
     }
@@ -403,7 +469,14 @@ def convert_still_bytes(data: bytes, source: str = "", settings: StillSettings |
     """
     if not isinstance(settings, StillSettings):
         settings = StillSettings.from_dict(dict(settings or {}))
-    res = convert_still(decode_image(data), settings)
+    if photo_mod.is_heif(data):
+        raise StillError(HEIF_MESSAGE, kind="format")
+    if settings.mode == "photo":   # 写真は向き（EXIF）を直して読む（98・今風モードの読み方は前のまま）
+        rgb, orientation = photo_mod.decode_photo(data)
+        res = convert_still(rgb, settings)
+        res.orientation = orientation
+    else:
+        res = convert_still(decode_image(data), settings)
     info = result_info(res, source)
     return {"png": encode_indexed_png(res.index, res.palette), "json": info_json_text(info), "info": info,
             "result": res}
@@ -411,11 +484,14 @@ def convert_still_bytes(data: bytes, source: str = "", settings: StillSettings |
 
 # ---- ブラウザ版（Pyodide）向け ----
 
+HEIF_MESSAGE = "HEIC（iPhone などの写真の形式）は読み込めません。JPEG か PNG にしてください。"
+
+
 def friendly_error(exc: BaseException) -> str:
     if isinstance(exc, StillError):
         return str(exc)
     if isinstance(exc, (OSError, Image.DecompressionBombError)) or type(exc).__name__ == "UnidentifiedImageError":
-        return "画像として読み込めませんでした。PNG・JPEG の画像ファイルを選んでください。"
+        return "画像として読み込めませんでした。JPEG か PNG にしてください。"
     if isinstance(exc, ValueError):
         return f"設定または画像に問題があり、変換できませんでした: {exc}"
     return f"思いがけないエラーで変換できませんでした（{type(exc).__name__}: {exc}）"
@@ -456,6 +532,10 @@ def still_for_web(data: bytes, name: str = "", settings_json: str = "{}") -> str
         extra.update(tidy_dots=info["tidy_dots"], dots_overlay_base64=b64png(out["result"].dots_overlay()))
     if out["result"].similar is not None:
         extra["similar"] = info["similar"]
+    if out["result"].outline is not None:
+        extra.update(outline=info["outline"], outline_overlay_base64=b64png(out["result"].outline_overlay()))
+    if out["result"].photo is not None:
+        extra["photo"] = info["photo"]
     return json.dumps({"ok": True, "png_base64": base64.b64encode(out["png"]).decode("ascii"), "json_text": out["json"],
                        "width": info["width"], "height": info["height"], "palette": info["palette"],
                        "dots": info["dots"], "colors": info["colors"], "canvas": info["canvas"],
@@ -469,4 +549,5 @@ def spec() -> dict:
             "default_mode": DEFAULT_MODE,
             "colors": {"min": colors_mod.MIN_COLORS, "max": colors_mod.MAX_COLORS},
             "modern_colors": list(MODERN_COLOR_CHOICES),
+            "smooth_levels": [{"value": k, "label": photo_mod.SMOOTH_LABELS[k]} for k in SMOOTH_LEVELS],
             "max_side": MAX_SIDE}

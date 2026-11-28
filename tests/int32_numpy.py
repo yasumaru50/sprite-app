@@ -12,7 +12,8 @@ NumPy の型の昇格では 'q' と intp（'l'）が混ざると 'q' が残る�
 受け取ると、32 ビットの環境と同じエラーを出す。計算の結果（値）は変わらない。
 
 確かめる関数（64 ビットで uint64 を渡して「rule 'safe'」になるかで調べたもの。bincount は 32 ビットでの既知のエラー）:
-`np.bincount`（1 つ目の引数）、`np.repeat`（repeats）、`np.put`（ind）、`np.choose`（a）、ufunc の `reduceat`（indices）。
+`np.bincount`（1 つ目の引数）、`np.repeat`（repeats）、`np.put`（ind）、`np.choose`（a）、ufunc の `reduceat`（indices）、
+`np.take`（indices。Pyodide のブラウザ版で、写真の下書きの int64 の番号がこのエラーになった）。
 """
 
 from __future__ import annotations
@@ -100,6 +101,7 @@ class _Int32NumPy(types.ModuleType):
         self.repeat = _wrap(_np.repeat, "repeat", 1, "repeats")
         self.put = _wrap(_np.put, "put", 1, "ind")
         self.choose = _wrap(_np.choose, "choose", 0, "a")
+        self.take = _wrap(_np.take, "take", 1, "indices")
 
     def __getattr__(self, name):
         value = getattr(_np, name)

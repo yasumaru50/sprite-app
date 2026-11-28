@@ -271,7 +271,7 @@ def test_cli_prints_counts(tmp_path, capsys):
 
 
 def test_modes_are_listed_for_the_page():
-    assert set(MODES) == {"pc98", "modern"}
+    assert set(MODES) == {"pc98", "modern", "photo"}
     assert all("merge_similar" in m for m in MODES.values())
 
 
