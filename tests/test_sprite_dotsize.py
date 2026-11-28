@@ -1,6 +1,6 @@
 """ドットの大きさの欄（画面）・--dot-size（CLI）と、格子が見つからなかったときの候補（`retrocore/sprite/dotsize.py`）。
 
-- 候補は、自動の推定でいちばん点が高かった大きさを 0.5 刻みに丸めた所を真ん中に、0.5 刻みで最大 5 つ
+- 候補は、自動の推定でいちばん点が高かった大きさの半分（4 画素以上のとき）の近くを 0.5 刻みで 5 つと、推定そのもの
 - 画面の設定（数・[横, 縦]）は CLI の --dot-size と同じ (横, 縦) になり、出力はバイト単位で同じ
 - 動きをまとめる設定（.anims.json）の settings に書いた大きさは、CLI でも同じに効く
 - 格子が見つからないときは、画面の結果に候補が入り、CLI は「次に試せる大きさ」を添える
@@ -46,11 +46,15 @@ def strict(monkeypatch):
 
 
 def test_candidate_sizes():
+    # 推定の半分が 4 より小さい: 推定を真ん中に 0.5 刻みで 5 つ
     assert D.candidate_sizes(6.4) == [5.5, 6.0, 6.5, 7.0, 7.5]
-    assert D.candidate_sizes(6.6) == [5.5, 6.0, 6.5, 7.0, 7.5]
     assert D.candidate_sizes(6.76) == [6.0, 6.5, 7.0, 7.5, 8.0]
-    assert D.candidate_sizes(20.0) == [19.0, 19.5, 20.0, 20.5, 21.0]
+    assert D.candidate_sizes(7.9) == [7.0, 7.5, 8.0, 8.5, 9.0]
     assert D.candidate_sizes(2.3) == [2.0, 2.5, 3.0, 3.5]         # 下限（2）より小さいものは除く
+    # 半分が 4 以上: 半分の近くの 5 つと、推定そのもの（ai21 の回転: 推定 11.7〜12.1、利用者が選んだのは 6.5）
+    assert D.candidate_sizes(11.72) == [5.0, 5.5, 6.0, 6.5, 7.0, 11.5]
+    assert D.candidate_sizes(12.09) == [5.0, 5.5, 6.0, 6.5, 7.0, 12.0]
+    assert D.candidate_sizes(20.3) == [9.0, 9.5, 10.0, 10.5, 11.0, 20.5]
     assert D.candidate_sizes(None) == [] and D.candidate_sizes(0.0) == []
     assert D.cli_hint([6.0, 6.5, 7.0]) == "次に試せる大きさ: --dot-size 6 / 6.5 / 7"
     assert D.cli_hint([]) == ""
@@ -93,8 +97,9 @@ def test_single_candidates(one, strict):
     r = C.convert_image_bytes(data, {})
     assert not r["ok"]
     sizes = r["dot_candidates"]
-    assert len(sizes) == 5 and sizes == sorted(sizes) and all(v * 2 == int(v * 2) for v in sizes)
-    assert sizes[2] - 1 == sizes[0] and 19 <= sizes[2] <= 22
+    assert len(sizes) == 6 and sizes == sorted(sizes) and all(v * 2 == int(v * 2) for v in sizes)
+    assert [b - a for a, b in zip(sizes, sizes[1:5])] == [0.5] * 4 and 19 <= sizes[5] <= 22
+    assert 9 <= sizes[2] <= 11   # 推定の半分の近く
     got = C.dot_candidates_bytes([("a.png", data)], {"kind": "single", "sizes": sizes})
     assert got["ok"] and [c["dot_size"] for c in got["candidates"]] == sizes
     for c in got["candidates"]:
@@ -117,8 +122,8 @@ def test_frames_candidates(strip, strict):
     r = C.frames_convert_bytes(data, {})
     assert r["ok"] and not r["made"] and r["code"] == "grid_not_found"
     sizes = r["dot_candidates"]
-    assert len(sizes) == 5 and 19 <= sizes[2] <= 22
-    got = C.dot_candidates_bytes([("a.png", data)], {"kind": "frames", "sizes": sizes[1:4], "frames": {"frame_count": 3}})
+    assert len(sizes) == 6 and 19 <= sizes[5] <= 22
+    got = C.dot_candidates_bytes([("a.png", data)], {"kind": "frames", "sizes": sizes[3:], "frames": {"frame_count": 3}})
     assert got["ok"] and len(got["candidates"]) == 3
     for c in got["candidates"]:
         assert c["ok"] and len(c["heights"]) == 3 and len(c["widths"]) == 3
@@ -132,7 +137,7 @@ def test_frames_candidates(strip, strict):
     cfg = {"anims": [{"name": "walk", "files": ["a.png"]}]}
     r = C.anims_convert_bytes([("a.png", data)], {"anims": cfg})
     assert not r["made"] and r["dot_candidates"] == sizes
-    got = C.dot_candidates_bytes([("a.png", data)], {"kind": "anims", "sizes": sizes[2:3], "anims": cfg})
+    got = C.dot_candidates_bytes([("a.png", data)], {"kind": "anims", "sizes": sizes[5:], "anims": cfg})
     assert got["ok"] and got["candidates"][0]["ok"] and len(got["candidates"][0]["heights"]) == 3
 
 
@@ -216,3 +221,18 @@ def test_anims_config_keeps_dot_size(strip, tmp_path):
     assert "dot_size" not in c2.settings
     conv2 = C.anims_convert_bytes(files, {"settings": old["settings"], "anims": anims})
     assert conv2["made"] and conv2["dot_size"] != 20.5
+
+
+def test_rows_for_stacked_characters(one, strict):
+    """縦に段が並んだ絵（3 段に並べた回転など）は、候補に段ごとの高さ（rows）が付く。1 段なら付かない。"""
+    gap = np.zeros((60, one.shape[1], 4), np.uint8)
+    gap[..., :3] = one[0, 0, :3]
+    gap[..., 3] = 255
+    two = np.concatenate([one, gap, one], 0)
+    data = C.encode_png(two)
+    sizes = C.convert_image_bytes(data, {})["dot_candidates"]
+    got = C.dot_candidates_bytes([("a.png", data)], {"kind": "single", "sizes": sizes[-1:]})
+    c = got["candidates"][0]
+    assert c["ok"] and len(c["rows"]) == 1 and len(c["rows"][0]) == 2 and c["rows"][0][0] == c["rows"][0][1]
+    got = C.dot_candidates_bytes([("a.png", C.encode_png(one))], {"kind": "single", "sizes": sizes[-1:]})
+    assert "rows" not in got["candidates"][0]

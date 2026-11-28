@@ -672,8 +672,9 @@
     <div id="warnings" class="message warn" hidden></div>
     <div id="dot-cands" class="message warn" hidden>
       <div id="dot-cands-title" data-help-name="ドットの大きさの候補"><b>ドットの大きさの候補</b></div>
-      <div class="note help" data-help-at="dot-cands-title">自動の検出でいちばん点が高かった大きさの近くを 0.5 画素ずつ試しました。
-        コマが並んだ絵は、コマごとのキャラの高さ（ドット）がそろう大きさがおすすめです。押すと「ドットの大きさ」の欄にその数を入れて変換します。</div>
+      <div class="note help" data-help-at="dot-cands-title">自動の検出でいちばん点が高かった大きさと、その半分の近くを 0.5 画素ずつ試しました
+        （AI の絵では、本当のドットの 2 倍の所に山が出ることが多いため）。コマごと・段ごとのキャラの高さ（ドット）がそろう大きさがおすすめです。
+        押すと「ドットの大きさ」の欄にその数を入れて変換します。</div>
       <div id="dot-cands-status" role="status" aria-live="polite"></div>
       <div id="dot-cands-list"></div>
     </div>
@@ -1869,8 +1870,8 @@ async function dotCandidatesRun(request, files) {
     if (!result.ok) { $("dot-cands-status").textContent = "候補を試せませんでした: " + result.error; return; }
     const good = result.candidates.filter((c) => c.ok);
     $("dot-cands-status").textContent = good.length
-      ? (request.kind === "single" ? "押すと、その大きさで変換します（数は絵の高さ。ドット）。"
-                                   : "押すと、その大きさで変換します（数はコマごとのキャラの高さ。ドット）。")
+      ? (request.kind === "single" ? "押すと、その大きさで変換します（数は絵の高さ。縦に段が並んだ絵は段ごとの高さ。ドット）。"
+                                   : "押すと、その大きさで変換します（数はコマごとのキャラの高さ。縦に段が並んだコマは段ごとの高さ。ドット）。")
       : "どの大きさでも変換できませんでした。ドットの大きさを欄に入れて試してください。";
     for (const c of result.candidates) $("dot-cands-list").appendChild(dotCandidateButton(c, request.kind));
   } catch (e) {
@@ -1897,10 +1898,16 @@ function dotCandidateButton(c, kind) {
     img.src = url;
     b.appendChild(img);
     const h = c.heights;
-    const spread = Math.max(...h) - Math.min(...h);
+    const spread = (v) => Math.max(...v) - Math.min(...v);
     const info = document.createElement("span");
-    info.textContent = kind === "single" ? `高さ ${h[0]} ドット（幅 ${c.widths[0]}）`
-      : `高さ ${h.join("・")}` + (h.length > 1 ? `（差 ${spread}）` : "");
+    if (c.rows) {
+      // 縦に段が並んだ絵（3 段など）: 段ごとの高さ（コマが並んだ絵では、コマごとに「/」で区切る）
+      const all = c.rows.flat();
+      info.textContent = `段ごとの高さ ${c.rows.map((r) => r.join("/")).join("・")}（差 ${spread(all)}）`;
+    } else {
+      info.textContent = kind === "single" ? `高さ ${h[0]} ドット（幅 ${c.widths[0]}）`
+        : `高さ ${h.join("・")}` + (h.length > 1 ? `（差 ${spread(h)}）` : "");
+    }
     b.appendChild(info);
     b.title = "この大きさで変換する";
     b.addEventListener("click", () => {

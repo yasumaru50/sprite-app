@@ -1598,7 +1598,8 @@ def dot_candidates_bytes(files: list, request: dict) -> dict:
     "frames": {"frame_count", "align", "align_y"}（コマが並んだ絵）, "match_height"（つなげるとき）, "anims": 動きをまとめる設定}。
 
     結果: {"ok": True, "candidates": [{"dot_size": 6.5, "ok": True, "png": 見本の絵（1 枚の絵はその絵、コマはそろえたコマを並べた絵）,
-    "heights": [コマごとのキャラの高さ（ドット。1 枚の絵は絵の高さ 1 つ）], "widths": [...]}
+    "heights": [コマごとのキャラの高さ（ドット。1 枚の絵は絵の高さ 1 つ）], "widths": [...],
+    "rows": [コマごとの段の高さの並び]（どれかのコマ（絵）に、透明な行で分かれた段が 2 つ以上あるときだけ。3 段に並べた絵など）}
     か {"dot_size", "ok": False, "error"}, ...]}。設定の間違い: {"ok": False, "error", "detail"}。
     """
     from . import frames as F
@@ -1651,12 +1652,29 @@ def dot_candidates_bytes(files: list, request: dict) -> dict:
                 hs = [int(f.shape[0]) for f in res.raw]
                 ws = [int(f.shape[1]) for f in res.raw]
                 view = F.source_strip(res)
+            rows = [_band_heights(f) for f in ([view] if kind == "single" else res.raw)]
         except Exception as e:
             msg = str(e) if isinstance(e, (F.FramesError, GridNotFoundError, ValueError)) else friendly_error(e)
             out.append({"dot_size": size, "ok": False, "error": msg})
             continue
-        out.append({"dot_size": size, "ok": True, "png": encode_png(view), "heights": hs, "widths": ws})
+        c = {"dot_size": size, "ok": True, "png": encode_png(view), "heights": hs, "widths": ws}
+        if any(len(r) > 1 for r in rows):
+            c["rows"] = rows
+        out.append(c)
     return {"ok": True, "candidates": out}
+
+
+BAND_MIN = 0.15   # 段とみなす高さ（いちばん高い段に対する割合）。これより低い切れ端（離れた小さな部品）は数えない
+
+
+def _band_heights(img: np.ndarray) -> list[int]:
+    """透明な行で分かれた段（縦に並んだキャラ）ごとの高さ（ドット。上から順）。小さな切れ端は除く。"""
+    from .frames import _runs
+    runs = [e - s for s, e in _runs(img[..., 3].any(1))]
+    if not runs:
+        return []
+    top = max(runs)
+    return [int(h) for h in runs if h >= BAND_MIN * top]
 
 
 def dot_candidates_for_web(datas: list, names: list, request_json: str = "{}") -> str:
