@@ -703,6 +703,7 @@ python -m apps.still 入力.png --mode modern --tidy-dots             # 今風�
 python -m apps.still 写真.jpg --mode photo --smooth strong --outline # 写真の下書き（横 320）。輪郭の線も引く
 python -m apps.still 入力.png --mode modern --width 600 --smooth weak # 今風＋色の塊を弱くまとめる
 python -m apps.still 写真.png --mode photo --colors 16 --4bit        # 写真の下書き＋16 色＋4096 色に丸め
+python -m apps.still 写真.jpg --mode photo --width 640 --colors 16 --4bit --dither 2x2   # 空などに 2×2 の網目
 ```
 
 `--mode` は **初めの設定**（項目の値の組み合わせ）で、工程は 1 本。どの値も下の項目のオプションで 1 つずつ変えられる
@@ -714,7 +715,7 @@ python -m apps.still 写真.png --mode photo --colors 16 --4bit        # 写真�
 | `--out` / `-o` | 出力名（拡張子なし）。`<出力名>.png` と `<出力名>.json` を書く。既定 `out/still/<入力の名前>` |
 | `--mode pc98` | 初めの設定（既定）: マス目を探す・上限 640×400・まとめない・16 色・4096 色に丸める・いちばん暗い色を取っておく |
 | `--mode modern` | 今風: マス目を探す・上限 1920×1080・まとめない・32 色・4096 色に丸めない・いちばん暗い色・似た色をまとめる（手順 4） |
-| `--mode photo` | 写真の下書き: 写真の向き（EXIF）を直す・マス目は探さずに横 320 マス・上限 1920×1080・色の塊をまとめる（中）・減色は今風と同じ・孤立したドットをそろえる。下の「写真の下書きの工程」 |
+| `--mode photo` | 写真の下書き: 写真の向き（EXIF）を直す・マス目は探さずに横 320 マス・上限 1920×1080・色の塊をまとめる（中）・減色は今風と同じ（ただし似た色はまとめない）・孤立したドットをそろえる。下の「写真の下書きの工程」 |
 | `--orient` / `--no-orient` | 写真の向き（EXIF の Orientation）を直して読む・読まない（写真の下書きだけ既定で入）。切のときの読み方は前の版のまま |
 | `--grid` | ドットのマス目を探す（98・今風の既定。写真の下書きで使うとき）。`--width` とは一緒に使えない |
 | `--width N` | マス目を探さずに、横 N マスに等分する（縦は縦横の比から四捨五入。写真の下書きの既定は 320） |
@@ -723,7 +724,8 @@ python -m apps.still 写真.png --mode photo --colors 16 --4bit        # 写真�
 | `--colors N` | 色数の上限（2〜256）。似た色が多いときは少なくなる |
 | `--4bit` / `--no-4bit` | 色を 4096 色（RGB 各 4 ビット）に丸める・丸めない（98 だけ既定で入） |
 | `--keep-darkest` / `--no-keep-darkest` | いちばん暗い色をパレットに取っておく・取っておかない（どの初めの設定でも入） |
-| `--merge-similar` / `--no-merge-similar` | 似た色をまとめる・まとめない（今風・写真の下書きの既定は入、98 は切。どの初めの設定でも使える） |
+| `--merge-similar` / `--no-merge-similar` | 似た色をまとめる・まとめない（今風の既定は入、98・写真の下書きは切。どの初めの設定でも使える）。写真の下書きは、近い色が空などの段として要るので切（まとめると photo03 で 16 色が 11 色に減り、空の段が粗くなった） |
+| `--dither off\|2x2\|4x4` | ディザを作る（どの初めの設定でも既定は off）。なめらかに色が変わる所で、近い 2 色の間を Bayer の網目（2x2 は 5 段、4x4 は 17 段）でつなぐ。下の手順 4b |
 | `--tidy-dots` / `--no-tidy-dots` | 孤立したドットをそろえる・そろえない（既定は写真の下書きだけ入。下の手順 5） |
 | `--outline` | 輪郭の線を引く（どの初めの設定でも既定は切。下の手順 7） |
 | `--canvas WxH` | 絵を真ん中に置き、余白を足して W×H にする（奇数の余りは右・下に 1 多く）。余白はパレットのいちばん暗い色（0 番）。絵より小さい・上限より大きいときはエラー |
@@ -743,6 +745,16 @@ python -m apps.still 写真.png --mode photo --colors 16 --4bit        # 写真�
 4. **似た色をまとめる**（今風モードの既定。`retrocore/still/colors.py` の `merge_similar()`）: パレットの色どうしで OKLab の距離が 0.04 未満の組を、
    いちばん近い組から 1 組ずつ、ドット数の少ない方を多い方の色にする（同じなら暗い方を残す）。いちばん暗い色（0 番と取っておいた色）は必ず残す側。
    0.04 は、OKLab でやっと見分けられる差（約 0.02）の 2 倍（並べればやっと分かるが、絵の中ではまず見分けられない）。新しい色は作らない
+4b. **ディザを作る**（`--dither 2x2`・`4x4` のときだけ。`retrocore/still/dither.py`）: 色を割り当て直すだけで、パレットはディザなしのときと同じ（新しい色は作らない）。
+   - なめらかな所: 減色する前のドットの色（OKLab）で、上下・左右のとなりとの差が 0.03 以上の所が、まわり 5×5 に 1 つも無いドット。
+     そのつながりが 64 ドット未満なら外す。輪郭・はっきりした境目・木の葉のような細かい描き込みは差が大きいので入らない
+   - 2 色: まわり 5×5 の色の平均にいちばん近い色と、その色から OKLab で 0.15 未満の色のうち、平均を間にはさみ、平均が 2 色を結ぶ線にいちばん近い色。
+     平均が線から 2 色の距離の半分より離れているとき・どちらかがいちばん暗い色のときは入れない。ディザなしで 2 色のどちらかだったドットだけを変える
+   - 網目: 平均が 2 色の間のどこにあるかを、5 段（2x2）か 17 段（4x4）のいちばん近い段にし、Bayer の表で段の数より小さい所を明るい方の色にする。
+     表の位置は絵の左上を基準にした絵全体で共通の座標（手順 6 と同じ考え方）
+   - しきい値の理由: photo03（幅 640）で、空のとなりどうしの差は 99.9% が 0.007 以下、木の葉は半分が 0.009 以上・1 割が 0.083 以上だったので、その間の 0.03。
+     2 色の上限は、16 色の空の同じ色みの段（0.111）を入れ、空と雪（0.169）は入れない 0.15
+   - 網目の範囲のドットは、手順 5（孤立したドット）で変えず、手順 6（模様を整える）の候補にもしない
 5. **孤立したドットをそろえる**（`--tidy-dots` のときだけ。`retrocore/still/lone.py`）: 真ん中のドットの色がまわりの 8 ドットに 1 つも無く、
    まわりの 7 つ以上が同じ色 A のとき、そのドットを A にする。いちばん暗い色のドットと絵の端のドットは変えない。1 回だけ（変える前の絵で判断する）。
    使われなくなった色はパレットから外す
@@ -795,14 +807,18 @@ JSON（`<出力名>.json`）の形:
   `{"regions": 整えた範囲の数, "changed": 変えたドット数, "skipped": {"third_color": 3 色目が多くて整えなかった範囲の数, "small": 小さくて整えなかった範囲の数},
   "protected_line_dots": 輪郭として守ったドット数, "settings": {中で決めたしきい値}, "list": [{"box": [左, 上, 右, 下], "size", "colors": ["#暗い方", "#明るい方"], "changed", "third", "skipped"（整えなかったときだけ）}, …]}`。
   座標は絵の部分（キャンバスの余白を足す前）
-- `--mode modern` のときは `settings` の `mode` が `"modern"` で、`"merge_similar": true/false` が入る。似た色をまとめたときは `colors` に
+- `--mode modern`・`--mode photo` のときは `settings` に `"merge_similar": true/false` が入る。似た色をまとめたときは `colors` に
   `"merged_similar": まとめた組の数`、`palette` の後に `similar` が入る: `{"merged": 組の数, "distance": 0.04, "space": "OKLab",
   "list": [{"from": "#まとめた色", "to": "#合わせた色", "count": 移したドット数, "distance": 距離}, …]}`（まとめた順）
+- `--dither 2x2`・`4x4` のときだけ、`settings` に `"dither": "2x2"`（か `"4x4"`）と、`palette`（似た色の `similar`）の後に `dither` が入る:
+  `{"kind": "2x2", "changed": 網目で色を変えたドット数, "area": 網目の範囲のドット数（2 色の間の段が 0 と最大のどちらでもない所）, "pairs": 網目でつないだ 2 色の組の数,
+  "settings": {"tile": "bayer2x2", "levels": 5, "window": 5, "edge_max": 0.03, "min_area": 64, "pair_max": 0.15, "off_line_max": 0.5, "space": "OKLab"}}`。
+  off のときの出力（JSON も）は前とバイト単位で同じ（`tests/test_still_dither.py`）
 - `--tidy-dots` のときだけ、`settings` に `"tidy_dots": true` と、`tidy_dots`: `{"changed": 置き換えたドット数, "settings": {"min_same": 7, "neighbors": 8, "passes": 1, "keep_darkest": true, "keep_edges": true}}` が入る
 - 98 モードで `--tidy-dots` を使わないときの出力（JSON も）は、今風モードを足す前とバイト単位で同じ（`tests/test_still_modern.py`）
 - 初めの設定から項目を 1 つでも変えたときは、`settings` の後に `preset` が入る（初めの設定のままなら入らず、前の版とバイト単位で同じ）:
   `{"name": "初めの設定の名前", "changed": {"項目": {"preset": 初めの設定の値, "used": 使った値}, …}, "values": {項目の値すべて（工程の順）}}`。
-  項目は `orient`・`find_grid`・`width`・`max_size`・`smooth`・`colors`・`four_bit`・`keep_darkest`・`merge_similar`・`tidy_dots`・`tidy_pattern`・`outline`・`canvas`。
+  項目は `orient`・`find_grid`・`width`・`max_size`・`smooth`・`colors`・`four_bit`・`keep_darkest`・`merge_similar`・`dither`・`tidy_dots`・`tidy_pattern`・`outline`・`canvas`。
   `settings` は前の版と同じ形のまま（初めの設定によって書かない項目がある。全部の値は `preset.values`）
 - 色の塊をまとめたとき・写真の向きを直したときは、`dots` の後に `photo` が入る（下の `--mode photo` の形。向きを直さないときの `orientation` は null、
   まとめないときの `prescale`・`work_size`・`smooth` は null）。横のマス数で分けてまとめたときの `dots.method` は `"photo"`、マス目を探してまとめたときは `"grid"`
