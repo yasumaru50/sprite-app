@@ -39,22 +39,31 @@ from . import photo as photo_mod
 
 APP = "still"
 FORMAT_VERSION = 1
-# プリセット。値を変えると出力が変わる（足すのはよい）
+# 項目（工程の順）。初めの設定（MODES）は、この項目の値の組み合わせ。JSON の `preset.values` もこの順
+ITEMS = ("orient", "find_grid", "width", "max_size", "smooth", "colors", "four_bit", "keep_darkest", "merge_similar",
+         "tidy_dots", "tidy_pattern", "outline", "canvas")
+_OFF = {"tidy_pattern": False, "outline": False, "canvas": None}
+# 初めの設定（プリセット）。値を変えると出力が変わる（足すのはよい）。どの値も、項目（CLI のオプション・画面の
+# 「必要なときに開く」）で 1 つずつ変えられる
 MODES = {
     "pc98": {"label": "PC-98 風（16 色・4096 色・640×400 まで）",
-             "colors": 16, "four_bit": True, "max_size": (640, 400), "keep_darkest": True, "merge_similar": False},
+             "colors": 16, "four_bit": True, "max_size": (640, 400), "keep_darkest": True, "merge_similar": False,
+             "orient": False, "find_grid": True, "width": None, "smooth": "off", "tidy_dots": False, **_OFF},
     # 今風（最近のインディーゲームの背景のようなドット絵の手直しの出発点）。色が多いと AI のにじみの色が残りやすいので、
     # 見た目でほぼ同じ色はまとめる（色数は上限で、少なくなってよい）
     "modern": {"label": "今風（32 色・丸めない・1920×1080 まで・似た色をまとめる）",
-               "colors": 32, "four_bit": False, "max_size": (1920, 1080), "keep_darkest": True, "merge_similar": True},
-    # 写真の下書き（自分で撮った写真を、手直しの出発点になる色を塗り分けた下絵にする）。グリッド検出はせず、横 320 マスに縮める。
-    # 減色は今風と同じ。写真は浮いた点が多いので、孤立したドットをそろえるのもこのモードでは既定で入
+               "colors": 32, "four_bit": False, "max_size": (1920, 1080), "keep_darkest": True, "merge_similar": True,
+               "orient": False, "find_grid": True, "width": None, "smooth": "off", "tidy_dots": False, **_OFF},
+    # 写真の下書き（自分で撮った写真を、手直しの出発点になる色を塗り分けた下絵にする）。写真の向きを直し、マス目は探さずに
+    # 横 320 マスに分け、色の塊をまとめる。減色は今風と同じ。写真は浮いた点が多いので、孤立したドットもそろえる
     "photo": {"label": "写真の下書き（横 320・32 色・色の塊をまとめる・孤立したドットをそろえる）",
               "colors": 32, "four_bit": False, "max_size": (1920, 1080), "keep_darkest": True, "merge_similar": True,
-              "tidy_dots": True, "width": photo_mod.DEFAULT_WIDTH, "smooth": photo_mod.DEFAULT_SMOOTH},
+              "tidy_dots": True, "width": photo_mod.DEFAULT_WIDTH, "smooth": photo_mod.DEFAULT_SMOOTH,
+              "orient": True, "find_grid": False, **_OFF},
 }
 SMOOTH_LEVELS = tuple(photo_mod.SMOOTH)
-# ブラウザ版で今風モードのときに選べる色数（CLI の --colors は 2〜256 のまま）
+SMOOTH_CHOICES = ("off",) + SMOOTH_LEVELS   # 色の塊をまとめる: しない・弱・中・強
+# ブラウザ版の色数の欄で、候補として出す数（CLI の --colors と同じく 2〜256 のどれでも入れられる）
 MODERN_COLOR_CHOICES = (16, 24, 32, 48, 64, 96, 128)
 DEFAULT_MODE = "pc98"
 MAX_SIDE = 4096   # 上限・キャンバスに指定できる 1 辺の最大
@@ -86,38 +95,60 @@ def parse_size(text, name: str = "大きさ") -> tuple[int, int]:
     return w, h
 
 
+def _json_value(v):
+    return list(v) if isinstance(v, tuple) else v
+
+
 @dataclass
 class StillSettings:
-    """変換の設定。既定は `--mode pc98` と同じ。"""
+    """変換の設定。既定は `--mode pc98` と同じ。`mode` は初めの設定の名前で、ほかの値はすべて項目（`ITEMS`）。"""
 
     mode: str = DEFAULT_MODE
     colors: int = MODES[DEFAULT_MODE]["colors"]
     four_bit: bool = MODES[DEFAULT_MODE]["four_bit"]
     max_size: tuple[int, int] = MODES[DEFAULT_MODE]["max_size"]
-    width: int | None = None                 # 横のマス数（None ならグリッド検出）
+    width: int | None = None                 # 横のマス数（マス目を探すときは None）
     canvas: tuple[int, int] | None = None    # 余白を足して、この大きさにする
     keep_darkest: bool = MODES[DEFAULT_MODE]["keep_darkest"]
-    tidy_pattern: bool = False               # ざらついた範囲を 2 色の模様に整える（既定は切。プリセットには入れない）
-    merge_similar: bool = MODES[DEFAULT_MODE]["merge_similar"]   # 似た色をまとめる（今風モードだけ）
-    tidy_dots: bool = False                  # 孤立したドットをそろえる（既定は切。写真の下書きだけ入）
-    smooth: str | None = None                # 色の塊をまとめる強さ（写真の下書きだけ。weak・medium・strong）
-    outline: bool = False                    # 輪郭の線を引く（どのモードでも既定は切）
+    tidy_pattern: bool = False               # ざらついた範囲を 2 色の模様に整える（どの初めの設定でも切）
+    merge_similar: bool = MODES[DEFAULT_MODE]["merge_similar"]   # 似た色をまとめる（今風・写真の下書きは入）
+    tidy_dots: bool = False                  # 孤立したドットをそろえる（写真の下書きだけ入）
+    smooth: str | None = None                # 色の塊をまとめる強さ（off・weak・medium・strong。None は mode の既定）
+    outline: bool = False                    # 輪郭の線を引く（どの初めの設定でも切）
+    orient: bool | None = None               # 写真の向き（EXIF）を直して読む（None は mode の既定。写真の下書きだけ入）
+    find_grid: bool | None = None            # マス目を探す（False なら横 width マスに分ける。None は width から決める）
+
+    def __post_init__(self):
+        # 直接作ったとき（StillSettings(width=40) など）の、決まっていない値を埋める（前の版と同じ意味になるように）
+        photo = self.mode == "photo"
+        if self.find_grid is None:
+            self.find_grid = self.width is None and not photo
+        if self.orient is None:
+            self.orient = photo
+        if self.smooth is None:
+            self.smooth = photo_mod.DEFAULT_SMOOTH if photo else "off"
 
     @classmethod
     def from_mode(cls, mode: str = DEFAULT_MODE, **overrides) -> "StillSettings":
-        """プリセットの値に、None でない overrides を重ねた設定。"""
+        """初めの設定の値に、None でない overrides を重ねた設定。
+
+        横のマス数（width）だけを渡したときは、マス目を探さずにその数で分ける（前の版と同じ）。
+        マス目を探す（find_grid=True）だけを渡したときは、初めの設定の横のマス数を使わない。
+        """
         if mode not in MODES:
             raise ValueError(f"--mode は {', '.join(MODES)} のどれかです（{mode}）")
-        base = {k: v for k, v in MODES[mode].items() if k != "label"}
-        base["tidy_pattern"] = False
-        base.setdefault("tidy_dots", False)
-        base["outline"] = False
-        base.update({k: v for k, v in overrides.items() if v is not None})
+        base = {k: MODES[mode][k] for k in ITEMS}
+        ov = {k: v for k, v in overrides.items() if v is not None}
+        if "width" in ov and "find_grid" not in ov:
+            ov["find_grid"] = False
+        if ov.get("find_grid") is True and "width" not in ov:
+            ov["width"] = None
+        base.update(ov)
         return cls(mode=mode, **base)
 
     @classmethod
     def from_dict(cls, values: dict) -> "StillSettings":
-        """画面（JSON）の値から。無い値・null はプリセットの値。"""
+        """画面（JSON）の値から。無い値・null は初めの設定の値。"""
         known = {f.name for f in dataclasses.fields(cls)} - {"mode"}
         extra = set(values) - known - {"mode"}
         if extra:
@@ -131,14 +162,13 @@ class StillSettings:
                 if isinstance(v[k], bool) or not isinstance(v[k], (int, float)) or int(v[k]) != v[k]:
                     raise ValueError(f"{k} は整数で指定してください（{v[k]}）")
                 v[k] = int(v[k])
-        for k in ("four_bit", "keep_darkest", "tidy_pattern", "merge_similar", "tidy_dots", "outline"):
+        for k in ("four_bit", "keep_darkest", "tidy_pattern", "merge_similar", "tidy_dots", "outline", "orient",
+                  "find_grid"):
             if v[k] is not None and not isinstance(v[k], bool):
                 raise ValueError(f"{k} は true か false で指定してください（{v[k]}）")
         if v["smooth"] is not None and not isinstance(v["smooth"], str):
-            raise ValueError(f"smooth は {', '.join(SMOOTH_LEVELS)} のどれかです（{v['smooth']}）")
-        tidy = v.pop("tidy_pattern")
+            raise ValueError(f"smooth は {', '.join(SMOOTH_CHOICES)} のどれかです（{v['smooth']}）")
         s = cls.from_mode(values.get("mode") or DEFAULT_MODE, **v)
-        s.tidy_pattern = bool(tidy)
         s.validate()
         return s
 
@@ -148,30 +178,52 @@ class StillSettings:
         if not colors_mod.MIN_COLORS <= self.colors <= colors_mod.MAX_COLORS:
             raise ValueError(f"色数は {colors_mod.MIN_COLORS}〜{colors_mod.MAX_COLORS} で指定してください（{self.colors}）")
         self.max_size = parse_size(self.max_size, "大きさの上限")
+        if self.find_grid:
+            if self.width is not None:
+                raise ValueError(f"マス目を探す（--grid）ときは、横のマス数（--width {self.width}）は使えません。"
+                                 "一緒には使えないので、どちらか 1 つにしてください")
+        elif self.width is None:
+            if self.mode == "photo":   # 前の版と同じ（写真の下書きで横のマス数が空なら 320）
+                self.width = photo_mod.DEFAULT_WIDTH
+            else:
+                raise ValueError("マス目を探さないときは、横のマス数（--width）を指定してください")
         if self.width is not None and not 1 <= self.width <= MAX_SIDE:
             raise ValueError(f"横のマス数は 1〜{MAX_SIDE} で指定してください（{self.width}）")
         if self.canvas is not None:
             self.canvas = parse_size(self.canvas, "キャンバス")
-        if self.merge_similar and not MODES[self.mode]["merge_similar"]:
-            raise ValueError(f"似た色をまとめるのは今風モード（--mode modern）と写真の下書き（--mode photo）だけです"
-                             f"（--mode {self.mode}）")
-        if self.mode == "photo":
-            if self.width is None:   # 写真の下書きはグリッド検出をしない
-                self.width = photo_mod.DEFAULT_WIDTH
-            if self.smooth is None:
-                self.smooth = photo_mod.DEFAULT_SMOOTH
-            if self.smooth not in photo_mod.SMOOTH:
-                raise ValueError(f"まとめの強さは {', '.join(SMOOTH_LEVELS)} のどれかです（{self.smooth}）")
-        elif self.smooth is not None:
-            raise ValueError(f"まとめの強さ（--smooth）は写真の下書き（--mode photo）だけです（--mode {self.mode}）")
+        if self.smooth not in SMOOTH_CHOICES:
+            raise ValueError(f"色の塊のまとめの強さ（--smooth）は {', '.join(SMOOTH_CHOICES)} のどれかです（{self.smooth}）")
+
+    def values(self) -> dict:
+        """項目の値すべて（工程の順。JSON の `preset.values`）。"""
+        return {k: _json_value(getattr(self, k)) for k in ITEMS}
+
+    def changed(self) -> list[str]:
+        """初めの設定から変えた項目（工程の順）。"""
+        base = StillSettings.from_mode(self.mode)
+        base.validate()
+        mine, ref = self.values(), base.values()
+        return [k for k in ITEMS if mine[k] != ref[k]]
+
+    def preset_info(self) -> dict | None:
+        """初めの設定から変えたときの記録（変えていなければ None。JSON は前の版と同じバイト列のまま）。"""
+        changed = self.changed()
+        if not changed:
+            return None
+        ref = StillSettings.from_mode(self.mode)
+        ref.validate()
+        mine, base = self.values(), ref.values()
+        return {"name": self.mode, "changed": {k: {"preset": base[k], "used": mine[k]} for k in changed},
+                "values": mine}
 
     def to_json(self) -> dict:
+        """JSON の `settings`（前の版と同じ形。項目の値すべては `preset.values`）。"""
         out = {"mode": self.mode, "colors": self.colors, "four_bit": self.four_bit,
                "max_size": list(self.max_size), "width": self.width,
                "canvas": None if self.canvas is None else list(self.canvas), "keep_darkest": self.keep_darkest}
         if self.tidy_pattern:   # 切のときは書かない（前の版と同じバイト列にするため）
             out["tidy_pattern"] = True
-        if MODES[self.mode]["merge_similar"]:   # 使えるモード（今風）のときだけ書く（98 モードは前と同じバイト列）
+        if MODES[self.mode]["merge_similar"]:   # 今風・写真の下書きのときだけ書く（98 モードは前と同じバイト列）
             out["merge_similar"] = self.merge_similar
         if self.tidy_dots or MODES[self.mode].get("tidy_dots"):   # 切のときは書かない（写真の下書きでは切も書く）
             out["tidy_dots"] = self.tidy_dots
@@ -264,15 +316,18 @@ def convert_still(rgba: np.ndarray, settings: StillSettings | None = None) -> St
     s.validate()
     a = np.asarray(rgba)
     photo = None
-    if s.mode == "photo" and a.ndim == 3 and a.shape[2] == 3 and a.dtype == np.uint8:
+    if a.ndim == 3 and a.shape[2] == 3 and a.dtype == np.uint8:
         rgb = a   # 写真は大きいので、写しを作らずにそのまま使う（中身は変えない）
     else:
         rgb = dots_mod.flatten_black(a)
     h, w = rgb.shape[:2]
     max_w, max_h = s.max_size
-    if s.mode == "photo":
+    smoothing = s.smooth != "off"
+    what = "写真" if s.mode == "photo" else "画像"
+    if not s.find_grid and smoothing:
+        # 横のマス数で分けて色の塊をまとめる（写真の下書きの工程）。重い処理の前に大きさを確かめる
         if s.width > w:
-            raise StillError(f"横のマス数（{s.width}）が、写真の幅（{w}px）より多くなっています。",
+            raise StillError(f"横のマス数（{s.width}）が、{what}の幅（{w}px）より多くなっています。",
                              dots_mod.size_candidates(w, h, max_w, max_h), "width")
         if dots_mod.height_for_width(s.width, w, h) > max_h or s.width > max_w:
             dw, dh = s.width, dots_mod.height_for_width(s.width, w, h)
@@ -280,14 +335,14 @@ def convert_still(rgba: np.ndarray, settings: StillSettings | None = None) -> St
                              "出力しませんでした。--width で横のマス数を小さくするか、--max-size で上限を変えてください。",
                              dots_mod.size_candidates(w, h, max_w, max_h), "size")
         dots, photo = photo_mod.photo_dots(rgb, s.width, s.smooth)
-    elif s.width is None:
+    elif s.find_grid:
         try:
             dots = dots_mod.grid_dots(rgb, s.max_size)
         except dots_mod.StillGridError as e:
             raise StillError(str(e), e.candidates, "grid") from e
     else:
         if s.width > w:
-            raise StillError(f"横のマス数（{s.width}）が、画像の幅（{w}px）より多くなっています。",
+            raise StillError(f"横のマス数（{s.width}）が、{what}の幅（{w}px）より多くなっています。",
                              dots_mod.size_candidates(w, h, max_w, max_h), "width")
         dots = dots_mod.width_dots(rgb, s.width)
     dw, dh = dots.size
@@ -297,6 +352,10 @@ def convert_still(rgba: np.ndarray, settings: StillSettings | None = None) -> St
         raise StillError(f"{how}で {dw}×{dh} ドットになり、大きさの上限 {max_w}×{max_h} を超えたので、出力しませんでした。"
                          "--width で横のマス数を小さくするか、--max-size で上限を変えてください。",
                          dots_mod.size_candidates(aw, ah, max_w, max_h), "size")
+    if s.find_grid and smoothing:   # マス目を探したうえで、マスの中で色の塊をまとめる
+        dots, photo = photo_mod.smooth_grid_dots(rgb, dots, s.smooth)
+    if photo is None and s.orient:   # 向きだけを直したとき（色の塊はまとめない）
+        photo = photo_mod.PhotoWork(None, False, "off")
     if s.canvas is not None:
         cw, ch = s.canvas
         if cw < dw or ch < dh:
@@ -414,7 +473,7 @@ def result_info(res: StillResult, source: str = "") -> dict:
         "picture": {"width": res.dots.size[0], "height": res.dots.size[1]},
         "pixel_aspect": "1:1",
         "dots": res.dots.describe(),
-        **({} if res.photo is None else {"photo": res.photo.describe(res.orientation)}),
+        **({} if res.photo is None else {"photo": res.photo.describe(res.orientation if s.orient else None)}),
         "canvas": canvas,
         "colors": colors,
         "palette": pal,
@@ -423,6 +482,7 @@ def result_info(res: StillResult, source: str = "") -> dict:
         **({} if res.tidied is None else {"pattern": pattern_info(res.tidied)}),
         **({} if res.outline is None else {"outline": {"drawn": res.outline.count, "settings": res.outline.settings}}),
         "settings": s.to_json(),
+        **({} if (preset := s.preset_info()) is None else {"preset": preset}),
         "warnings": list(res.warnings),
     }
 
@@ -471,7 +531,7 @@ def convert_still_bytes(data: bytes, source: str = "", settings: StillSettings |
         settings = StillSettings.from_dict(dict(settings or {}))
     if photo_mod.is_heif(data):
         raise StillError(HEIF_MESSAGE, kind="format")
-    if settings.mode == "photo":   # 写真は向き（EXIF）を直して読む（98・今風モードの読み方は前のまま）
+    if settings.orient:   # 写真の向き（EXIF）を直して読む（切のときの読み方は前のまま）
         rgb, orientation = photo_mod.decode_photo(data)
         res = convert_still(rgb, settings)
         res.orientation = orientation
@@ -550,4 +610,7 @@ def spec() -> dict:
             "colors": {"min": colors_mod.MIN_COLORS, "max": colors_mod.MAX_COLORS},
             "modern_colors": list(MODERN_COLOR_CHOICES),
             "smooth_levels": [{"value": k, "label": photo_mod.SMOOTH_LABELS[k]} for k in SMOOTH_LEVELS],
+            "smooth_choices": [{"value": k, "label": "しない" if k == "off" else photo_mod.SMOOTH_LABELS[k]}
+                               for k in SMOOTH_CHOICES],
+            "items": list(ITEMS),
             "max_side": MAX_SIDE}

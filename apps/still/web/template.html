@@ -93,6 +93,7 @@
   details.fold > summary { cursor: pointer; padding: 8px 12px; font-weight: 600; display: flex; flex-wrap: wrap; align-items: baseline;
                            gap: 2px 10px; list-style-position: inside; }
   details.fold > summary .fold-mark { color: var(--error-line); }
+  .mode-mark { color: var(--error-line); font-weight: 600; font-size: 0.9em; }
   details.fold > summary .fold-what { color: var(--muted); font-weight: normal; font-size: 0.82em; }
   details.fold > .fold-body { padding: 4px 12px 12px; }
 </style>
@@ -114,14 +115,9 @@
     </div>
     <div class="controls" style="margin-top:12px">
       <div class="field">
-        <label for="mode">初めの設定</label>
+        <span class="help-row"><label for="mode">初めの設定</label><span class="fold-mark mode-mark" id="mode-mark" hidden>（変更あり）</span></span>
         <select id="mode"></select>
-        <small class="help">設定の組み合わせ（プリセット）です。決まりではないので、下の「必要なときに開く」で 1 つずつ変えられます。「今風」は最近のインディーゲームの背景のようなドット絵の手直しの出発点で、32 色・4096 色に丸めない・1920×1080 まで・似た色をまとめる です（CLI の --mode modern）。「写真の下書き」は自分で撮った写真を、塗り直しの出発点になる色を塗り分けた下絵にします。マス目は探さずに横 320 マスに縮め、減色は今風と同じで、孤立したドットもそろえます（CLI の --mode photo）</small>
-      </div>
-      <div class="field" id="smooth-field" hidden>
-        <label for="smooth">まとめの強さ</label>
-        <select id="smooth"></select>
-        <small class="help">写真の下書きで、境目は残したまま、似た色の近所をならして色の塊にする強さです。強いほど塊が大きく、細かい所が消えます（CLI の --smooth weak・medium・strong）</small>
+        <small class="help">項目の値の組み合わせです（CLI の --mode）。決まりではないので、下の「必要なときに開く」で 1 つずつ変えられます。変えると「（変更あり）」と出て、JSON に変えた項目が残ります。「今風」は最近のインディーゲームの背景のようなドット絵の手直しの出発点で、32 色・4096 色に丸めない・1920×1080 まで・似た色をまとめる です。「写真の下書き」は自分で撮った写真を、塗り直しの出発点になる色を塗り分けた下絵にします（写真の向きを直す・マス目は探さずに横 320 マス・色の塊をまとめる（中）・減色は今風と同じ・孤立したドットをそろえる）</small>
       </div>
       <div class="field">
         <button type="button" id="run" disabled>② 変換する</button>
@@ -129,55 +125,80 @@
     </div>
 
     <details class="fold" id="fold-need">
-      <summary><span class="fold-name">必要なときに開く</span><span class="fold-mark" hidden>（変更あり）</span><small class="fold-what">色数・横のマス数・大きさの上限・キャンバス・4096 色に丸める・いちばん暗い色・似た色・孤立したドット・模様を整える・輪郭の線</small></summary>
+      <summary><span class="fold-name">必要なときに開く</span><span class="fold-mark" hidden>（変更あり）</span><small class="fold-what">工程の順: 向き・マス目・色の塊・減色・似た色・孤立したドット・模様・輪郭・余白</small></summary>
       <div class="fold-body">
         <div class="controls">
           <div class="field">
-            <label for="colors">色数</label>
-            <input type="number" id="colors" step="1">
-            <select id="colors-modern" aria-label="色数（今風）" hidden></select>
-            <small class="help" id="colors-help"></small>
+            <label class="check"><input type="checkbox" id="orient"> 写真の向きを直す</label>
+            <small class="help">写真に記録された向き（EXIF）を見て、正しい向きに回してから読みます。写真の下書きでは初めから入（CLI の --orient・--no-orient）</small>
+          </div>
+        </div>
+        <div class="controls" style="margin-top:10px">
+          <div class="field">
+            <label for="find-grid">マス目の決め方</label>
+            <select id="find-grid">
+              <option value="grid">マス目を探す</option>
+              <option value="width">横のマス数で分ける</option>
+            </select>
+            <small class="help">「マス目を探す」は AI が描いたドットのマス目を自動で見つけます（98・今風の初めの設定。CLI の --grid）。「横のマス数で分ける」はマス目を探さずに、横を決まった数のマスに分けます（縦は縦横の比から。写真の下書きの初めの設定。CLI の --width）</small>
           </div>
           <div class="field">
             <label for="width">横のマス数</label>
-            <input type="number" id="width" min="1" step="1" placeholder="自動">
-            <small class="help">空ならドットのマス目を自動で探します（写真の下書きでは空なら 320）。数を入れると、マス目を探さずに横をその数のマスに分けます（縦は縦横の比から）。CLI の --width</small>
+            <input type="number" id="width" min="1" step="1">
+            <small class="help">「横のマス数で分ける」のときのマスの数です（CLI の --width）</small>
           </div>
           <div class="field">
             <span class="label" id="max-label">大きさの上限</span>
             <span class="pair"><input type="number" id="max-w" min="1" step="1" aria-label="上限の幅">×<input type="number" id="max-h" min="1" step="1" aria-label="上限の高さ"></span>
             <small class="help" data-help-at="max-label">ドット数（幅×高さ）。超えたら出力せずに、収まる「横のマス数」の候補を出します。CLI の --max-size</small>
           </div>
+        </div>
+        <div class="controls" style="margin-top:10px">
           <div class="field">
-            <span class="label" id="canvas-label">キャンバス</span>
-            <span class="pair"><input type="number" id="canvas-w" min="1" step="1" placeholder="なし" aria-label="キャンバスの幅">×<input type="number" id="canvas-h" min="1" step="1" placeholder="なし" aria-label="キャンバスの高さ"></span>
-            <small class="help" data-help-at="canvas-label">空ならなし。入れると、絵を真ん中に置いて余白を足し、この大きさにします。余白はパレットのいちばん暗い色。CLI の --canvas</small>
+            <label for="smooth">色の塊をまとめる</label>
+            <select id="smooth"></select>
+            <small class="help">境目は残したまま、似た色の近所をならして色の塊にします（桑原フィルタ）。強いほど塊が大きく、細かい所が消えます。作業用に 1 マスを 4×4 の画素に縮めてから まとめます。写真の下書きでは初めから「中」、ほかは「しない」（CLI の --smooth off・weak・medium・strong）</small>
           </div>
         </div>
         <div class="controls" style="margin-top:10px">
           <div class="field">
+            <label for="colors">色数</label>
+            <input type="number" id="colors" step="1" list="colors-list">
+            <datalist id="colors-list"></datalist>
+            <small class="help" id="colors-help"></small>
+          </div>
+          <div class="field">
             <label class="check"><input type="checkbox" id="four-bit"> 4096 色に丸める</label>
-            <small class="help">パレットの色を RGB 各 16 段階（4 ビット）の 4096 色の中から選びます。切ると丸めません（CLI の --no-4bit）</small>
+            <small class="help">パレットの色を RGB 各 16 段階（4 ビット）の 4096 色の中から選びます。98 の初めの設定で入（CLI の --4bit・--no-4bit）</small>
           </div>
           <div class="field">
             <label class="check"><input type="checkbox" id="keep-darkest"> いちばん暗い色を取っておく</label>
-            <small class="help">パレットの 1 色を絵の中のいちばん暗い色にして、暗い線が中間の色に吸われて消えないようにします（CLI の --no-keep-darkest で切）</small>
+            <small class="help">パレットの 1 色を絵の中のいちばん暗い色にして、暗い線が中間の色に吸われて消えないようにします（CLI の --keep-darkest・--no-keep-darkest）</small>
           </div>
+        </div>
+        <div class="controls" style="margin-top:10px">
           <div class="field">
             <label class="check"><input type="checkbox" id="merge-similar"> 似た色をまとめる</label>
-            <small class="help">減色のあと、見た目でほぼ区別できない色どうし（OKLab の距離 0.04 未満）を、ドット数の多い方の色に合わせます。いちばん暗い色は残します。色数は上限なので、少なくなることがあります。今風モードと写真の下書きで使います（CLI の --no-merge-similar で切）</small>
+            <small class="help">減色のあと、見た目でほぼ区別できない色どうし（OKLab の距離 0.04 未満）を、ドット数の多い方の色に合わせます。いちばん暗い色は残します。色数は上限なので、少なくなることがあります。今風・写真の下書きの初めの設定で入（CLI の --merge-similar・--no-merge-similar）</small>
           </div>
           <div class="field">
             <label class="check"><input type="checkbox" id="tidy-dots"> 孤立したドットをそろえる</label>
-            <small class="help">まわりの 8 ドットに同じ色が 1 つも無く、まわりの 7 つ以上が同じ色のドットを、その色にします（AI のにじみの点を消すため）。いちばん暗い色のドットと絵の端のドットは変えません。1 回だけ通します（CLI の --tidy-dots。写真の下書きでは初めから入で、--no-tidy-dots で切）</small>
+            <small class="help">まわりの 8 ドットに同じ色が 1 つも無く、まわりの 7 つ以上が同じ色のドットを、その色にします（AI のにじみの点を消すため）。いちばん暗い色のドットと絵の端のドットは変えません。1 回だけ通します。写真の下書きの初めの設定で入（CLI の --tidy-dots・--no-tidy-dots）</small>
+          </div>
+          <div class="field">
+            <label class="check"><input type="checkbox" id="tidy-pattern"> ざらついた範囲を模様に整える</label>
+            <small class="help">AI が描いたディザ風の所は、減色するとばらばらの点になります。そういう所を、その場所の多い 2 色だけを使った 2×2 の決まった模様（濃さ 5 段。50% は市松）に置き換えます。輪郭・平塗りの面・小さい所・3 色目が多い所は変えません（CLI の --tidy-pattern）</small>
           </div>
           <div class="field">
             <label class="check"><input type="checkbox" id="outline"> 輪郭の線を引く</label>
             <small class="help">明るさの差が大きい色の境目に、暗い方の側へ 1 ドットの線を引きます。線の色はパレットのいちばん暗い色で、新しい色は作りません（CLI の --outline）</small>
           </div>
+        </div>
+        <div class="controls" style="margin-top:10px">
           <div class="field">
-            <label class="check"><input type="checkbox" id="tidy-pattern"> ざらついた範囲を模様に整える</label>
-            <small class="help">AI が描いたディザ風の所は、減色するとばらばらの点になります。そういう所を、その場所の多い 2 色だけを使った 2×2 の決まった模様（濃さ 5 段。50% は市松）に置き換えます。輪郭・平塗りの面・小さい所・3 色目が多い所は変えません（CLI の --tidy-pattern）</small>
+            <span class="label" id="canvas-label">余白（キャンバス）</span>
+            <span class="pair"><input type="number" id="canvas-w" min="1" step="1" placeholder="なし" aria-label="キャンバスの幅">×<input type="number" id="canvas-h" min="1" step="1" placeholder="なし" aria-label="キャンバスの高さ"></span>
+            <small class="help" data-help-at="canvas-label">空ならなし。入れると、絵を真ん中に置いて余白を足し、この大きさにします。余白はパレットのいちばん暗い色。CLI の --canvas</small>
           </div>
         </div>
       </div>
@@ -333,43 +354,54 @@ for (const [key, m] of Object.entries(SPEC.modes)) $("mode").add(new Option(m.la
 $("mode").value = SPEC.default_mode;
 $("colors").min = SPEC.colors.min;
 $("colors").max = SPEC.colors.max;
-for (const n of SPEC.modern_colors) $("colors-modern").add(new Option(`${n} 色`, String(n)));
-for (const s of SPEC.smooth_levels) $("smooth").add(new Option(s.label, s.value));
-$("colors-help").textContent = `パレットの色数の上限（${SPEC.colors.min}〜${SPEC.colors.max}。今風モードでは ${SPEC.modern_colors.join("・")} から選ぶ）。似た色が多いときは、これより少なくなることがあります。CLI の --colors`;
+for (const n of SPEC.modern_colors) $("colors-list").appendChild(new Option(`${n} 色`, String(n)));
+for (const s of SPEC.smooth_choices) $("smooth").add(new Option(s.label, s.value));
+$("colors-help").textContent = `パレットの色数の上限（${SPEC.colors.min}〜${SPEC.colors.max}。よく使う数: ${SPEC.modern_colors.join("・")}）。似た色が多いときは、これより少なくなることがあります。CLI の --colors`;
 for (const z of [1, 2, 3, 4, 6, 8]) $("zoom").add(new Option(`${z} 倍`, String(z)));
 $("zoom").value = "3";
+// 初めの設定（項目の値の組み合わせ）を、「必要なときに開く」の項目に入れる。どの項目も、どの初めの設定でも変えられる
 function applyMode(key) {
   const m = SPEC.modes[key];
-  const modern = key === "modern" || key === "photo";   // 今風・写真の下書きの色数は決まった数から選ぶ
-  $("smooth-field").hidden = key !== "photo";
-  $("smooth").value = m.smooth || "medium";
-  $("colors").hidden = modern;
-  $("colors-modern").hidden = !modern;
-  $("colors").value = m.colors;
-  $("colors-modern").value = String(m.colors);
-  $("merge-similar").checked = m.merge_similar;
-  $("merge-similar").disabled = !m.merge_similar;   // 98 モードでは使わない
-  $("tidy-dots").checked = !!m.tidy_dots;
-  $("outline").checked = false;
+  $("orient").checked = m.orient;
+  $("find-grid").value = m.find_grid ? "grid" : "width";
+  $("width").value = m.width ? String(m.width) : "";
   $("max-w").value = m.max_size[0];
   $("max-h").value = m.max_size[1];
+  $("smooth").value = m.smooth;
+  $("colors").value = m.colors;
   $("four-bit").checked = m.four_bit;
   $("keep-darkest").checked = m.keep_darkest;
-  $("tidy-pattern").checked = false;
-  $("width").value = m.width ? String(m.width) : "";
-  $("canvas-w").value = "";
-  $("canvas-h").value = "";
+  $("merge-similar").checked = m.merge_similar;
+  $("tidy-dots").checked = m.tidy_dots;
+  $("tidy-pattern").checked = m.tidy_pattern;
+  $("outline").checked = m.outline;
+  $("canvas-w").value = m.canvas ? m.canvas[0] : "";
+  $("canvas-h").value = m.canvas ? m.canvas[1] : "";
   for (const el of foldControls()) foldDefaults.set(el, ctlValue(el));
+  syncGrid();
   foldRefresh();
 }
+// 「マス目を探す」のときは横のマス数を使わない（入れられないようにする）
+function syncGrid() {
+  const grid = $("find-grid").value === "grid";
+  $("width").disabled = grid;
+  $("width").placeholder = grid ? "使わない" : "";
+}
+$("find-grid").addEventListener("change", () => {
+  syncGrid();
+  if ($("find-grid").value === "width" && !$("width").value) $("width").focus();
+});
 
-// ---- 折りたたむ欄: 最初の値（選んだプリセットの値）から変えた設定があれば、見出しに「（変更あり）」 ----
+// ---- 折りたたむ欄: 選んだ初めの設定の値から変えた項目があれば、見出しと初めの設定の横に「（変更あり）」 ----
 const foldDefaults = new Map();
 function ctlValue(el) { return el.type === "checkbox" ? el.checked : el.value; }
 function foldControls() { return [...$("fold-need").querySelectorAll("input, select")]; }
 function foldRefresh() {
-  const changed = foldControls().some((el) => foldDefaults.has(el) && ctlValue(el) !== foldDefaults.get(el));
+  // 横のマス数は「横のマス数で分ける」のときだけ数える（マス目を探すときは使わない）
+  const changed = foldControls().some((el) => foldDefaults.has(el) && !(el.id === "width" && el.disabled)
+                                               && ctlValue(el) !== foldDefaults.get(el));
   $("fold-need").querySelector(".fold-mark").hidden = !changed;
+  $("mode-mark").hidden = !changed;
 }
 $("fold-need").addEventListener("input", foldRefresh);
 $("fold-need").addEventListener("change", foldRefresh);
@@ -392,20 +424,23 @@ function intField(id, name, { min = 1, max = SPEC.max_side, optional = false } =
 function currentSettings() {
   const cw = $("canvas-w").value.trim(), ch = $("canvas-h").value.trim();
   if ((cw === "") !== (ch === "")) throw new Error("キャンバスは幅と高さの両方を入れてください（なしにするときは両方とも空に）。");
+  const grid = $("find-grid").value === "grid";
+  // 項目の値すべてを送る（Python の側で初めの設定と比べ、変えた項目を JSON の preset に書く。CLI と同じ結果）
   return {
     mode: $("mode").value,
-    colors: $("mode").value !== "pc98" ? Number($("colors-modern").value)
-                                         : intField("colors", "色数", { min: SPEC.colors.min, max: SPEC.colors.max }),
-    width: intField("width", "横のマス数", { optional: true }),
+    orient: $("orient").checked,
+    find_grid: grid,
+    width: grid ? null : intField("width", "横のマス数"),
     max_size: [intField("max-w", "上限の幅"), intField("max-h", "上限の高さ")],
-    canvas: cw === "" ? null : [intField("canvas-w", "キャンバスの幅"), intField("canvas-h", "キャンバスの高さ")],
+    smooth: $("smooth").value,
+    colors: intField("colors", "色数", { min: SPEC.colors.min, max: SPEC.colors.max }),
     four_bit: $("four-bit").checked,
     keep_darkest: $("keep-darkest").checked,
-    tidy_pattern: $("tidy-pattern").checked,
+    merge_similar: $("merge-similar").checked,
     tidy_dots: $("tidy-dots").checked,
+    tidy_pattern: $("tidy-pattern").checked,
     outline: $("outline").checked,
-    ...($("mode").value === "photo" ? { smooth: $("smooth").value } : {}),
-    ...(SPEC.modes[$("mode").value].merge_similar ? { merge_similar: $("merge-similar").checked } : {}),
+    canvas: cw === "" ? null : [intField("canvas-w", "キャンバスの幅"), intField("canvas-h", "キャンバスの高さ")],
   };
 }
 
@@ -434,7 +469,13 @@ function showError(text, detail = "", candidates = []) {
       b.type = "button";
       b.className = "secondary";
       b.textContent = `${c.width}（${c.width}×${c.height} ドット。${c.note}）`;
-      b.addEventListener("click", () => { $("width").value = String(c.width); foldRefresh(); runConvert(); });
+      b.addEventListener("click", () => {
+        $("find-grid").value = "width";
+        syncGrid();
+        $("width").value = String(c.width);
+        foldRefresh();
+        runConvert();
+      });
       box.appendChild(b);
     }
   }
@@ -558,6 +599,11 @@ function startWorker() {
   };
 }
 
+// JSON の preset.changed の項目の名前（画面の言葉）
+const ITEM_NAMES = { orient: "写真の向き", find_grid: "マス目の決め方", width: "横のマス数", max_size: "大きさの上限",
+  smooth: "色の塊をまとめる", colors: "色数", four_bit: "4096 色に丸める", keep_darkest: "いちばん暗い色",
+  merge_similar: "似た色をまとめる", tidy_dots: "孤立したドット", tidy_pattern: "模様を整える", outline: "輪郭の線",
+  canvas: "余白（キャンバス）" };
 function outName() { return srcFile && srcFile.name ? srcFile.name.replace(/\.[^.]+$/, "") : "still"; }
 
 async function runConvert() {
@@ -587,7 +633,8 @@ async function runConvert() {
     setLink("dl-png", outPngUrl, `${outName()}.png`);
     setLink("dl-json", outJsonUrl, `${outName()}.json`);
     const d = result.dots;
-    const how = (result.photo ? `写真の下書き（まとめの強さ ${SPEC.smooth_levels.find((s) => s.value === result.photo.smooth.level).label}）、` : "")
+    const sm = result.photo && result.photo.smooth;
+    const how = (sm ? `${info.settings.mode === "photo" ? "写真の下書き" : "色の塊をまとめる"}（まとめの強さ ${SPEC.smooth_levels.find((s) => s.value === sm.level).label}）、` : "")
       + (d.method === "grid" ? `グリッド検出（1 ドット ${d.dot_size.toFixed(1)}px）`
                              : `横 ${d.width} マス（1 マス ${d.cell_size[0].toFixed(1)}×${d.cell_size[1].toFixed(1)}px）`);
     $("out-meta").textContent = `${how} → ${info.picture.width}×${info.picture.height} ドット、${result.colors.used} 色`
@@ -595,7 +642,8 @@ async function runConvert() {
       + (result.similar ? `、似た色をまとめた組 ${result.similar.merged}` : "")
       + (result.tidy_dots ? `、孤立したドットを置き換えた数 ${result.tidy_dots.changed}` : "")
       + (result.outline ? `、輪郭の線を引いたドット ${result.outline.drawn}` : "")
-      + (result.pattern ? `、模様を整えた範囲 ${result.pattern.regions} か所（${result.pattern.changed} ドット）` : "");
+      + (result.pattern ? `、模様を整えた範囲 ${result.pattern.regions} か所（${result.pattern.changed} ドット）` : "")
+      + (info.preset ? `。初めの設定から変えた項目: ${Object.keys(info.preset.changed).map((k) => ITEM_NAMES[k] || k).join("・")}` : "");
     if (result.overlay_base64) {
       overlayUrl = URL.createObjectURL(new Blob([decodeBase64(result.overlay_base64)], { type: "image/png" }));
       overlayImg = await loadImage(overlayUrl);
