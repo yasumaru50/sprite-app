@@ -1,0 +1,301 @@
+{
+  "app": "still",
+  "version": 1,
+  "source": "photo01.jpg",
+  "input": {
+    "width": 2448,
+    "height": 3264
+  },
+  "width": 320,
+  "height": 427,
+  "picture": {
+    "width": 320,
+    "height": 427
+  },
+  "pixel_aspect": "1:1",
+  "dots": {
+    "method": "photo",
+    "cells": [320, 427],
+    "width": 320,
+    "cell_size": [7.65, 7.644],
+    "area": [0, 0, 2448, 3264]
+  },
+  "photo": {
+    "orientation": 1,
+    "prescale": 4,
+    "work_size": [1280, 1708],
+    "smooth": {
+      "level": "medium",
+      "method": "kuwahara",
+      "radius": 4,
+      "passes": 2
+    }
+  },
+  "canvas": null,
+  "colors": {
+    "limit": 32,
+    "used": 31,
+    "chosen": 32,
+    "merged_by_4bit": 0,
+    "darkest_kept": "#0C0C0C",
+    "merged_similar": 1
+  },
+  "palette": [
+    {
+      "index": 0,
+      "rgb4": null,
+      "rgb": [12, 12, 12],
+      "hex": "#0C0C0C",
+      "count": 4851
+    },
+    {
+      "index": 1,
+      "rgb4": null,
+      "rgb": [28, 27, 20],
+      "hex": "#1C1B14",
+      "count": 2142
+    },
+    {
+      "index": 2,
+      "rgb4": null,
+      "rgb": [69, 27, 16],
+      "hex": "#451B10",
+      "count": 710
+    },
+    {
+      "index": 3,
+      "rgb4": null,
+      "rgb": [44, 43, 14],
+      "hex": "#2C2B0E",
+      "count": 1929
+    },
+    {
+      "index": 4,
+      "rgb4": null,
+      "rgb": [55, 55, 20],
+      "hex": "#373714",
+      "count": 3054
+    },
+    {
+      "index": 5,
+      "rgb4": null,
+      "rgb": [68, 68, 59],
+      "hex": "#44443B",
+      "count": 4783
+    },
+    {
+      "index": 6,
+      "rgb4": null,
+      "rgb": [75, 86, 34],
+      "hex": "#4B5622",
+      "count": 5594
+    },
+    {
+      "index": 7,
+      "rgb4": null,
+      "rgb": [148, 56, 38],
+      "hex": "#943826",
+      "count": 248
+    },
+    {
+      "index": 8,
+      "rgb4": null,
+      "rgb": [106, 98, 103],
+      "hex": "#6A6267",
+      "count": 9680
+    },
+    {
+      "index": 9,
+      "rgb4": null,
+      "rgb": [98, 106, 62],
+      "hex": "#626A3E",
+      "count": 7452
+    },
+    {
+      "index": 10,
+      "rgb4": null,
+      "rgb": [186, 68, 69],
+      "hex": "#BA4445",
+      "count": 111
+    },
+    {
+      "index": 11,
+      "rgb4": null,
+      "rgb": [146, 102, 82],
+      "hex": "#926652",
+      "count": 1438
+    },
+    {
+      "index": 12,
+      "rgb4": null,
+      "rgb": [119, 123, 90],
+      "hex": "#777B5A",
+      "count": 7803
+    },
+    {
+      "index": 13,
+      "rgb4": null,
+      "rgb": [228, 74, 81],
+      "hex": "#E44A51",
+      "count": 182
+    },
+    {
+      "index": 14,
+      "rgb4": null,
+      "rgb": [141, 138, 129],
+      "hex": "#8D8A81",
+      "count": 9199
+    },
+    {
+      "index": 15,
+      "rgb4": null,
+      "rgb": [134, 149, 63],
+      "hex": "#86953F",
+      "count": 1800
+    },
+    {
+      "index": 16,
+      "rgb4": null,
+      "rgb": [101, 178, 37],
+      "hex": "#65B225",
+      "count": 4
+    },
+    {
+      "index": 17,
+      "rgb4": null,
+      "rgb": [189, 146, 136],
+      "hex": "#BD9288",
+      "count": 355
+    },
+    {
+      "index": 18,
+      "rgb4": null,
+      "rgb": [202, 145, 93],
+      "hex": "#CA915D",
+      "count": 470
+    },
+    {
+      "index": 19,
+      "rgb4": null,
+      "rgb": [162, 162, 125],
+      "hex": "#A2A27D",
+      "count": 39682
+    },
+    {
+      "index": 20,
+      "rgb4": null,
+      "rgb": [151, 173, 82],
+      "hex": "#97AD52",
+      "count": 502
+    },
+    {
+      "index": 21,
+      "rgb4": null,
+      "rgb": [234, 129, 114],
+      "hex": "#EA8172",
+      "count": 8
+    },
+    {
+      "index": 22,
+      "rgb4": null,
+      "rgb": [233, 168, 66],
+      "hex": "#E9A842",
+      "count": 139
+    },
+    {
+      "index": 23,
+      "rgb4": null,
+      "rgb": [223, 175, 152],
+      "hex": "#DFAF98",
+      "count": 124
+    },
+    {
+      "index": 24,
+      "rgb4": null,
+      "rgb": [163, 207, 96],
+      "hex": "#A3CF60",
+      "count": 30
+    },
+    {
+      "index": 25,
+      "rgb4": null,
+      "rgb": [240, 198, 129],
+      "hex": "#F0C681",
+      "count": 141
+    },
+    {
+      "index": 26,
+      "rgb4": null,
+      "rgb": [199, 208, 210],
+      "hex": "#C7D0D2",
+      "count": 14327
+    },
+    {
+      "index": 27,
+      "rgb4": null,
+      "rgb": [188, 219, 179],
+      "hex": "#BCDBB3",
+      "count": 157
+    },
+    {
+      "index": 28,
+      "rgb4": null,
+      "rgb": [243, 225, 195],
+      "hex": "#F3E1C3",
+      "count": 684
+    },
+    {
+      "index": 29,
+      "rgb4": null,
+      "rgb": [218, 233, 239],
+      "hex": "#DAE9EF",
+      "count": 5131
+    },
+    {
+      "index": 30,
+      "rgb4": null,
+      "rgb": [250, 253, 252],
+      "hex": "#FAFDFC",
+      "count": 13910
+    }
+  ],
+  "similar": {
+    "merged": 1,
+    "distance": 0.04,
+    "space": "OKLab",
+    "list": [
+      {
+        "from": "#A3A69B",
+        "to": "#A2A27D",
+        "count": 16973,
+        "distance": 0.0398
+      }
+    ]
+  },
+  "tidy_dots": {
+    "changed": 80,
+    "settings": {
+      "min_same": 7,
+      "neighbors": 8,
+      "passes": 1,
+      "keep_darkest": true,
+      "keep_edges": true
+    }
+  },
+  "settings": {
+    "mode": "photo",
+    "colors": 32,
+    "four_bit": false,
+    "max_size": [1920, 1080],
+    "width": 320,
+    "canvas": null,
+    "keep_darkest": true,
+    "merge_similar": true,
+    "tidy_dots": true,
+    "smooth": "medium",
+    "outline": false
+  },
+  "warnings": [
+    "見た目でほぼ同じ色 1 組をまとめ、31 色になりました（上限 32 色）"
+  ]
+}
