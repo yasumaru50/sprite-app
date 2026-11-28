@@ -78,6 +78,11 @@
   .swatch span.chip { width: 40px; height: 28px; border: 1px solid var(--line); border-radius: 4px; display: block; }
   .swatch b { color: var(--text); font-weight: 600; }
   footer { color: var(--muted); font-size: 0.82em; }
+  .anchor-grid { display: grid; grid-template-columns: repeat(3, 2.2em); gap: 3px; }
+  .anchor-grid button { padding: 0; height: 2.2em; font-size: 0.85em; background: transparent; color: var(--accent); }
+  .anchor-grid button[aria-pressed=true] { background: var(--accent); color: var(--accent-text); }
+  .width-picks { display: flex; flex-wrap: wrap; gap: 6px; }
+  .width-picks button { font-size: 0.85em; padding: 3px 10px; }
   /* 説明の文（「？」を押したときだけ出す。Sprite App と同じしくみ） */
   .help:not(.open) { display: none !important; }
   .help-row { display: inline-flex; align-items: center; gap: 6px; }
@@ -125,7 +130,7 @@
     </div>
 
     <details class="fold" id="fold-need">
-      <summary><span class="fold-name">必要なときに開く</span><span class="fold-mark" hidden>（変更あり）</span><small class="fold-what">工程の順: 向き・マス目・色の塊・減色・似た色・孤立したドット・模様・輪郭・余白</small></summary>
+      <summary><span class="fold-name">必要なときに開く</span><span class="fold-mark" hidden>（変更あり）</span><small class="fold-what">工程の順: 向き・マス目・比率・色の塊・減色・似た色・孤立したドット・模様・輪郭・余白</small></summary>
       <div class="fold-body">
         <div class="controls">
           <div class="field">
@@ -151,6 +156,26 @@
             <span class="label" id="max-label">大きさの上限</span>
             <span class="pair"><input type="number" id="max-w" min="1" step="1" aria-label="上限の幅">×<input type="number" id="max-h" min="1" step="1" aria-label="上限の高さ"></span>
             <small class="help" data-help-at="max-label">ドット数（幅×高さ）。超えたら出力せずに、収まる「横のマス数」の候補を出します。CLI の --max-size</small>
+          </div>
+        </div>
+        <div class="controls" style="margin-top:10px">
+          <div class="field">
+            <label for="aspect">比率に合わせて切り抜く</label>
+            <select id="aspect"></select>
+            <span class="pair" id="aspect-custom" hidden><input type="number" id="aspect-w" min="1" step="1" aria-label="比率の幅">:<input type="number" id="aspect-h" min="1" step="1" aria-label="比率の高さ"></span>
+            <small class="help">拡大・縮小はせず、切り抜くだけで この比率にします（余白を足すときは下の「余白（キャンバス）」）。「横のマス数で分ける」ときは入力の画像を先に切り抜くので、横 320・16:9 ならちょうど 320×180 ドットです。「マス目を探す」ときは見つけたマス目のまま、マス単位で切ります（格子はずれません）。「数値で入れる」は正の整数どうし（例 21:9・1200:630）。CLI の --aspect</small>
+            <span class="width-picks" id="aspect-widths" hidden></span>
+          </div>
+          <div class="field" id="anchor-field">
+            <span class="label" id="anchor-label">切る位置</span>
+            <span class="pair">
+              <span class="anchor-grid" id="anchor-grid"></span>
+              <span style="display:flex;flex-direction:column;gap:4px">
+                <span class="pair">横 <input type="number" id="anchor-x" min="0" max="100" step="1" aria-label="切る位置の横（%）">%</span>
+                <span class="pair">縦 <input type="number" id="anchor-y" min="0" max="100" step="1" aria-label="切る位置の縦（%）">%</span>
+              </span>
+            </span>
+            <small class="help" data-help-at="anchor-label">どこを残すか（横・縦それぞれ 0〜100 の%）。50・50 は中央、横 50・縦 0 は上寄せ、横 0・縦 50 は左寄せ。ボタンは 0・50・100 の組み合わせで、ほかの数は欄に入れます。比率が「元のまま」のときは使いません。CLI の --anchor</small>
           </div>
         </div>
         <div class="controls" style="margin-top:10px">
@@ -366,6 +391,67 @@ $("colors").max = SPEC.colors.max;
 for (const n of SPEC.modern_colors) $("colors-list").appendChild(new Option(`${n} 色`, String(n)));
 for (const s of SPEC.smooth_choices) $("smooth").add(new Option(s.label, s.value));
 for (const s of SPEC.dither_choices) $("dither").add(new Option(s.label, s.value));
+$("aspect").add(new Option("元のまま", ""));
+for (const [a, b] of SPEC.aspect_choices) $("aspect").add(new Option(`${a}:${b}`, `${a}:${b}`));
+$("aspect").add(new Option("数値で入れる", "custom"));
+const ANCHOR_NAMES = { "0,0": "左上", "50,0": "上", "100,0": "右上", "0,50": "左", "50,50": "中央", "100,50": "右",
+  "0,100": "左下", "50,100": "下", "100,100": "右下" };
+for (const y of [0, 50, 100]) for (const x of [0, 50, 100]) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.dataset.anchor = `${x},${y}`;
+  b.textContent = ANCHOR_NAMES[`${x},${y}`];
+  b.title = `横 ${x}%・縦 ${y}%`;
+  b.addEventListener("click", () => {
+    $("anchor-x").value = String(x);
+    $("anchor-y").value = String(y);
+    syncAspect();
+    foldRefresh();
+  });
+  $("anchor-grid").appendChild(b);
+}
+// 比率の選択（数値で入れるときの欄・切る位置を使うか・16:9 の幅の候補）
+function aspectRatio() {
+  const v = $("aspect").value;
+  if (v === "") return null;
+  if (v !== "custom") return v.split(":").map(Number);
+  return [$("aspect-w").value.trim(), $("aspect-h").value.trim()];
+}
+function syncAspect() {
+  const v = $("aspect").value;
+  $("aspect-custom").hidden = v !== "custom";
+  const off = v === "";
+  for (const el of [$("anchor-x"), $("anchor-y"), ...$("anchor-grid").querySelectorAll("button")]) el.disabled = off;
+  const key = `${$("anchor-x").value.trim()},${$("anchor-y").value.trim()}`;
+  for (const b of $("anchor-grid").querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.anchor === key));
+  const r = aspectRatio();
+  const picks = r && SPEC.aspect_widths.find((c) => String(c.aspect[0]) === String(r[0]) && String(c.aspect[1]) === String(r[1]));
+  const box = $("aspect-widths");
+  box.innerHTML = "";
+  box.hidden = !picks;
+  if (picks) {
+    box.appendChild(document.createTextNode("横のマス数:"));
+    for (const n of picks.widths) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "secondary";
+      b.textContent = `${n}（${n}×${Math.floor((2 * n * picks.aspect[1] + picks.aspect[0]) / (2 * picks.aspect[0]))}）`;
+      b.title = "「横のマス数で分ける」にして、この数を入れます";
+      b.addEventListener("click", () => {
+        $("find-grid").value = "width";
+        syncGrid();
+        $("width").value = String(n);
+        foldRefresh();
+      });
+      box.appendChild(b);
+    }
+  }
+}
+$("aspect").addEventListener("change", () => {
+  syncAspect();
+  if ($("aspect").value === "custom" && !$("aspect-w").value) $("aspect-w").focus();
+});
+for (const id of ["aspect-w", "aspect-h", "anchor-x", "anchor-y"]) $(id).addEventListener("input", syncAspect);
 $("colors-help").textContent = `パレットの色数の上限（${SPEC.colors.min}〜${SPEC.colors.max}。よく使う数: ${SPEC.modern_colors.join("・")}）。似た色が多いときは、これより少なくなることがあります。CLI の --colors`;
 for (const z of [1, 2, 3, 4, 6, 8]) $("zoom").add(new Option(`${z} 倍`, String(z)));
 $("zoom").value = "3";
@@ -377,6 +463,11 @@ function applyMode(key) {
   $("width").value = m.width ? String(m.width) : "";
   $("max-w").value = m.max_size[0];
   $("max-h").value = m.max_size[1];
+  $("aspect").value = m.aspect ? `${m.aspect[0]}:${m.aspect[1]}` : "";
+  $("aspect-w").value = m.aspect ? String(m.aspect[0]) : "";
+  $("aspect-h").value = m.aspect ? String(m.aspect[1]) : "";
+  $("anchor-x").value = String(m.anchor[0]);
+  $("anchor-y").value = String(m.anchor[1]);
   $("smooth").value = m.smooth;
   $("colors").value = m.colors;
   $("four-bit").checked = m.four_bit;
@@ -390,6 +481,7 @@ function applyMode(key) {
   $("canvas-h").value = m.canvas ? m.canvas[1] : "";
   for (const el of foldControls()) foldDefaults.set(el, ctlValue(el));
   syncGrid();
+  syncAspect();
   foldRefresh();
 }
 // 「マス目を探す」のときは横のマス数を使わない（入れられないようにする）
@@ -409,7 +501,9 @@ function ctlValue(el) { return el.type === "checkbox" ? el.checked : el.value; }
 function foldControls() { return [...$("fold-need").querySelectorAll("input, select")]; }
 function foldRefresh() {
   // 横のマス数は「横のマス数で分ける」のときだけ数える（マス目を探すときは使わない）
-  const changed = foldControls().some((el) => foldDefaults.has(el) && !(el.id === "width" && el.disabled)
+  // 比率が「元のまま」のときの切る位置、「数値で入れる」でないときの比率の欄も数えない
+  const changed = foldControls().some((el) => foldDefaults.has(el) && !el.disabled
+                                               && !(el.closest("[hidden]"))
                                                && ctlValue(el) !== foldDefaults.get(el));
   $("fold-need").querySelector(".fold-mark").hidden = !changed;
   $("mode-mark").hidden = !changed;
@@ -432,6 +526,12 @@ function intField(id, name, { min = 1, max = SPEC.max_side, optional = false } =
   if (!Number.isInteger(v) || v < min || v > max) throw new Error(`${name}は ${min}〜${max} の整数で入れてください（いまは「${text}」）。`);
   return v;
 }
+function aspectSetting() {
+  const v = $("aspect").value;
+  if (v === "") return null;
+  if (v !== "custom") return v;
+  return [intField("aspect-w", "比率の幅", { max: 100000 }), intField("aspect-h", "比率の高さ", { max: 100000 })];
+}
 function currentSettings() {
   const cw = $("canvas-w").value.trim(), ch = $("canvas-h").value.trim();
   if ((cw === "") !== (ch === "")) throw new Error("キャンバスは幅と高さの両方を入れてください（なしにするときは両方とも空に）。");
@@ -442,6 +542,9 @@ function currentSettings() {
     orient: $("orient").checked,
     find_grid: grid,
     width: grid ? null : intField("width", "横のマス数"),
+    aspect: aspectSetting(),
+    anchor: $("aspect").value === "" ? null : [intField("anchor-x", "切る位置の横", { min: 0, max: 100 }),
+                                               intField("anchor-y", "切る位置の縦", { min: 0, max: 100 })],
     max_size: [intField("max-w", "上限の幅"), intField("max-h", "上限の高さ")],
     smooth: $("smooth").value,
     colors: intField("colors", "色数", { min: SPEC.colors.min, max: SPEC.colors.max }),
@@ -537,9 +640,24 @@ function render() {
     if (srcImg) {
       // キャンバスで余白を足したときは、元の絵を余白の内側（絵の部分）に合わせる
       const pic = outImg.picture || { width: outImg.naturalWidth, height: outImg.naturalHeight };
-      put($("src-stage"), srcImg, pic.width * z, pic.height * z);
+      const box = outImg.aspectBox;
+      if (box) {
+        // 比率に合わせて切り抜いたときは、元の絵の切り抜いた範囲（box）だけを、結果と同じ大きさで見せる
+        const sx = pic.width * z / (box[2] - box[0]), sy = pic.height * z / (box[3] - box[1]);
+        const clip = document.createElement("div");
+        clip.style.cssText = `position:relative;overflow:hidden;width:${pic.width * z}px;height:${pic.height * z}px`;
+        srcImg.style.cssText = `position:absolute;max-width:none;left:${-box[0] * sx}px;top:${-box[1] * sy}px;`
+          + `width:${srcImg.naturalWidth * sx}px;height:${srcImg.naturalHeight * sy}px`;
+        clip.appendChild(srcImg);
+        $("src-stage").innerHTML = "";
+        $("src-stage").appendChild(clip);
+      } else {
+        srcImg.style.cssText = "";
+        put($("src-stage"), srcImg, pic.width * z, pic.height * z);
+      }
     }
   } else if (srcImg) {
+    srcImg.style.cssText = "";
     put($("src-stage"), srcImg, srcImg.naturalWidth, srcImg.naturalHeight);
   }
 }
@@ -616,7 +734,8 @@ function startWorker() {
 }
 
 // JSON の preset.changed の項目の名前（画面の言葉）
-const ITEM_NAMES = { orient: "写真の向き", find_grid: "マス目の決め方", width: "横のマス数", max_size: "大きさの上限",
+const ITEM_NAMES = { orient: "写真の向き", find_grid: "マス目の決め方", width: "横のマス数", aspect: "比率に合わせて切り抜く",
+  anchor: "切る位置", max_size: "大きさの上限",
   smooth: "色の塊をまとめる", colors: "色数", four_bit: "4096 色に丸める", keep_darkest: "いちばん暗い色",
   merge_similar: "似た色をまとめる", dither: "ディザ", tidy_dots: "孤立したドット", tidy_pattern: "模様を整える", outline: "輪郭の線",
   canvas: "余白（キャンバス）" };
@@ -646,6 +765,7 @@ async function runConvert() {
     outImg = await loadImage(outPngUrl);
     const info = JSON.parse(result.json_text);
     outImg.picture = info.picture;
+    outImg.aspectBox = info.aspect ? info.aspect.box : null;
     setLink("dl-png", outPngUrl, `${outName()}.png`);
     setLink("dl-json", outJsonUrl, `${outName()}.json`);
     const d = result.dots;
@@ -654,6 +774,7 @@ async function runConvert() {
       + (d.method === "grid" ? `グリッド検出（1 ドット ${d.dot_size.toFixed(1)}px）`
                              : `横 ${d.width} マス（1 マス ${d.cell_size[0].toFixed(1)}×${d.cell_size[1].toFixed(1)}px）`);
     $("out-meta").textContent = `${how} → ${info.picture.width}×${info.picture.height} ドット、${result.colors.used} 色`
+      + (result.aspect ? `、比率 ${result.aspect.ratio.join(":")} に${result.aspect.stage === "input" ? "入力の段階" : "マス単位"}で切り抜き（切り落とした画素 左 ${result.aspect.cut.left}・上 ${result.aspect.cut.top}・右 ${result.aspect.cut.right}・下 ${result.aspect.cut.bottom}）` : "")
       + (result.canvas ? `、キャンバス ${result.width}×${result.height}` : "")
       + (result.similar ? `、似た色をまとめた組 ${result.similar.merged}` : "")
       + (result.dither ? `、網目を入れたドット ${result.dither.changed}（網目の範囲 ${result.dither.area}）` : "")
