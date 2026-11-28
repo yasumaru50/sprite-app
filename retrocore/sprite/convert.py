@@ -117,6 +117,10 @@ class SpriteSettings:
         unknown = sorted(set(values) - names)
         if unknown:
             raise ValueError(f"知らない設定です: {', '.join(unknown)}")
+        if "dot_size" in values:
+            # 画面の欄・.anims.json の settings は 6.5 か [横, 縦]（JSON の並び）。CLI の --dot-size と同じ (横, 縦) にする
+            from .dotsize import parse_dot_size
+            values = dict(values, dot_size=parse_dot_size(values["dot_size"]))
         return cls(**values)
 
 
@@ -251,13 +255,22 @@ def convert_image_bytes(data: bytes, settings: dict | SpriteSettings | None = No
         rgba = decode_image(data)
         res = convert_sprite(rgba, settings)
     except Exception as e:  # 画面にそのまま出すので、どんなエラーでも言葉にして返す
-        return {"ok": False, "error": friendly_error(e), "detail": error_detail(e)}
+        out = {"ok": False, "error": friendly_error(e), "detail": error_detail(e)}
+        if isinstance(e, GridNotFoundError):
+            out["dot_candidates"] = _candidates(e)
+        return out
     img = res.image
     opaque = img[img[..., 3] > 0][:, :3]
     n_colors = int(len(np.unique(opaque.reshape(-1, 3), axis=0))) if len(opaque) else 0
     return {"ok": True, "png": encode_png(img), "width": int(img.shape[1]), "height": int(img.shape[0]),
             "colors": n_colors, "steps": [r.description for r in res.steps], "warnings": list(res.warnings),
             "skipped": list(res.skipped)}
+
+
+def _candidates(e) -> list[float]:
+    """格子が見つからなかったときの、次に試せるドットの大きさ（`dotsize.candidate_sizes()`。それ以外のエラーは空）。"""
+    from .dotsize import candidates_of
+    return candidates_of(e) if isinstance(e, GridNotFoundError) else []
 
 
 def convert_for_web(data: bytes, settings_json: str = "{}") -> str:
@@ -1041,7 +1054,7 @@ def frames_convert_bytes(data, request: dict) -> dict:
     except (F.FramesError, GridNotFoundError) as e:
         boxes = e.extra.get("boxes") if isinstance(e, F.FramesError) else None
         return {"ok": True, "made": False, "error": str(e), "code": getattr(e, "code", "grid_not_found"),
-                "skipped_json": F.frames_skipped_json(e, name), "boxes": boxes}
+                "skipped_json": F.frames_skipped_json(e, name), "boxes": boxes, "dot_candidates": _candidates(e)}
     except Exception as e:
         return {"ok": False, "error": friendly_error(e), "detail": error_detail(e)}
     token = int(_FRAMES_CACHE.get("token", 0)) + 1
@@ -1424,7 +1437,7 @@ def anims_convert_bytes(files: list, request: dict) -> dict:
         res = convert_anims(images, settings, cfg)
     except (F.FramesError, GridNotFoundError) as e:
         return {"ok": True, "made": False, "error": str(e), "code": getattr(e, "code", "grid_not_found"),
-                "skipped_json": F.frames_skipped_json(e, cfg.name), "boxes": None}
+                "skipped_json": F.frames_skipped_json(e, cfg.name), "boxes": None, "dot_candidates": _candidates(e)}
     except ValueError as e:
         return {"ok": False, "error": f"動きをまとめられませんでした: {e}", "detail": error_detail(e)}
     except Exception as e:
@@ -1571,4 +1584,94 @@ def anims_gif_for_web(sheet_png: bytes, sheet_json_text: str, anim: str, options
     res = anims_gif_bytes(sheet_png, sheet_json_text, anim, values)
     if "gif" in res:
         res["gif_base64"] = base64.b64encode(res.pop("gif")).decode("ascii")
+    return json.dumps(res, ensure_ascii=False)
+
+
+# ---- ブラウザ UI（Pyodide）向け: 格子が見つからなかったときの、ドットの大きさの候補 ----
+# 候補の大きさは変換のエラー（"dot_candidates"）に入っている（`dotsize.candidate_sizes()`。CLI の「次に試せる大きさ」と同じ）。
+# ここでは候補ごとに、その大きさで変換した絵（小さな見本）と、コマごとのキャラの高さを返す。押した候補の変換は、
+# ふつうの変換（欄にその数を入れて「② 変換する」と同じ）でやり直すので、ここで作った絵は見本にだけ使う。
+
+def dot_candidates_bytes(files: list, request: dict) -> dict:
+    """候補ごとに変換する（例外は投げない）。`files` は [(ファイルの名前, バイト列), ...]（1 枚の絵は 1 つ）、
+    `request` は {"kind": "single" / "frames" / "anims", "sizes": [6, 6.5, 7], "settings": 変換の設定,
+    "frames": {"frame_count", "align", "align_y"}（コマが並んだ絵）, "match_height"（つなげるとき）, "anims": 動きをまとめる設定}。
+
+    結果: {"ok": True, "candidates": [{"dot_size": 6.5, "ok": True, "png": 見本の絵（1 枚の絵はその絵、コマはそろえたコマを並べた絵）,
+    "heights": [コマごとのキャラの高さ（ドット。1 枚の絵は絵の高さ 1 つ）], "widths": [...]}
+    か {"dot_size", "ok": False, "error"}, ...]}。設定の間違い: {"ok": False, "error", "detail"}。
+    """
+    from . import frames as F
+    from .dotsize import parse_dot_size
+    try:
+        unknown = sorted(set(request) - {"kind", "sizes", "settings", "frames", "match_height", "anims"})
+        if unknown:
+            raise ValueError(f"知らない設定です: {', '.join(unknown)}")
+        kind = request.get("kind", "single")
+        if kind not in ("single", "frames", "anims"):
+            raise ValueError(f"kind は single / frames / anims のどれかです: {kind}")
+        sizes = request.get("sizes") or []
+        if not isinstance(sizes, list) or len(sizes) > 16:
+            raise ValueError("sizes は [6, 6.5, 7] のような数の並びで渡してください")
+        sizes = [parse_dot_size(v)[0] for v in sizes]
+        base = dict(request.get("settings") or {})
+        base.pop("dot_size", None)
+        SpriteSettings.from_dict(base).validate()
+        fr = dict(request.get("frames") or {})
+        fs = F.FrameSettings(frame_count=fr.get("frame_count"), align=fr.get("align", F.DEFAULT_ALIGN),
+                             align_y=fr.get("align_y", F.DEFAULT_ALIGN_Y))
+        fs.validate()
+        cfg = _anims_config(request.get("anims"), base) if kind == "anims" else None
+        images = []
+        for fname, fdata in files:
+            try:
+                images.append((str(fname), decode_image(bytes(fdata))))
+            except Exception as e:
+                raise ValueError(f"{fname}: {friendly_error(e)}") from None
+        if not images:
+            raise ValueError("画像がありません")
+    except Exception as e:
+        return {"ok": False, "error": friendly_error(e), "detail": error_detail(e)}
+    out = []
+    for size in sizes:
+        settings = SpriteSettings.from_dict(dict(base, dot_size=size))
+        try:
+            if kind == "single":
+                img = convert_sprite(images[0][1], settings).image
+                bb = F._bbox(img[..., 3] > 0)
+                hs, ws = ([bb[3] - bb[1]], [bb[2] - bb[0]]) if bb is not None else ([0], [0])
+                view = img
+            else:
+                if kind == "anims":
+                    from .anims import convert_anims
+                    res = convert_anims(images, settings, cfg)
+                else:
+                    from .join import convert_frame_files
+                    res = convert_frame_files(images, settings, fs, match_height=bool(request.get("match_height", False)))
+                hs = [int(f.shape[0]) for f in res.raw]
+                ws = [int(f.shape[1]) for f in res.raw]
+                view = F.source_strip(res)
+        except Exception as e:
+            msg = str(e) if isinstance(e, (F.FramesError, GridNotFoundError, ValueError)) else friendly_error(e)
+            out.append({"dot_size": size, "ok": False, "error": msg})
+            continue
+        out.append({"dot_size": size, "ok": True, "png": encode_png(view), "heights": hs, "widths": ws})
+    return {"ok": True, "candidates": out}
+
+
+def dot_candidates_for_web(datas: list, names: list, request_json: str = "{}") -> str:
+    """ブラウザ UI（Pyodide）から呼ぶ形。結果は JSON 文字列（見本の絵は base64 の "png_base64"）。"""
+    try:
+        values = json.loads(request_json or "{}")
+        if not isinstance(values, dict):
+            raise ValueError("設定は {\"kind\": \"single\", \"sizes\": [6, 6.5, 7]} のような形で渡してください")
+        if len(datas) != len(names) or not datas:
+            raise ValueError("ファイルの名前とバイト列の数が合いません")
+    except ValueError as e:
+        return json.dumps({"ok": False, "error": friendly_error(ValueError(f"設定を読めません: {e}")),
+                           "detail": error_detail(e)}, ensure_ascii=False)
+    res = dot_candidates_bytes(list(zip(names, datas)), values)
+    for c in res.get("candidates", []):
+        if "png" in c:
+            c["png_base64"] = base64.b64encode(c.pop("png")).decode("ascii")
     return json.dumps(res, ensure_ascii=False)
