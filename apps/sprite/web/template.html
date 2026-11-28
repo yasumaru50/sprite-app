@@ -219,6 +219,16 @@
   .message.info.flash { animation: flash 1.2s ease-out 1; }
   @keyframes flash { from { box-shadow: 0 0 0 6px var(--accent); } to { box-shadow: 0 0 0 0 transparent; } }
   #frames-skip { white-space: normal; }
+  #dot-size { width: 6em; }
+  #dot-cands { white-space: normal; }
+  #dot-cands-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  #dot-cands-list button { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left;
+                           background: var(--panel); color: var(--text); border: 1px solid var(--line); max-width: 100%; }
+  #dot-cands-list button:hover, #dot-cands-list button:focus-visible { border-color: var(--accent); }
+  #dot-cands-list button b { font-size: 1.05em; }
+  #dot-cands-list img { image-rendering: pixelated; max-width: 100%; height: auto; background:
+                        repeating-conic-gradient(#ddd 0% 25%, #fff 0% 50%) 50% / 8px 8px; }
+  #dot-cands-list small { font-size: 0.85em; color: var(--muted); }
   #frames-extra a, #frames-extra button { font-size: 0.9em; padding: 6px 14px; }
   #edit-panel .controls .field { min-width: 15em; }
   #edit-panel input[type=file] { max-width: 100%; }
@@ -498,10 +508,16 @@
       </div>
     </div>
     <details class="fold" id="fold-need">
-      <summary><span class="fold-name">必要なときに開く</span><span class="fold-mark" hidden>（変更あり）</span><small class="fold-what">色数・クリーンアップ・縁取り／コマの数・そろえ方・上げ下げ／分ける高さ</small></summary>
+      <summary><span class="fold-name">必要なときに開く</span><span class="fold-mark" hidden>（変更あり）</span><small class="fold-what">ドットの大きさ・色数・クリーンアップ・縁取り／コマの数・そろえ方・上げ下げ／分ける高さ</small></summary>
       <div class="fold-body">
       <h3 id="convert-settings-title">変換の設定</h3>
       <div class="controls">
+      <div class="field">
+        <label for="dot-size">ドットの大きさ</label>
+        <input type="text" id="dot-size" inputmode="decimal" spellcheck="false" placeholder="自動">
+        <small id="dot-size-help" class="help">元の絵のドット 1 個が何画素か（小数も可。例 6.5）。空なら自動（CLI の --dot-size）。
+          自動で見つからないときは候補が出ます。つなげる・まとめるときは全部のファイルに同じ大きさを使います</small>
+      </div>
       <div class="field">
         <label for="colors">色数</label>
         <input type="number" id="colors" step="1">
@@ -654,6 +670,14 @@
       </details>
     </div>
     <div id="warnings" class="message warn" hidden></div>
+    <div id="dot-cands" class="message warn" hidden>
+      <div id="dot-cands-title" data-help-name="ドットの大きさの候補"><b>ドットの大きさの候補</b></div>
+      <div class="note help" data-help-at="dot-cands-title">自動の検出でいちばん点が高かった大きさと、その半分の近くを 0.5 画素ずつ試しました
+        （AI の絵では、本当のドットの 2 倍の所に山が出ることが多いため）。コマごと・段ごとのキャラの高さ（ドット）がそろう大きさがおすすめです。
+        押すと「ドットの大きさ」の欄にその数を入れて変換します。</div>
+      <div id="dot-cands-status" role="status" aria-live="polite"></div>
+      <div id="dot-cands-list"></div>
+    </div>
     <div id="frames-skip" class="message warn" hidden>
       <div id="frames-skip-text" style="white-space:pre-wrap;font-weight:600"></div>
       <div class="actions" style="margin-top:8px"><a id="dl-skipped" class="button secondary" href="#">作らなかった理由を保存（JSON）</a></div>
@@ -1085,6 +1109,7 @@ let fxForWeb = null;
 let zipForWeb = null;
 let compareForWeb = null;
 let animsConvertForWeb = null, animsSheetsForWeb = null, animsGifForWeb = null;
+let dotCandidatesForWeb = null;
 async function init(indexURL, sources) {
   importScripts(indexURL + "pyodide.js");
   pyodide = await loadPyodide({ indexURL });
@@ -1119,6 +1144,10 @@ async function init(indexURL, sources) {
     "    return anims_convert_files_for_web([b.to_bytes() for b in js_list], json.loads(names_json), request_json)",
     "def sprite_app_anims_gif(js_bytes, sheet_json, anim, options_json):",
     "    return anims_gif_for_web(js_bytes.to_bytes(), sheet_json, anim, options_json)",
+    "from retrocore.sprite.convert import dot_candidates_for_web",
+    "def sprite_app_dot_candidates(js_list, names_json, request_json):",
+    "    import json",
+    "    return dot_candidates_for_web([b.to_bytes() for b in js_list], json.loads(names_json), request_json)",
     "from retrocore.sprite.convert import readback_for_web",
     "def sprite_app_readback(edited, name, info_text, original, options_json):",
     "    return readback_for_web(edited.to_bytes(), name, info_text, None if original is None else original.to_bytes(), options_json)",
@@ -1169,6 +1198,7 @@ async function init(indexURL, sources) {
   fxForWeb = pyodide.globals.get("sprite_app_fx");
   zipForWeb = pyodide.globals.get("sprite_app_zip");
   compareForWeb = pyodide.globals.get("sprite_app_compare");
+  dotCandidatesForWeb = pyodide.globals.get("sprite_app_dot_candidates");
 }
 self.onmessage = async (ev) => {
   const msg = ev.data;
@@ -1233,6 +1263,10 @@ self.onmessage = async (ev) => {
       self.postMessage({ type: "result", id: msg.id, result: JSON.parse(json) });
     } else if (msg.type === "anims-gif") {
       const json = animsGifForWeb(new Uint8Array(msg.bytes), msg.sheetJson, msg.anim, JSON.stringify(msg.options));
+      self.postMessage({ type: "result", id: msg.id, result: JSON.parse(json) });
+    } else if (msg.type === "dot-candidates") {
+      // 格子が見つからなかったとき: 候補のドットの大きさごとに変換した見本とキャラの高さ
+      const json = dotCandidatesForWeb(msg.list.map((b) => new Uint8Array(b)), JSON.stringify(msg.names), JSON.stringify(msg.request));
       self.postMessage({ type: "result", id: msg.id, result: JSON.parse(json) });
     } else if (msg.type === "readback") {
       // 直したシートの読み戻し（CLI の --readback と同じ関数）
@@ -1357,6 +1391,7 @@ $("colors").min = SPEC.colors.min;
 $("colors").max = SPEC.colors.max;
 $("colors-help").textContent = `${SPEC.colors.min}〜${SPEC.colors.max}（既定 ${SPEC.colors.default}）。透明は数えない`;
 function resetSettings() {
+  $("dot-size").value = "";
   $("colors").value = SPEC.colors.default;
   $("cleanup").value = SPEC.cleanup.default;
   $("outline").value = SPEC.outline.default;
@@ -1487,6 +1522,7 @@ function loadImage(url) {
 }
 
 function clearResult(text) {
+  if (typeof dotCandidatesClear === "function") dotCandidatesClear();
   outImage = null;
   outPng = null;
   outSkipped = [];
@@ -1724,7 +1760,20 @@ function currentSettings() {
   if (!Number.isInteger(colors) || colors < SPEC.colors.min || colors > SPEC.colors.max) {
     throw new Error(`色数は ${SPEC.colors.min}〜${SPEC.colors.max} の整数で入れてください（いまは「${$("colors").value}」）。`);
   }
-  return { colors, cleanup: $("cleanup").value, outline: $("outline").value };
+  const out = { colors, cleanup: $("cleanup").value, outline: $("outline").value };
+  const dot = dotSizeValue();
+  if (dot !== null) out.dot_size = dot;   // 空なら送らない（自動。今までと同じ）
+  return out;
+}
+// ドットの大きさの欄（CLI の --dot-size。空なら null = 自動）。正方形のドットの 1 つの数（小数も可）
+function dotSizeValue() {
+  const text = $("dot-size").value.trim().replace(/[０-９．]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+  if (text === "") return null;
+  const v = Number(text);
+  if (!/^\d+(\.\d+)?$/.test(text) || !(v >= 2 && v <= 256)) {
+    throw new Error(`ドットの大きさは 2〜256 の数で入れてください（小数も可。例 6.5。空なら自動）。いまは「${$("dot-size").value}」。`);
+  }
+  return v;
 }
 
 function decodeBase64(text) {
@@ -1751,6 +1800,10 @@ async function runConvert() {
       clearResult("変換できませんでした");
       showError(result.error, result.detail ? result.detail + "\nブラウザ: " + navigator.userAgent : "");
       setStatus("", false);
+      if (result.dot_candidates && result.dot_candidates.length) {
+        dotCandidatesLater({ kind: "single", sizes: result.dot_candidates, settings },
+                           [{ name: srcFile && srcFile.name ? srcFile.name : "image.png", bytes: srcBytes }]);
+      }
       return;
     }
     const png = decodeBase64(result.png_base64);
@@ -1786,6 +1839,91 @@ async function runConvert() {
 }
 $("convert").addEventListener("click", runConvert);
 $("download").addEventListener("click", (ev) => { if (!outUrl || busy) ev.preventDefault(); });
+
+// ---- ドットの大きさの候補（格子が自動で見つからなかったとき） ----
+// 候補の大きさは変換のエラーに入っている（Python の dotsize.candidate_sizes()。CLI の「次に試せる大きさ」と同じ）。
+// 候補ごとに Python で変換して、見本の絵とコマごとのキャラの高さを並べる。押すと欄にその数を入れて「② 変換する」と同じに変換する
+// （見本は見るだけ。押した後の変換は、欄に数を入れて変換したときとバイト単位で同じ）。
+const dotCands = { seq: 0, urls: [] };
+function dotCandidatesClear() {
+  dotCands.seq++;
+  for (const u of dotCands.urls) URL.revokeObjectURL(u);
+  dotCands.urls = [];
+  $("dot-cands").hidden = true;
+  $("dot-cands-list").innerHTML = "";
+  $("dot-cands-status").textContent = "";
+}
+// 変換を止めた後に呼ぶ（busy が外れてから候補を作る。そのあいだに別の変換を始めたら捨てる）
+function dotCandidatesLater(request, files) { setTimeout(() => dotCandidatesRun(request, files), 0); }
+async function dotCandidatesRun(request, files) {
+  dotCandidatesClear();
+  const seq = dotCands.seq;
+  $("dot-cands").hidden = false;
+  const sizes = request.sizes.map(String).join(" / ");
+  $("dot-cands-status").textContent = `ドットの大きさ ${sizes} 画素で試しています…（候補ごとに変換するので、少し時間がかかります）`;
+  busy = true;
+  updateButtons();
+  try {
+    const { result } = await call({ type: "dot-candidates", list: files.map((f) => f.bytes.slice().buffer),
+                                    names: files.map((f) => f.name), request });
+    if (seq !== dotCands.seq) return;
+    if (!result.ok) { $("dot-cands-status").textContent = "候補を試せませんでした: " + result.error; return; }
+    const good = result.candidates.filter((c) => c.ok);
+    $("dot-cands-status").textContent = good.length
+      ? (request.kind === "single" ? "押すと、その大きさで変換します（数は絵の高さ。縦に段が並んだ絵は段ごとの高さ。ドット）。"
+                                   : "押すと、その大きさで変換します（数はコマごとのキャラの高さ。縦に段が並んだコマは段ごとの高さ。ドット）。")
+      : "どの大きさでも変換できませんでした。ドットの大きさを欄に入れて試してください。";
+    for (const c of result.candidates) $("dot-cands-list").appendChild(dotCandidateButton(c, request.kind));
+  } catch (e) {
+    if (seq === dotCands.seq) $("dot-cands-status").textContent = "思いがけないエラーで候補を試せませんでした。";
+  } finally {
+    busy = false;
+    updateButtons();
+  }
+}
+function dotCandidateButton(c, kind) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "dot-cand";
+  b.dataset.size = String(c.dot_size);
+  const t = document.createElement("b");
+  t.textContent = `${c.dot_size} 画素`;
+  b.appendChild(t);
+  if (c.ok) {
+    const url = URL.createObjectURL(new Blob([decodeBase64(c.png_base64)], { type: "image/png" }));
+    dotCands.urls.push(url);
+    const img = document.createElement("img");
+    img.alt = `ドット ${c.dot_size} 画素で変換した見本`;
+    img.onload = () => { const k = Math.max(1, Math.min(4, Math.floor(96 / Math.max(1, img.naturalHeight)))); img.width = img.naturalWidth * k; };
+    img.src = url;
+    b.appendChild(img);
+    const h = c.heights;
+    const spread = (v) => Math.max(...v) - Math.min(...v);
+    const info = document.createElement("span");
+    if (c.rows) {
+      // 縦に段が並んだ絵（3 段など）: 段ごとの高さ（コマが並んだ絵では、コマごとに「/」で区切る）
+      const all = c.rows.flat();
+      info.textContent = `段ごとの高さ ${c.rows.map((r) => r.join("/")).join("・")}（差 ${spread(all)}）`;
+    } else {
+      info.textContent = kind === "single" ? `高さ ${h[0]} ドット（幅 ${c.widths[0]}）`
+        : `高さ ${h.join("・")}` + (h.length > 1 ? `（差 ${spread(h)}）` : "");
+    }
+    b.appendChild(info);
+    b.title = "この大きさで変換する";
+    b.addEventListener("click", () => {
+      if (busy) return;
+      $("dot-size").value = String(c.dot_size);
+      foldLater();
+      runConvert();
+    });
+  } else {
+    b.disabled = true;
+    const info = document.createElement("small");
+    info.textContent = "変換できません: " + c.error;
+    b.appendChild(info);
+  }
+  return b;
+}
 
 // ---- キャンバスを倍数にそろえる（保存の前の欄。CLI の --canvas-multiple / --canvas-align） ----
 // 余白は保存するものにだけ足す（動きの材料・直し・差し替えは余白を足す前の絵のまま）。シートは Python がシートを作るときに足し、
@@ -4258,6 +4396,7 @@ function framesCli(req) {
   if (req.root_y) parts.push(`--frame-root-y=${req.root_y.join(",")}`);
   if (req.name !== FSPEC.name) parts.push(`--frame-name ${req.name}`);
   const s = currentSettings();
+  if (s.dot_size !== undefined) parts.push(`--dot-size ${s.dot_size}`);
   if (s.colors !== SPEC.colors.default) parts.push(`--colors ${s.colors}`);
   if (s.cleanup !== SPEC.cleanup.default) parts.push(`--cleanup ${s.cleanup}`);
   if (s.outline !== SPEC.outline.default) parts.push(`--outline ${s.outline}`);
@@ -4312,6 +4451,13 @@ async function runFramesConvert() {
       $("dl-skipped").download = `${baseName()}_sprite_${animsMode ? ASPEC.name : request.name}_skipped.json`;
       clearMotion("コマを作れなかったので、再生するものがありません");
       setStatus(`変換を止めました（${sec} 秒）。`, false);
+      if (result.dot_candidates && result.dot_candidates.length) {
+        const req = animsMode ? { kind: "anims", anims: request.anims }
+          : { kind: "frames", frames: { frame_count: request.frames.frame_count, align: request.frames.align, align_y: request.frames.align_y },
+              match_height: request.match_height };
+        dotCandidatesLater({ ...req, sizes: result.dot_candidates, settings: request.settings },
+                           join.files.map((f, i) => ({ name: joinKeys()[i], bytes: f.bytes })));
+      }
       return;
     }
     outBase = `${baseName()}_sprite`;
@@ -4372,7 +4518,7 @@ async function framesShowConverted(result) {
     for (const id of ["dl-flicker", "dl-flicker-json"]) $(id).setAttribute("aria-disabled", "false");
 }
 // 変換の設定の入力欄（変換し直しをやめたときに、前の値に戻す）
-const FRAMES_CONVERT_INPUTS = ["colors", "cleanup", "outline", "frame-count", "frame-align", "frame-align-y", "frame-shift-y", "frame-steady"];
+const FRAMES_CONVERT_INPUTS = ["dot-size", "colors", "cleanup", "outline", "frame-count", "frame-align", "frame-align-y", "frame-shift-y", "frame-steady"];
 function framesSnapshot() {
   // 入力欄の値は「前の変換に使った値」（変換を押す前に変えた値ではなく）
   return { result: frames.result, outBase, inputs: { ...frames.lastInputs },

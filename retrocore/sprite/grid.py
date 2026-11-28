@@ -61,7 +61,15 @@ DEFAULT_TRANSPARENT_RATIO = 0.5
 
 
 class GridNotFoundError(ValueError):
-    """ドットの格子が見つからないとき（普通のイラストなど）。メッセージは利用者向けの日本語。"""
+    """ドットの格子が見つからないとき（普通のイラストなど）。メッセージは利用者向けの日本語。
+
+    `estimate` は、自動の推定でいちばん点が高かったドットの大きさ（画素。分からなければ None）。
+    次に試せる大きさの候補（`dotsize.candidate_sizes()`）の軸にする。
+    """
+
+    def __init__(self, message: str = "", estimate: float | None = None):
+        super().__init__(message)
+        self.estimate = estimate if estimate is None or estimate > 0 else None
 
 
 @dataclass
@@ -396,7 +404,7 @@ def detect_grid(rgba: np.ndarray, dot_size=None, origin=None, snap: bool = True,
     elif joint:
         p, prom, per_axis = estimate_square_period(profs, ranges, min_dot, max_dot)
         if p <= 0 or prom < min_prominence:
-            raise GridNotFoundError(_not_found_message(list(per_axis), None))
+            raise GridNotFoundError(_not_found_message(list(per_axis), None), p)
         periods, proms = [p, p], list(per_axis)
     else:
         periods, proms = [], []
@@ -407,7 +415,7 @@ def detect_grid(rgba: np.ndarray, dot_size=None, origin=None, snap: bool = True,
     if not manual and not joint:
         ok = [p > 0 and pr >= min_prominence for p, pr in zip(periods, proms)]
         if not any(ok):
-            raise GridNotFoundError(_not_found_message(proms, None))
+            raise GridNotFoundError(_not_found_message(proms, None), _mean_positive(periods))
         if not all(ok):  # 片方だけ見つかった: ドットは正方形とみなす
             good = periods[ok.index(True)]
             periods = [good if not k else p for k, p in zip(ok, periods)]
@@ -448,10 +456,16 @@ def detect_grid(rgba: np.ndarray, dot_size=None, origin=None, snap: bool = True,
     aligns = [alignment(profs[k], lines[k], *ranges[k], periods[k]) for k in range(2)]
 
     if not manual and not all(al >= min_alignment for al in aligns):
-        raise GridNotFoundError(_not_found_message(proms, aligns))
+        raise GridNotFoundError(_not_found_message(proms, aligns), _mean_positive(periods))
     return Grid(xs=lines[0], ys=lines[1], period=(periods[0], periods[1]),
                 prominence=(proms[0], proms[1]), alignment=(aligns[0], aligns[1]), manual=manual,
                 square=joint or (manual and size[0] == size[1]))
+
+
+def _mean_positive(values) -> float | None:
+    """正の値の平均（無ければ None）。縦横別の推定で、見つからなかったときの候補の軸にする。"""
+    v = [float(x) for x in values if x > 0]
+    return sum(v) / len(v) if v else None
 
 
 def _not_found_message(proms, aligns) -> str:

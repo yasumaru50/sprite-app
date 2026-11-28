@@ -35,6 +35,7 @@
 | CLI | `apps/sprite/cli.py` |
 | 共通の入口（CLI と画面）・工程の組み立て `build_pipeline()`・画面用の `*_for_web()` | `retrocore/sprite/convert.py` |
 | 背景除去 / グリッド検出 / 縮小 | `retrocore/sprite/background.py` / `grid.py` / `resize.py`・`downscale.py` |
+| ドットの大きさの指定（画面の欄・`--dot-size`）と、格子が見つからないときの候補 | `retrocore/sprite/dotsize.py`（候補ごとの変換は `convert.py` の `dot_candidates_bytes()`） |
 | 単純化 / クリーンアップ / 縁取り / パレット | `retrocore/sprite/simplify.py` / `cleanup.py` / `outline.py` / `palette.py` |
 | コマが並んだ絵（`--frames`）/ 別々のファイルをつなげる（`--join`）/ 動きに名前を付けてまとめる（`--anims`）/ ちらつきを減らす / 1 コマ目と同じにする範囲 / 手の直し | `retrocore/sprite/frames.py` / `join.py` / `anims.py` / `steady.py` / `same.py` / `touchup.py` |
 | 差し替え（まばたき。CLI `--swaps`、画面の「差し替えを描く」） | `retrocore/sprite/swap.py` |

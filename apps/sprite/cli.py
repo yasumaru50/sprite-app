@@ -166,6 +166,14 @@ def _luma(text: str) -> float:
     return v
 
 
+def _print_dot_hint(e: Exception) -> None:
+    """格子が見つからなかったときに「次に試せる大きさ」を添える（画面の候補と同じ選び方。`dotsize.candidate_sizes()`）。"""
+    from retrocore.sprite.dotsize import candidates_of, cli_hint
+    hint = cli_hint(candidates_of(e)) if isinstance(e, GridNotFoundError) else ""
+    if hint:
+        print(f"  {hint}", file=sys.stderr)
+
+
 def _dot_size(text: str) -> tuple[float, float]:
     """ドットの大きさ: 20 または 20x21（横x縦、小数可）。"""
     parts = text.lower().replace("×", "x").split("x")
@@ -1473,7 +1481,7 @@ def write_frames(args: argparse.Namespace, images: list, settings: SpriteSetting
             print(f"エラー（{src.name}）: {e}", file=sys.stderr)
             return 1
         print(f"コマを作りませんでした（{src.name}）: {e}", file=sys.stderr)
-        print(f"コマを作りませんでした（{src.name}）: {e}", file=sys.stderr)
+        _print_dot_hint(e)
         rp = skipped_path(dst, name)
         rp.parent.mkdir(parents=True, exist_ok=True)
         rp.write_text(frames_mod.frames_skipped_json(e, name), encoding="utf-8")
@@ -1819,6 +1827,7 @@ def run_anims(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
             print(f"エラー（{src.name}）: {e}", file=sys.stderr)
             return 1
         print(f"コマを作りませんでした（{src.name}）: {e}", file=sys.stderr)
+        _print_dot_hint(e)
         rp = skipped_path(dst, cfg.name)
         rp.parent.mkdir(parents=True, exist_ok=True)
         rp.write_text(frames_mod.frames_skipped_json(e, cfg.name), encoding="utf-8")
@@ -2016,6 +2025,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"変換できません: {src}\n  {e}\n"
                   "  （普通のイラストなら --input-type illust --width 64 のように、"
                   "ドットの大きさが分かっていれば --dot-size 20 のように指定してください）", file=sys.stderr)
+            _print_dot_hint(e)
             failed += 1
             continue
         out = result.image

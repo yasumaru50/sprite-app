@@ -180,7 +180,7 @@ def prepare_files(images: list, s, fs, on_step=None, match_height: bool = False)
         try:
             got = F._grid_cells(subs, s, fs.grid)
         except GridNotFoundError as e:
-            raise GridNotFoundError(f"{name}: {e}") from None
+            raise GridNotFoundError(f"{name}: {e}", e.estimate) from None
         except F.FramesError as e:
             raise F.FramesError(e.code, f"{name}: {e}", file=name, **e.extra) from None
         per.append([name, cur, boxes, subs, got])

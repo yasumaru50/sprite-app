@@ -367,7 +367,7 @@ def detect_frame_grids(images: list[np.ndarray], dot_size=None, snap: bool = Tru
         raise GridNotFoundError(
             "全部のコマを合わせても、ドットの格子が見つかりませんでした（周期の目立ち方 "
             + "・".join(f"{v:.2f}" for v in proms) + f"（基準 {grid_mod.DEFAULT_MIN_PROMINENCE}））。"
-            "ドットの大きさが分かっている場合は --dot-size で指定してください")
+            "ドットの大きさが分かっている場合は --dot-size で指定してください", grid_mod._mean_positive(periods))
     period = (periods[0], periods[1])
     grids = _fit(images, period, snap, tolerance)
     # 山が本当の大きさの 2 倍・3 倍に出ることがある: 小さい大きさで境目がはっきりよくそろうなら、そちらにする
