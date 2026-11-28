@@ -701,30 +701,38 @@ python -m apps.still 入力.png --width 160 --colors 8 --canvas 640x400
 python -m apps.still 入力.png --width 600 --tidy-pattern            # ざらついた範囲を 2 色の模様に整える
 python -m apps.still 入力.png --mode modern --tidy-dots             # 今風。孤立したドットもそろえる
 python -m apps.still 写真.jpg --mode photo --smooth strong --outline # 写真の下書き（横 320）。輪郭の線も引く
+python -m apps.still 入力.png --mode modern --width 600 --smooth weak # 今風＋色の塊を弱くまとめる
+python -m apps.still 写真.png --mode photo --colors 16 --4bit        # 写真の下書き＋16 色＋4096 色に丸め
 ```
+
+`--mode` は **初めの設定**（項目の値の組み合わせ）で、工程は 1 本。どの値も下の項目のオプションで 1 つずつ変えられる
+（値の一覧は [apps/still/README.md](../apps/still/README.md) の「モード＝初めの設定」の表。コードは `retrocore/still/convert.py` の `MODES`・`ITEMS`）。
 
 | オプション | 内容 |
 | --- | --- |
 | `input` | 入力の画像（PNG・JPEG）。透明な所は黒で埋める。HEIC は読めない（「JPEG か PNG にしてください」と出して止める） |
 | `--out` / `-o` | 出力名（拡張子なし）。`<出力名>.png` と `<出力名>.json` を書く。既定 `out/still/<入力の名前>` |
-| `--mode pc98` | 初めの設定の組み合わせ（既定）: 16 色・4096 色に丸める・上限 640×400・いちばん暗い色を取っておく。強制ではなく、下で個別に変えられる |
-| `--mode modern` | 今風: 32 色・4096 色に丸めない・上限 1920×1080・いちばん暗い色を取っておく・似た色をまとめる（手順 4）。画面では色数を 16・24・32・48・64・96・128 から選ぶ |
-| `--mode photo` | 写真の下書き: グリッド検出はせず横 320 マス（`--width` で変えられる。縦は縦横の比から）・減色は今風と同じ（32 色・丸めない・上限 1920×1080・いちばん暗い色・似た色をまとめる）・孤立したドットをそろえる（このモードだけ既定で入）・まとめの強さ medium。写真の向き（EXIF）を直して読む（98・今風は前のまま見ない）。下の「写真の下書きの工程」 |
-| `--colors N` | 色数の上限（2〜256）。似た色が多いときは少なくなる |
-| `--no-4bit` | 色を 4096 色（RGB 各 4 ビット）に丸めない |
+| `--mode pc98` | 初めの設定（既定）: マス目を探す・上限 640×400・まとめない・16 色・4096 色に丸める・いちばん暗い色を取っておく |
+| `--mode modern` | 今風: マス目を探す・上限 1920×1080・まとめない・32 色・4096 色に丸めない・いちばん暗い色・似た色をまとめる（手順 4） |
+| `--mode photo` | 写真の下書き: 写真の向き（EXIF）を直す・マス目は探さずに横 320 マス・上限 1920×1080・色の塊をまとめる（中）・減色は今風と同じ・孤立したドットをそろえる。下の「写真の下書きの工程」 |
+| `--orient` / `--no-orient` | 写真の向き（EXIF の Orientation）を直して読む・読まない（写真の下書きだけ既定で入）。切のときの読み方は前の版のまま |
+| `--grid` | ドットのマス目を探す（98・今風の既定。写真の下書きで使うとき）。`--width` とは一緒に使えない |
+| `--width N` | マス目を探さずに、横 N マスに等分する（縦は縦横の比から四捨五入。写真の下書きの既定は 320） |
 | `--max-size WxH` | 大きさの上限（ドット）。超えたら出力せずに止め、収まる `--width` の候補（いちばん大きい数・その 3/4・半分）を出す |
-| `--width N` | マス目を探さずに、横 N マスに等分する（縦は縦横の比から四捨五入） |
+| `--smooth off\|weak\|medium\|strong` | 色の塊をまとめる強さ（写真の下書きの既定は medium、ほかは off）。マス目を探したときは、見つけたマスごとに 4×4 の画素に縮めてからまとめる（下の「写真の下書きの工程」の 3・4。マスが 4px より小さいときは縮めない） |
+| `--colors N` | 色数の上限（2〜256）。似た色が多いときは少なくなる |
+| `--4bit` / `--no-4bit` | 色を 4096 色（RGB 各 4 ビット）に丸める・丸めない（98 だけ既定で入） |
+| `--keep-darkest` / `--no-keep-darkest` | いちばん暗い色をパレットに取っておく・取っておかない（どの初めの設定でも入） |
+| `--merge-similar` / `--no-merge-similar` | 似た色をまとめる・まとめない（今風・写真の下書きの既定は入、98 は切。どの初めの設定でも使える） |
+| `--tidy-dots` / `--no-tidy-dots` | 孤立したドットをそろえる・そろえない（既定は写真の下書きだけ入。下の手順 5） |
+| `--outline` | 輪郭の線を引く（どの初めの設定でも既定は切。下の手順 7） |
 | `--canvas WxH` | 絵を真ん中に置き、余白を足して W×H にする（奇数の余りは右・下に 1 多く）。余白はパレットのいちばん暗い色（0 番）。絵より小さい・上限より大きいときはエラー |
-| `--no-keep-darkest` | いちばん暗い色をパレットに取っておかない |
-| `--no-merge-similar` | 今風モードで、似た色をまとめない（98 モードはもともとまとめない。JSON で `merge_similar: true` を 98 モードに渡すとエラー） |
-| `--tidy-dots` / `--no-tidy-dots` | 孤立したドットをそろえる・そろえない（既定は写真の下書きだけ入、ほかは切。どのモードでも。下の手順 5） |
-| `--smooth weak\|medium\|strong` | 写真の下書きで、色の塊をまとめる強さ（既定 medium）。ほかのモードではエラー |
-| `--outline` | 輪郭の線を引く（どのモードでも既定は切。下の手順 7） |
 | `--tidy-pattern` | ざらついた範囲（AI のディザ風の所が減色でばらばらの点になった所）を、2 色の決まった模様（2×2 の Bayer 型・濃さ 5 段）に整える（既定は切。下の手順 6） |
 | `-q` | 結果の表示を減らす |
 
 工程:
-1. **ドットに戻す**: 既定は Sprite App と同じグリッド検出（正方形のドット。端で半ドットより細いマスは落とす）。見つからないときは止めて、
+0. **読み込み**: `--orient` のとき（写真の下書きの既定）は写真の向き（EXIF）を直す（下の「写真の下書きの工程」の 1）
+1. **ドットに戻す**: `--grid`（98・今風の既定）は Sprite App と同じグリッド検出（正方形のドット。端で半ドットより細いマスは落とす）。見つからないときは止めて、
    縦・横の境目から別々に推定した 1 ドットの大きさと、1 ドット 6・8・10・12px とした場合の `--width` の候補を出す。
    マスの色は平均ではなく **いちばん多い色**（各チャンネル 16 段階の組で数え、いちばん多い組の中でいちばん多い元の色。縁から 2 割は数えない）
 2. **大きさを確かめる**: 上限を超えたら止める（上の `--max-size`）
@@ -752,7 +760,7 @@ python -m apps.still 写真.jpg --mode photo --smooth strong --outline # 写真�
 8. **キャンバス**（`--canvas` のときだけ）→ **PNG**（インデックスカラー。パレットは使った色だけ、暗い順。ビット深度は色数に合わせて 1・2・4・8。
    Pillow の版で圧縮が変わらないよう、標準の zlib で書く）と **JSON**
 
-写真の下書きの工程（`--mode photo`。`retrocore/still/photo.py`。上の手順 1 の代わり。手順 3 からは同じ）:
+写真の下書きの工程（`--mode photo` の初めの設定。`retrocore/still/photo.py`）。`--smooth` が off でないとき、上の手順 1 の代わりに 2〜4 を通る（手順 3 からは同じ）。`--grid` と一緒のときは、2 で見つけたマスを 1 つずつ 4×4 の画素に縮め（`smooth_grid_dots()`。マスの区切りと JSON の `dots` はグリッド検出のまま）、`--smooth off` のときは手順 1 の `--width` と同じ:
 1. **読み込み**: EXIF の Orientation を見て回す（`ImageOps.exif_transpose`）。HEIC・HEIF は先頭のバイトで見分けて止める
 2. **先に縮める**: 写真が仕上がり（横 W × 縦 H マス）の 4 倍より大きいときは、4W × 4H に縮める（マスの画素の平均。整数で四捨五入）。ブラウザ版を重くしないため
 3. **色の塊をまとめる**: 桑原（Kuwahara）フィルタ。各画素で、その画素を角に含む 4 つの正方形のうち、明るさのばらつきがいちばん小さいものの平均の色にする。
@@ -792,6 +800,12 @@ JSON（`<出力名>.json`）の形:
   "list": [{"from": "#まとめた色", "to": "#合わせた色", "count": 移したドット数, "distance": 距離}, …]}`（まとめた順）
 - `--tidy-dots` のときだけ、`settings` に `"tidy_dots": true` と、`tidy_dots`: `{"changed": 置き換えたドット数, "settings": {"min_same": 7, "neighbors": 8, "passes": 1, "keep_darkest": true, "keep_edges": true}}` が入る
 - 98 モードで `--tidy-dots` を使わないときの出力（JSON も）は、今風モードを足す前とバイト単位で同じ（`tests/test_still_modern.py`）
+- 初めの設定から項目を 1 つでも変えたときは、`settings` の後に `preset` が入る（初めの設定のままなら入らず、前の版とバイト単位で同じ）:
+  `{"name": "初めの設定の名前", "changed": {"項目": {"preset": 初めの設定の値, "used": 使った値}, …}, "values": {項目の値すべて（工程の順）}}`。
+  項目は `orient`・`find_grid`・`width`・`max_size`・`smooth`・`colors`・`four_bit`・`keep_darkest`・`merge_similar`・`tidy_dots`・`tidy_pattern`・`outline`・`canvas`。
+  `settings` は前の版と同じ形のまま（初めの設定によって書かない項目がある。全部の値は `preset.values`）
+- 色の塊をまとめたとき・写真の向きを直したときは、`dots` の後に `photo` が入る（下の `--mode photo` の形。向きを直さないときの `orientation` は null、
+  まとめないときの `prescale`・`work_size`・`smooth` は null）。横のマス数で分けてまとめたときの `dots.method` は `"photo"`、マス目を探してまとめたときは `"grid"`
 - `--mode photo` のときは `settings` に `"mode": "photo"`・`"width"`・`"tidy_dots": true/false`・`"smooth": "medium"`・`"outline": true/false` が入り、
   `dots` は `{"method": "photo", "cells", "width", "cell_size"（元の写真の px）, "area"}`、`dots` の後に `photo` が入る:
   `{"orientation": EXIF の値（無ければ 1）, "prescale": 4（先に縮めなかったときは null）, "work_size": [まとめた大きさ], "smooth": {"level", "method": "kuwahara", "radius", "passes"}}`。
