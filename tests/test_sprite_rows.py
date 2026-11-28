@@ -2,7 +2,8 @@
 
 - 背景だけの行で段に分け、段ごとに背景だけの列でコマに分ける。コマは左から右、上の段から下の段の順
 - 迷ったら分けない: 小さなかけら（離れた手・エフェクト・影）だけの段は作らず近い段に入れる。段どうしが縦に重なっていない
-  （横 1 列の絵で跳んだコマだけが上にある）ときも分けない。コマの数を入れたときは段に分けない（今までどおり）
+  （横 1 列の絵で跳んだコマだけが上にある）ときも分けない。コマの数を入れたときは、段に分けた数と合うときだけ段に分け、
+  合わなければ今までどおり（列のすき間だけで数える）
 - 1 段の絵の結果は前と同じ（段の切り分けを通しても通さなくても同じコマ）
 - 画面と CLI の出力はバイト単位で同じ。つなげる・動きをまとめるはファイルごとに段に分ける
 """
@@ -107,18 +108,34 @@ def test_frames_not_stacked_are_not_split():
     assert [b.x0 for b in boxes] == [10, 80, 150]
 
 
-def test_frame_count_keeps_columns_and_hints_rows():
+def test_frame_count_uses_rows_only_when_it_matches():
     m = np.zeros((200, 120), bool)
     for y in (10, 110):
         m[y:y + 80, 10:40] = True
         m[y:y + 80, 70:100] = True
-    boxes, _ = F.find_frames(_mask_image(m), frame_count=2)   # 数を入れたら今までどおり（段に分けない）
-    assert [(b.y0, b.y1) for b in boxes] == [(10, 190), (10, 190)]
+    # 段に分けた数（4）と合う → 段に分ける（空のときと同じコマ）
+    boxes, notes = F.find_frames(_mask_image(m), frame_count=4)
+    assert boxes == F.find_frames(_mask_image(m))[0] and len(boxes) == 4
+    assert any("段に分けました" in n and "（4）" in n for n in notes)
+    # 列だけの数（2）と合う → 今までどおり段に分けない
+    boxes, _ = F.find_frames(_mask_image(m), frame_count=2)
+    assert [(b.y0, b.y1) for b in boxes] == [(10, 190), (10, 190)] and all(b.band is None for b in boxes)
+    # どちらとも合わない → 作らない（列だけで数えた数を出し、段に分けたときの数を添える）
     with pytest.raises(F.FramesError) as e:
-        F.find_frames(_mask_image(m), frame_count=4)
-    assert "2 段" in str(e.value) and "段に分けると 4 コマ" in str(e.value) and e.value.extra["found"] == 2
-    assert len(F.find_frames(_mask_image(m))[0]) == 4
+        F.find_frames(_mask_image(m), frame_count=3)
+    assert e.value.extra["found"] == 2 and "段に分けると 4 コマ" in str(e.value) and "4 にするか" in str(e.value)
     assert len(F.find_frames(_mask_image(m), rows=False)[0]) == 2
+
+
+def test_frame_count_on_sheet_matches_auto(sheet):
+    """縦にも並んだ絵に、段に分けた数（6）を入れると、空のときとバイト単位で同じ。列だけの数（3）なら今までどおり。"""
+    auto = F.convert_frames(sheet, SpriteSettings(), F.FrameSettings())
+    six = F.convert_frames(sheet, SpriteSettings(), F.FrameSettings(frame_count=6))
+    assert len(six.frames) == 6 and all(np.array_equal(a, b) for a, b in zip(auto.frames, six.frames))
+    three = F.convert_frames(sheet, SpriteSettings(), F.FrameSettings(frame_count=3))
+    assert len(three.frames) == 3 and all(b.band is None for b in three.boxes)
+    with pytest.raises(F.FramesError):
+        F.convert_frames(sheet, SpriteSettings(), F.FrameSettings(frame_count=5))
 
 
 def test_one_row_strip_is_unchanged():
@@ -154,15 +171,18 @@ def test_keep_and_none_use_row_relative_positions(sheet):
         assert all(abs(a[1] - b[1]) <= 1 for a, b in zip(res.offsets[3:], res.offsets[:3])), res.offsets
 
 
-def test_cli_and_web_bytes_match(tmp_path, sheet):
+@pytest.mark.parametrize("count", [None, 6])
+def test_cli_and_web_bytes_match(tmp_path, sheet, count):
     from apps.sprite.cli import main
     src = tmp_path / "spin.png"
     save_rgba(sheet, src)
     out = tmp_path / "cli" / "spin_sprite.png"
+    extra = [] if count is None else ["--frame-count", str(count)]
     assert main([str(src), "-o", str(out), "-q", "--frames", "--frame-order", "1,2,3,4,5,6,5r",
-                 "--frame-name", "spin", "--gif", "--gif-scale", "4"]) == 0
+                 "--frame-name", "spin", "--gif", "--gif-scale", "4"] + extra) == 0
     cli = {p.name: p.read_bytes() for p in out.parent.iterdir()}
-    conv = json.loads(C.frames_convert_for_web(C.encode_png(sheet), json.dumps({"frames": {}, "name": "spin"})))
+    fr = {} if count is None else {"frame_count": count}
+    conv = json.loads(C.frames_convert_for_web(C.encode_png(sheet), json.dumps({"frames": fr, "name": "spin"})))
     assert conv["ok"] and conv["made"], conv
     assert conv["frame_count"] == 6 and len(conv["boxes"]) == 6
     web = {"spin_sprite.png": base64.b64decode(conv["png_base64"])}
@@ -187,10 +207,14 @@ def test_join_splits_rows_per_file(sheet):
     assert len(res.frames) == 9
     assert [f.frame_count for f in res.files] == [6, 3]
     assert res.sources[3] == ("spin.png", 4) and res.sources[6] == ("walk.png", 1)
-    # コマの数（合計）を入れたときは段に分けない（今までどおり）: 3 + 3
+    # コマの数（合計）が段に分けた数（6 + 3）と合えば段に分ける。列だけの数（3 + 3）なら今までどおり。どちらとも合わなければ作らない
+    nine = J.convert_frame_files([("spin.png", sheet), ("walk.png", strip)], SpriteSettings(), F.FrameSettings(frame_count=9))
+    assert all(np.array_equal(a, b) for a, b in zip(res.frames, nine.frames)) and len(nine.frames) == 9
+    six = J.convert_frame_files([("spin.png", sheet), ("walk.png", strip)], SpriteSettings(), F.FrameSettings(frame_count=6))
+    assert [f.frame_count for f in six.files] == [3, 3]
     with pytest.raises(F.FramesError) as e:
-        J.convert_frame_files([("spin.png", sheet), ("walk.png", strip)], SpriteSettings(), F.FrameSettings(frame_count=9))
-    assert e.value.extra["found"] == 6
+        J.convert_frame_files([("spin.png", sheet), ("walk.png", strip)], SpriteSettings(), F.FrameSettings(frame_count=7))
+    assert e.value.extra["found"] == 6 and "全部で 9 コマ" in str(e.value)
 
 
 def test_anims_split_rows_per_file(sheet):
@@ -206,7 +230,7 @@ def test_dot_candidates_give_height_per_frame(sheet):
     got = C.dot_candidates_bytes([("a.png", C.encode_png(sheet))], {"kind": "frames", "sizes": [20]})
     c = got["candidates"][0]
     assert c["ok"] and len(c["heights"]) == 6 and "rows" not in c
-    # コマの数を入れた（段に分けない）ときは今までどおり、縦の 2 体が 1 コマ → 段ごとの高さ
+    # コマの数を列だけの数（3）にした（段に分けない）ときは今までどおり、縦の 2 体が 1 コマ → 段ごとの高さ
     got = C.dot_candidates_bytes([("a.png", C.encode_png(sheet))],
                                  {"kind": "frames", "sizes": [20], "frames": {"frame_count": 3}})
     c = got["candidates"][0]
@@ -214,7 +238,7 @@ def test_dot_candidates_give_height_per_frame(sheet):
 
 
 def test_edits_from_old_cut_are_not_applied(tmp_path, sheet):
-    """前の切り分け（段に分けない 3 コマ）で直した一覧は、コマの大きさが違うので当てない（作らずに理由を出す）。"""
+    """前の切り分け（コマの数 3。段に分けない）で直した一覧は、コマの大きさが違うので当てない（作らずに理由を出す）。"""
     from apps.sprite.cli import main
     from retrocore.sprite import touchup as T
     old = F.convert_frames(sheet, SpriteSettings(), F.FrameSettings(frame_count=3))

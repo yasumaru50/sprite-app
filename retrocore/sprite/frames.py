@@ -15,7 +15,7 @@
    縦にも何段も並んだ絵（3 段 × 4 列の回転など）は、先に絵全体で背景だけの行を探して段に分け（`find_rows()`）、段ごとに
    列で分ける（腕を広げたコマなどで、全体の列ではそろわないため）。コマは左から右、上の段から下の段の順で、全部で 1 本の動き。
    小さなかけら（離れた手・エフェクト・影）だけの段は作らず、近い段に入れる。段どうしが縦に重なっていない（横 1 列の絵で、
-   跳んだコマだけが上にある）ときも分けない。数を指定したときは段に分けない（今までどおり）
+   跳んだコマだけが上にある）ときも分けない。数を指定したときは、段に分けた数がその数と合うときだけ段に分ける
 3. **グリッド**（`detect_frame_grids()`）: ドットの大きさは**全部のコマをまとめて 1 回だけ**推定し、全部のコマで同じ大きさを使う。
    ただし線の位置（ずれ・位相）はコマごとに合わせる。AI はコマを別々に描くので、試した 3 枚ではコマごとに位相が
    横・縦とも 0〜5 画素（ドット 1 個ぶん近く）違った。1 つの位相を全部のコマに当てると、あるコマでは線がドットの真ん中を通り、
@@ -265,26 +265,29 @@ def find_frames(rgba: np.ndarray, frame_count: int | None = None,
 
     まず絵全体で背景だけの行を探して段に分け（`find_rows()`。縦にも並んだ絵。段が 1 つなら今までと同じ）、段ごとに
     透明な列のすき間でコマに分ける。小さなかたまりは列がいちばん近いコマに入れる（同じ距離なら左）。ごく小さなものは捨てる。
-    `frame_count` を指定したときは段に分けない（今までどおり）。`rows` で段に分けるかを決められる（None は `frame_count` が無いとき）。
+    `frame_count` を指定したときは、段に分けた数がその数と合うときだけ段に分け、合わなければ段に分けない（今までどおり列だけで数える）。
+    `rows` で決めることもできる（True はいつも段に分ける、False は分けない、None は上のとおり）。
     コマが見つからない・数が `frame_count` と合わないときは `FramesError`。
     """
     a = to_rgba(rgba)
     op = a[..., 3] >= ALPHA_OPAQUE
-    if rows is None:
-        rows = frame_count is None
-    bands = find_rows(op) if rows else None
-    if bands is None:
-        out, notes = _split_columns(op)
-    else:
+    bands = find_rows(op) if rows is not False else None
+    out = notes = None
+    if bands is not None:
         out, notes = _split_rows(op, bands)
+        if rows is None and frame_count is not None and len(out) != frame_count:
+            out = notes = None   # 段に分けた数が入れた数と合わない: 今までどおり段に分けない
+        elif frame_count is not None and rows is None:
+            notes.append(f"入れたコマの数（{frame_count}）が段に分けた数と合うので、段に分けました")
+    rows_count = None if bands is None else len(_split_rows(op, bands)[0]) if out is None else len(out)
+    if out is None:
+        out, notes = _split_columns(op)
     if frame_count is not None and len(out) != frame_count:
         found = "、".join(f"{b.x0}〜{b.x1 - 1}" for b in out)
         hint = ""
-        found_rows = find_rows(op) if bands is None else None
-        if found_rows is not None:
-            n = len(_split_rows(op, found_rows)[0])
-            hint = (f"縦にも {len(found_rows)} 段に並んでいるようです（段に分けると {n} コマ）。"
-                    "段に分けるときは、コマの数を空（自動）にしてください。")
+        if bands is not None and rows_count != len(out):
+            hint = (f"縦にも {len(bands)} 段に並んでいるようです（段に分けると {rows_count} コマ）。"
+                    f"段に分けるときは、コマの数を {rows_count} にするか、空（自動）にしてください。")
         raise FramesError("frame_count",
                           f"コマの数が合いません: 指定 {frame_count}、見つかったのは {len(out)}（列 {found}）。"
                           + hint

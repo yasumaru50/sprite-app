@@ -710,7 +710,7 @@ def build_parser() -> argparse.ArgumentParser:
                          "（しゃがみ・ジャンプのコマだけのファイルが混ざっても、ほかのファイルを小さくしないため）")
     fr.add_argument("--frame-count", type=_frame_count, default=None, metavar="N",
                     help="コマの数。見つかった数が違えば作らずに警告し、理由を <出力名>_<名前>_skipped.json に書く。"
-                         "付けたときは段に分けない（列のすき間だけで数える。今までどおり）")
+                         "段に分けた数と合うときは段に分け、合わなければ段に分けない（列のすき間だけで数える。今までどおり）")
     fr.add_argument("--align", choices=list(frames_mod.ALIGNS), default=None,
                     help="横のそろえ方。" + "、".join(f"{k} = {v}" for k, v in frames_mod.ALIGNS.items()))
     fr.add_argument("--align-y", choices=list(frames_mod.ALIGNS_Y), default=None,
