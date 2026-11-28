@@ -88,6 +88,8 @@ python tools/build_still_web.py                         # 1 枚絵のアプリ�
 - Sprite App の新しい処理は `retrocore/sprite/` に置く。工程は `retrocore/sprite/convert.py` の `build_pipeline()` に足す（CLI と画面で共通）。
   retrocore を変えたら `python tools/build_sprite_web.py` と `python tools/build_still_web.py` でブラウザ版の HTML も作り直す（テストで検出される。
   Sprite App の HTML には `retrocore/still/` を入れない）。既存の関数の挙動は変えない（ゴールデンは既存分を再生成しない）
+- CLI とブラウザ版の出力（PNG・JSON）はバイト単位で一致させる。ただし入力が JPEG のときは、JPEG を点に戻す部品が違う
+  （CLI の Pillow は libjpeg-turbo、Pyodide の Pillow は IJG libjpeg 9）ため一致しなくてよい。処理の一致は PNG の入力で確かめる
 - アプリ内の手の直し（`touchup.py`、CLI `--edits`、画面の「ドットを直す」）は変換・範囲・ちらつきの後に当て、パレットに無い色は作らない。
   直しが無いときの出力は前とバイト単位で同じ（`tests/test_sprite_touchup.py`）
 - `retrocore/` は NumPy と Pillow だけに依存させる（Pyodide で動かすため。PySide6・SciPy・OpenCV も不可。`tests/test_retrocore_deps.py` が確かめる）
