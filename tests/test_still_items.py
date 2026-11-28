@@ -139,7 +139,9 @@ def test_changed_items_are_recorded(inputs):
     assert list(pre["changed"]) == ["find_grid", "width", "smooth"]
     assert pre["changed"]["smooth"] == {"preset": "off", "used": "weak"}
     assert pre["changed"]["width"] == {"preset": None, "used": 64}
-    assert list(pre["values"]) == list(ITEMS) and pre["values"]["colors"] == 32 and pre["values"]["max_size"] == [1920, 1080]
+    # 比率に合わせて切り抜く（aspect・anchor）は、元のままのときは values に書かない（前と同じバイト列）
+    assert list(pre["values"]) == [k for k in ITEMS if k not in ("aspect", "anchor")]
+    assert pre["values"]["colors"] == 32 and pre["values"]["max_size"] == [1920, 1080]
     # 初めの設定と同じ値を渡しても「変えた」にはならない
     same = convert_still_bytes(inputs["scene"], "s.png", {"colors": 16, "four_bit": True, "smooth": "off"})["info"]
     assert "preset" not in same

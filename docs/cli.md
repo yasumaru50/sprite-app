@@ -704,6 +704,8 @@ python -m apps.still 写真.jpg --mode photo --smooth strong --outline # 写真�
 python -m apps.still 入力.png --mode modern --width 600 --smooth weak # 今風＋色の塊を弱くまとめる
 python -m apps.still 写真.png --mode photo --colors 16 --4bit        # 写真の下書き＋16 色＋4096 色に丸め
 python -m apps.still 写真.jpg --mode photo --width 640 --colors 16 --4bit --dither 2x2   # 空などに 2×2 の網目
+python -m apps.still 写真.jpg --mode photo --aspect 16:9 --anchor 50,20   # 16:9（320×180）に切り抜く（少し上寄り）
+python -m apps.still 写真.jpg --mode photo --width 640 --aspect 16:10 --colors 16 --4bit --dither 2x2   # 640×400
 ```
 
 `--mode` は **初めの設定**（項目の値の組み合わせ）で、工程は 1 本。どの値も下の項目のオプションで 1 つずつ変えられる
@@ -719,6 +721,8 @@ python -m apps.still 写真.jpg --mode photo --width 640 --colors 16 --4bit --di
 | `--orient` / `--no-orient` | 写真の向き（EXIF の Orientation）を直して読む・読まない（写真の下書きだけ既定で入）。切のときの読み方は前の版のまま |
 | `--grid` | ドットのマス目を探す（98・今風の既定。写真の下書きで使うとき）。`--width` とは一緒に使えない |
 | `--width N` | マス目を探さずに、横 N マスに等分する（縦は縦横の比から四捨五入。写真の下書きの既定は 320） |
+| `--aspect W:H` | 比率に合わせて切り抜く（正の整数どうし。例 16:9・16:10・4:3・3:2・1:1・21:9・1200:630。既定は元のまま）。拡大・縮小はせず、切り抜くだけ（余白を足すのは `--canvas`）。下の手順 1b |
+| `--anchor X,Y` | 切る位置（横・縦それぞれ 0〜100 の%。既定 50,50 は中央、50,0 は上寄せ、0,50 は左寄せ）。`--aspect` のときだけ使える |
 | `--max-size WxH` | 大きさの上限（ドット）。超えたら出力せずに止め、収まる `--width` の候補（いちばん大きい数・その 3/4・半分）を出す |
 | `--smooth off\|weak\|medium\|strong` | 色の塊をまとめる強さ（写真の下書きの既定は medium、ほかは off）。マス目を探したときは、見つけたマスごとに 4×4 の画素に縮めてからまとめる（下の「写真の下書きの工程」の 3・4。マスが 4px より小さいときは縮めない） |
 | `--colors N` | 色数の上限（2〜256）。似た色が多いときは少なくなる |
@@ -737,7 +741,14 @@ python -m apps.still 写真.jpg --mode photo --width 640 --colors 16 --4bit --di
 1. **ドットに戻す**: `--grid`（98・今風の既定）は Sprite App と同じグリッド検出（正方形のドット。端で半ドットより細いマスは落とす）。見つからないときは止めて、
    縦・横の境目から別々に推定した 1 ドットの大きさと、1 ドット 6・8・10・12px とした場合の `--width` の候補を出す。
    マスの色は平均ではなく **いちばん多い色**（各チャンネル 16 段階の組で数え、いちばん多い組の中でいちばん多い元の色。縁から 2 割は数えない）
-2. **大きさを確かめる**: 上限を超えたら止める（上の `--max-size`）
+1b. **比率に合わせて切り抜く**（`--aspect` のときだけ。`retrocore/still/aspect.py`）。計算は整数だけで、四捨五入は .5 を上げる:
+   - 横のマス数で分けるとき（`--width`・写真の下書き）: 手順 1 の**前に**入力を切り抜く。縦のマス数 H を `横のマス数 × 高さ ÷ 幅` の四捨五入で先に決め、
+     入力を ちょうど 横のマス数:H の比の、いちばん大きい四角に切る（片方の辺はそのまま、もう片方は四捨五入）。幅 320 なら 16:9 は 320×180、16:10 は 320×200。
+     比が割り切れないとき（例 幅 300・16:9 は 168.75 → 169）は、その分だけ比がずれる（JSON の `aspect.exact` が false）。写真の向きを直した後の画像を切る
+   - マス目を探すとき: 手順 1 で見つけたマス目のまま、**マス単位で**切る（格子をずらさない）。長すぎる方の辺のマスの数を `もう一方 × 比` の四捨五入にする
+     （例 165×95 マスを 16:9 → 165×93）。マスの色は切り抜く前と同じ。色の塊をまとめるのは切った後のマスだけ
+   - 切る量の分け方: 左（上）で `切る量 × 位置% ÷ 100` の四捨五入、残りを右（下）で切る
+2. **大きさを確かめる**: 上限を超えたら止める（上の `--max-size`。比率に切り抜いた後の大きさで確かめる）
 3. **減色**（`retrocore/still/colors.py`）: いちばん暗い色を 1 色取っておき（全体の 1% 以上ある 16 段階の組のうちいちばん暗い組の色）、
    残りの色を Sprite App の単純化（大きな面を守る割合だけ 0.5%）で選ぶ。選んだ色を 4096 色に丸め（各チャンネルの上下の段のうち、
    明るさの感じ方で近い方）、丸めで重なったら少ない色数のまま（JSON の `merged_by_4bit` と警告）。最後に全部のドットをいちばん近い色
@@ -801,6 +812,11 @@ JSON（`<出力名>.json`）の形:
 
 - `width`・`height` は出力の大きさ（キャンバスを足した後）、`picture` は絵の部分の大きさ
 - `dots` は `--width` のとき `{"method": "width", "cells", "width", "cell_size": [横, 縦]（px）, "area"}`
+- `--aspect` のときだけ、`settings` に `"aspect": [W, H], "anchor": [X, Y]` と、`dots` の後に `aspect` が入る:
+  `{"ratio": [W, H], "anchor": [X, Y], "stage": "input"（入力の段階）か "cells"（マス単位）, "box": [左, 上, 右, 下]（残した範囲。入力の画像の画素）,
+  "cut": {"left", "top", "right", "bottom"}（切り落とした画素の数。マス単位のときはマス目の範囲から数える）, "exact": 絵の大きさがちょうど比のとおりか,
+  "cut_cells": {"left", "top", "right", "bottom"}（マス単位のときだけ。切り落としたマスの数）}`。`input` は切り抜く前の大きさ、`dots.area` は残した範囲。
+  元のままのときの出力（JSON も）は前とバイト単位で同じ（`tests/test_still_aspect.py`・`tests/test_still_items.py`）
 - `canvas` は `--canvas` のとき `{"width", "height", "offset": [左, 上], "fill": {"index": 0, "hex"}}`
 - `palette` の `rgb4` は RGB 各 0〜15（`--no-4bit` で 4096 色に無い色は `null`）。`count` はその色のドット数（余白を含む）
 - `--tidy-pattern` のときだけ、`settings` に `"tidy_pattern": true` と、`palette` の後に `pattern` が入る:
@@ -818,8 +834,9 @@ JSON（`<出力名>.json`）の形:
 - 98 モードで `--tidy-dots` を使わないときの出力（JSON も）は、今風モードを足す前とバイト単位で同じ（`tests/test_still_modern.py`）
 - 初めの設定から項目を 1 つでも変えたときは、`settings` の後に `preset` が入る（初めの設定のままなら入らず、前の版とバイト単位で同じ）:
   `{"name": "初めの設定の名前", "changed": {"項目": {"preset": 初めの設定の値, "used": 使った値}, …}, "values": {項目の値すべて（工程の順）}}`。
-  項目は `orient`・`find_grid`・`width`・`max_size`・`smooth`・`colors`・`four_bit`・`keep_darkest`・`merge_similar`・`dither`・`tidy_dots`・`tidy_pattern`・`outline`・`canvas`。
-  `settings` は前の版と同じ形のまま（初めの設定によって書かない項目がある。全部の値は `preset.values`）
+  項目は `orient`・`find_grid`・`width`・`aspect`・`anchor`・`max_size`・`smooth`・`colors`・`four_bit`・`keep_darkest`・`merge_similar`・`dither`・`tidy_dots`・`tidy_pattern`・`outline`・`canvas`。
+  `settings` は前の版と同じ形のまま（初めの設定によって書かない項目がある。全部の値は `preset.values`）。
+  比率が元のままのときは `preset.values` に `aspect`・`anchor` を書かない（前と同じバイト列）
 - 色の塊をまとめたとき・写真の向きを直したときは、`dots` の後に `photo` が入る（下の `--mode photo` の形。向きを直さないときの `orientation` は null、
   まとめないときの `prescale`・`work_size`・`smooth` は null）。横のマス数で分けてまとめたときの `dots.method` は `"photo"`、マス目を探してまとめたときは `"grid"`
 - `--mode photo` のときは `settings` に `"mode": "photo"`・`"width"`・`"tidy_dots": true/false`・`"smooth": "medium"`・`"outline": true/false` が入り、
