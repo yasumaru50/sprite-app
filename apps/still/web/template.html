@@ -106,7 +106,7 @@
   </div>
   <p class="lead" id="lead">AI が描いた「ドット絵風の 1 枚絵」を、決まった色数・格子の本物のドット絵にそろえます。</p>
   <p class="lead help" data-help-at="lead">ドットのマス目を見つけて 1 ドット＝1 画素にし、いちばん多い色でマスを塗り、決まった色数のパレットにそろえます。
-    透明な所は黒で埋めます。出力は正方形のドットです（98 の縦長のドットは再現しません）。ディザは使いません。</p>
+    透明な所は黒で埋めます。出力は正方形のドットです（98 の縦長のドットは再現しません）。ディザは、「ディザを作る」を選んだときだけ、なめらかに色が変わる所に入れます。</p>
 
   <section class="panel">
     <div class="drop" id="drop">
@@ -117,7 +117,7 @@
       <div class="field">
         <span class="help-row"><label for="mode">初めの設定</label><span class="fold-mark mode-mark" id="mode-mark" hidden>（変更あり）</span></span>
         <select id="mode"></select>
-        <small class="help">項目の値の組み合わせです（CLI の --mode）。決まりではないので、下の「必要なときに開く」で 1 つずつ変えられます。変えると「（変更あり）」と出て、JSON に変えた項目が残ります。「今風」は最近のインディーゲームの背景のようなドット絵の手直しの出発点で、32 色・4096 色に丸めない・1920×1080 まで・似た色をまとめる です。「写真の下書き」は自分で撮った写真を、塗り直しの出発点になる色を塗り分けた下絵にします（写真の向きを直す・マス目は探さずに横 320 マス・色の塊をまとめる（中）・減色は今風と同じ・孤立したドットをそろえる）</small>
+        <small class="help">項目の値の組み合わせです（CLI の --mode）。決まりではないので、下の「必要なときに開く」で 1 つずつ変えられます。変えると「（変更あり）」と出て、JSON に変えた項目が残ります。「今風」は最近のインディーゲームの背景のようなドット絵の手直しの出発点で、32 色・4096 色に丸めない・1920×1080 まで・似た色をまとめる です。「写真の下書き」は自分で撮った写真を、塗り直しの出発点になる色を塗り分けた下絵にします（写真の向きを直す・マス目は探さずに横 320 マス・色の塊をまとめる（中）・減色は今風と同じ（ただし似た色はまとめない）・孤立したドットをそろえる）</small>
       </div>
       <div class="field">
         <button type="button" id="run" disabled>② 変換する</button>
@@ -179,7 +179,12 @@
         <div class="controls" style="margin-top:10px">
           <div class="field">
             <label class="check"><input type="checkbox" id="merge-similar"> 似た色をまとめる</label>
-            <small class="help">減色のあと、見た目でほぼ区別できない色どうし（OKLab の距離 0.04 未満）を、ドット数の多い方の色に合わせます。いちばん暗い色は残します。色数は上限なので、少なくなることがあります。今風・写真の下書きの初めの設定で入（CLI の --merge-similar・--no-merge-similar）</small>
+            <small class="help">減色のあと、見た目でほぼ区別できない色どうし（OKLab の距離 0.04 未満）を、ドット数の多い方の色に合わせます。いちばん暗い色は残します。色数は上限なので、少なくなることがあります。今風の初めの設定で入。写真の下書きでは、近い色が空などの段として要るので切（CLI の --merge-similar・--no-merge-similar）</small>
+          </div>
+          <div class="field">
+            <label for="dither">ディザを作る</label>
+            <select id="dither"></select>
+            <small class="help">空のようになめらかに色が変わる所で、明るさの近い 2 色の間を決まった網目（2×2 は 5 段、4×4 は 17 段）でつなぎ、グラデーションにします。新しい色は作らず、どのドットにどちらの色を置くかだけを変えます。輪郭・はっきりした境目・細かい描き込み・いちばん暗い色には入れません。網目のドットは「孤立したドットをそろえる」で消されません。どの初めの設定でも「しない」（CLI の --dither off・2x2・4x4）</small>
           </div>
           <div class="field">
             <label class="check"><input type="checkbox" id="tidy-dots"> 孤立したドットをそろえる</label>
@@ -223,6 +228,10 @@
       <div class="field">
         <label class="check"><input type="checkbox" id="show-overlay" disabled> 整えた範囲を色で重ねる</label>
         <small class="help">「ざらついた範囲を模様に整える」で変えた範囲を、薄い色（縁は濃い色）で結果に重ねて見せます。表示だけで、保存する PNG は変わりません</small>
+      </div>
+      <div class="field">
+        <label class="check"><input type="checkbox" id="show-dither-overlay" disabled> 網目を入れたドットを色で重ねる</label>
+        <small class="help">「ディザを作る」で色を変えたドットを濃い緑で、網目の範囲のほかのドットを薄い緑で結果に重ねて見せます。表示だけで、保存する PNG は変わりません</small>
       </div>
       <div class="field">
         <label class="check"><input type="checkbox" id="show-dots-overlay" disabled> 置き換えたドットを色で重ねる</label>
@@ -356,6 +365,7 @@ $("colors").min = SPEC.colors.min;
 $("colors").max = SPEC.colors.max;
 for (const n of SPEC.modern_colors) $("colors-list").appendChild(new Option(`${n} 色`, String(n)));
 for (const s of SPEC.smooth_choices) $("smooth").add(new Option(s.label, s.value));
+for (const s of SPEC.dither_choices) $("dither").add(new Option(s.label, s.value));
 $("colors-help").textContent = `パレットの色数の上限（${SPEC.colors.min}〜${SPEC.colors.max}。よく使う数: ${SPEC.modern_colors.join("・")}）。似た色が多いときは、これより少なくなることがあります。CLI の --colors`;
 for (const z of [1, 2, 3, 4, 6, 8]) $("zoom").add(new Option(`${z} 倍`, String(z)));
 $("zoom").value = "3";
@@ -372,6 +382,7 @@ function applyMode(key) {
   $("four-bit").checked = m.four_bit;
   $("keep-darkest").checked = m.keep_darkest;
   $("merge-similar").checked = m.merge_similar;
+  $("dither").value = m.dither;
   $("tidy-dots").checked = m.tidy_dots;
   $("tidy-pattern").checked = m.tidy_pattern;
   $("outline").checked = m.outline;
@@ -437,6 +448,7 @@ function currentSettings() {
     four_bit: $("four-bit").checked,
     keep_darkest: $("keep-darkest").checked,
     merge_similar: $("merge-similar").checked,
+    dither: $("dither").value,
     tidy_dots: $("tidy-dots").checked,
     tidy_pattern: $("tidy-pattern").checked,
     outline: $("outline").checked,
@@ -449,6 +461,7 @@ let worker = null, nextId = 1, ready = false, busy = false;
 const pending = new Map();
 let srcFile = null, srcBytes = null, srcUrl = null, srcImg = null, outImg = null, outPngUrl = null, outJsonUrl = null;
 let overlayImg = null, overlayUrl = null, dotsOverlayImg = null, dotsOverlayUrl = null, outlineImg = null, outlineUrl = null;
+let ditherImg = null, ditherUrl = null;
 function setStatus(text, spin) {
   $("status").innerHTML = "";
   if (spin) { const s = document.createElement("span"); s.className = "spinner"; $("status").appendChild(s); }
@@ -506,7 +519,8 @@ function render() {
     const w = outImg.naturalWidth * z, h = outImg.naturalHeight * z;
     put($("out-stage"), outImg, w, h);
     // 見える化（表示だけ）。結果の上に同じ大きさで重ねる
-    const layers = [[overlayImg, "show-overlay"], [dotsOverlayImg, "show-dots-overlay"], [outlineImg, "show-outline-overlay"]]
+    const layers = [[overlayImg, "show-overlay"], [ditherImg, "show-dither-overlay"], [dotsOverlayImg, "show-dots-overlay"],
+                    [outlineImg, "show-outline-overlay"]]
       .filter(([img, id]) => img && $(id).checked).map(([img]) => img);
     if (layers.length) {
       const wrap = document.createElement("div");
@@ -532,13 +546,15 @@ function render() {
 $("zoom").addEventListener("change", render);
 $("show-overlay").addEventListener("change", render);
 $("show-dots-overlay").addEventListener("change", render);
+$("show-dither-overlay").addEventListener("change", render);
 $("show-outline-overlay").addEventListener("change", render);
 
 function clearResult(text) {
   outImg = null;
-  overlayImg = dotsOverlayImg = outlineImg = null;
-  for (const u of [outPngUrl, outJsonUrl, overlayUrl, dotsOverlayUrl, outlineUrl]) if (u) URL.revokeObjectURL(u);
-  outPngUrl = outJsonUrl = overlayUrl = dotsOverlayUrl = outlineUrl = null;
+  overlayImg = dotsOverlayImg = outlineImg = ditherImg = null;
+  for (const u of [outPngUrl, outJsonUrl, overlayUrl, dotsOverlayUrl, outlineUrl, ditherUrl]) if (u) URL.revokeObjectURL(u);
+  outPngUrl = outJsonUrl = overlayUrl = dotsOverlayUrl = outlineUrl = ditherUrl = null;
+  $("show-dither-overlay").disabled = true;
   $("show-overlay").disabled = true;
   $("show-dots-overlay").disabled = true;
   $("show-outline-overlay").disabled = true;
@@ -602,7 +618,7 @@ function startWorker() {
 // JSON の preset.changed の項目の名前（画面の言葉）
 const ITEM_NAMES = { orient: "写真の向き", find_grid: "マス目の決め方", width: "横のマス数", max_size: "大きさの上限",
   smooth: "色の塊をまとめる", colors: "色数", four_bit: "4096 色に丸める", keep_darkest: "いちばん暗い色",
-  merge_similar: "似た色をまとめる", tidy_dots: "孤立したドット", tidy_pattern: "模様を整える", outline: "輪郭の線",
+  merge_similar: "似た色をまとめる", dither: "ディザ", tidy_dots: "孤立したドット", tidy_pattern: "模様を整える", outline: "輪郭の線",
   canvas: "余白（キャンバス）" };
 function outName() { return srcFile && srcFile.name ? srcFile.name.replace(/\.[^.]+$/, "") : "still"; }
 
@@ -640,6 +656,7 @@ async function runConvert() {
     $("out-meta").textContent = `${how} → ${info.picture.width}×${info.picture.height} ドット、${result.colors.used} 色`
       + (result.canvas ? `、キャンバス ${result.width}×${result.height}` : "")
       + (result.similar ? `、似た色をまとめた組 ${result.similar.merged}` : "")
+      + (result.dither ? `、網目を入れたドット ${result.dither.changed}（網目の範囲 ${result.dither.area}）` : "")
       + (result.tidy_dots ? `、孤立したドットを置き換えた数 ${result.tidy_dots.changed}` : "")
       + (result.outline ? `、輪郭の線を引いたドット ${result.outline.drawn}` : "")
       + (result.pattern ? `、模様を整えた範囲 ${result.pattern.regions} か所（${result.pattern.changed} ドット）` : "")
@@ -649,6 +666,12 @@ async function runConvert() {
       overlayImg = await loadImage(overlayUrl);
       overlayImg.alt = "整えた範囲";
       $("show-overlay").disabled = false;
+    }
+    if (result.dither_overlay_base64) {
+      ditherUrl = URL.createObjectURL(new Blob([decodeBase64(result.dither_overlay_base64)], { type: "image/png" }));
+      ditherImg = await loadImage(ditherUrl);
+      ditherImg.alt = "網目を入れたドット";
+      $("show-dither-overlay").disabled = false;
     }
     if (result.dots_overlay_base64) {
       dotsOverlayUrl = URL.createObjectURL(new Blob([decodeBase64(result.dots_overlay_base64)], { type: "image/png" }));
